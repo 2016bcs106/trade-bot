@@ -1,5 +1,20 @@
 // Reusable style primitives for consistent Paytm Money-like UI
 
+export const colors = {
+  green: '#22c55e',
+  red: '#ef4444',
+  blue: '#3b82f6',
+  amber: '#f59e0b',
+  dark: '#1e293b',
+  secondary: '#64748b',
+  muted: '#94a3b8',
+  light: '#f1f5f9',
+  border: '#e2e8f0',
+  white: '#ffffff',
+}
+
+export const gainColor = (value) => value >= 0 ? colors.green : colors.red
+
 export const layout = {
   page: {
     minHeight: '100vh',

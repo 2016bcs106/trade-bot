@@ -8,7 +8,7 @@ import {
   LineElement,
   Filler,
 } from 'chart.js'
-import { merge } from '../utils/styles'
+import { colors, merge } from '../utils/styles'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler)
 
@@ -40,7 +40,7 @@ const chartOptions = {
       grid: { display: false },
       border: { display: false },
       ticks: {
-        color: '#94a3b8',
+        color: colors.muted,
         font: { size: 10 },
         maxTicksLimit: 7,
         padding: 0,
@@ -62,9 +62,9 @@ const chartOptions = {
 }
 
 const SERIES = {
-  close: { label: 'Close', color: '#22c55e', fillColor: '34, 197, 94' },
-  fastSma: { label: 'Fast SMA', color: '#3b82f6', fillColor: null },
-  slowSma: { label: 'Slow SMA', color: '#f59e0b', fillColor: null },
+  close: { label: 'Close', color: colors.green, fillColor: '34, 197, 94' },
+  fastSma: { label: 'Fast SMA', color: colors.blue, fillColor: null },
+  slowSma: { label: 'Slow SMA', color: colors.amber, fillColor: null },
 }
 
 const styles = {
@@ -79,18 +79,18 @@ const styles = {
     width: '48px',
     height: '48px',
     borderRadius: '50%',
-    background: '#f1f5f9',
+    background: colors.light,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '20px',
     fontWeight: '700',
-    color: '#334155',
+    color: colors.dark,
     marginBottom: '0.5rem',
-    border: '1px solid #e2e8f0',
+    border: `1px solid ${colors.border}`,
   },
-  name: { fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' },
-  price: { fontSize: '2rem', fontWeight: '700', color: '#1e293b', lineHeight: 1.2 },
+  name: { fontSize: '0.875rem', color: colors.secondary, marginBottom: '0.25rem' },
+  price: { fontSize: '2rem', fontWeight: '700', color: colors.dark, lineHeight: 1.2 },
   change: { fontSize: '0.875rem', fontWeight: '600', marginTop: '0.25rem' },
   chart: { height: '25vh', width: '100%' },
   labels: {
@@ -108,8 +108,8 @@ const styles = {
     cursor: 'pointer',
     padding: '0.25rem 0.75rem',
     borderRadius: '999px',
-    border: '1px solid #e2e8f0',
-    background: 'white',
+    border: `1px solid ${colors.border}`,
+    background: colors.white,
     userSelect: 'none',
     transition: 'opacity 0.2s',
   },
@@ -134,7 +134,7 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
   const change = currentPrice - openPrice
   const changePercent = (change / openPrice) * 100
   const isPositive = change >= 0
-  const changeColor = isPositive ? '#22c55e' : '#ef4444'
+  const changeColor = isPositive ? colors.green : colors.red
 
   const addTick = useCallback((time, close, fastSma = null, slowSma = null) => {
     setDataMap((prev) => ({
@@ -182,7 +182,7 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
     return {
       label: series.label,
       data,
-      borderColor: isClose ? (isPositive ? '#22c55e' : '#ef4444') : series.color,
+      borderColor: isClose ? (isPositive ? colors.green : colors.red) : series.color,
       backgroundColor: isClose
         ? (ctx) => {
             if (!ctx.chart) return 'transparent'
@@ -200,7 +200,7 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
       pointBackgroundColor: (ctx) => {
         const sig = signalMap[TIME_SLOTS[ctx.dataIndex]]
         if (!sig) return 'transparent'
-        if (isClose) return sig === 'BUY' ? '#22c55e' : '#ef4444'
+        if (isClose) return sig === 'BUY' ? colors.green : colors.red
         return series.color
       },
       pointBorderColor: (ctx) => {
@@ -240,7 +240,7 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
             key={key}
             style={merge(styles.label, {
               opacity: visible[key] ? 1 : 0.4,
-              borderColor: visible[key] ? series.color : '#e2e8f0',
+              borderColor: visible[key] ? series.color : colors.border,
             })}
             onClick={() => toggleSeries(key)}
           >
