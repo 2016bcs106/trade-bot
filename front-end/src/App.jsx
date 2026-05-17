@@ -1,8 +1,23 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import AuthGuard from './components/AuthGuard'
+import Login from './pages/Login'
+import Home from './pages/Home'
+
 function App() {
   return (
-    <div>
-      <h1>Hello World</h1>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <AuthGuard>
+              <Home />
+            </AuthGuard>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
