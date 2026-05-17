@@ -10,14 +10,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/paytm-money-callback" element={<PaytmMoneyCallback />} />
-        <Route
-          path="/"
-          element={
-            <AuthGuard>
-              <Home />
-            </AuthGuard>
-          }
-        />
+        <Route path="/" element={<Home />} />
       </Routes>
     </BrowserRouter>
   )

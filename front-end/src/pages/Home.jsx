@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom'
 import { clearAuth } from '../utils/auth'
 import { layout, card, text, button, header, merge } from '../utils/styles'
+import PortfolioChart from '../components/PortfolioChart'
 
 export default function Home() {
   const [searchParams] = useSearchParams()
@@ -23,7 +24,10 @@ export default function Home() {
           Logout
         </button>
       </header>
-      <div style={layout.center}>
+
+      <PortfolioChart />
+
+      <div style={merge(layout.center, { flex: 1 })}>
         <div style={merge(card.base, { padding: '3rem 4rem', textAlign: 'center' })}>
           <h1 style={merge(text.heroHeading, { marginBottom: '0.5rem' })}>Hello World 👋</h1>
           <p style={text.muted}>Session valid until midnight today</p>
