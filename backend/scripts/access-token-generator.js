@@ -50,8 +50,19 @@ onValue(requestTokenRef, async (snapshot) => {
       await set(ref(db, 'auth/accessToken'), {
         token: result.access_token,
         timestamp: Date.now(),
+      });
+
+      await set(ref(db, 'auth/publicAccessToken'), {
+        token: result.public_access_token,
+        timestamp: Date.now(),
       })
-      console.log('💾 Access token saved to database.')
+
+      await set(ref(db, 'auth/readAccessToken'), {
+        token: result.read_access_token,
+        timestamp: Date.now(),
+      })
+
+      console.log('💾 Access tokens saved to database.')
     } else {
       console.error('❌ Token exchange failed:', result)
     }

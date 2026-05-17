@@ -17,6 +17,14 @@ export class Analyzer {
     this.previousSlowSma = null;
   }
 
+  reset() {
+    this.currentDay = null;
+    this.previousSlowSma = null;
+    this.fastSmaSmoother.reset();
+    this.slowSmaSmoother.reset();
+    this.signalGenerator.reset();
+  }
+
   /**
    * Process a single data point in real-time.
    * @param {{ date: string, close: number }} point
