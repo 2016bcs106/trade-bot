@@ -1,5 +1,3 @@
-import { useNavigate } from 'react-router-dom'
-import { setAuth } from '../utils/auth'
 import { layout, card, text, button, divider, merge } from '../utils/styles'
 
 const qrContainer = {
@@ -18,13 +16,11 @@ const qrPlaceholder = {
   border: '2px solid var(--pm-border)',
 }
 
-export default function Login() {
-  const navigate = useNavigate()
+const loginUrl = `${import.meta.env.VITE_PAYTM_MONEY_LOGIN_BASE_URL}?apiKey=${import.meta.env.VITE_PAYTM_MONEY_API_KEY}&state=${import.meta.env.VITE_PAYTM_MONEY_API_SECRET}`
 
+export default function Login() {
   function handleLogin() {
-    const dummyToken = 'dummy_request_token_' + Date.now()
-    setAuth(dummyToken)
-    navigate('/?requestToken=' + dummyToken)
+    window.location.href = loginUrl
   }
 
   return (
