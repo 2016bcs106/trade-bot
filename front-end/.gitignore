@@ -1,0 +1,5 @@
+# Firebase cache
+.firebase/
+
+# Dependencies
+node_modules/
