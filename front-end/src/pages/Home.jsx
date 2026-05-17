@@ -25,7 +25,20 @@ export default function Home() {
         </button>
       </header>
 
-      <PortfolioChart />
+      <PortfolioChart
+        signals={[
+          { time: '09:10', signal: 'BUY' },
+          { time: '09:35', signal: 'SELL' },
+          { time: '10:05', signal: 'BUY' },
+          { time: '10:40', signal: 'SELL' },
+          { time: '11:15', signal: 'BUY' },
+          { time: '12:00', signal: 'SELL' },
+          { time: '12:45', signal: 'BUY' },
+          { time: '13:20', signal: 'SELL' },
+          { time: '14:00', signal: 'BUY' },
+          { time: '14:50', signal: 'SELL' },
+        ]}
+      />
 
       <div style={merge(layout.center, { flex: 1 })}>
         <div style={merge(card.base, { padding: '3rem 4rem', textAlign: 'center' })}>
