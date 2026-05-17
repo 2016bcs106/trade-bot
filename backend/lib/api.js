@@ -1,7 +1,14 @@
 import fetch from "node-fetch";
 
 export class DataFetcher {
-  async fetch(fromDate, toDate, pmlId) {
+  /**
+   * @param {string} fromDate
+   * @param {string} toDate
+   * @param {string} pmlId
+   * @param {function} [onChange] - Called for each data point { date, close, volume }.
+   *                                Will be replaced by WebSocket in future.
+   */
+  async fetch(fromDate, toDate, pmlId, onChange) {
     const response = await fetch(
       "https://api-eq.paytmmoney.com/charts/price/v1/price-charts",
       {
@@ -35,10 +42,19 @@ export class DataFetcher {
 
     const data = await response.json();
 
-    return data.data.map((item) => ({
+    const points = data.data.map((item) => ({
       date: item[0],
       close: item[4],
       volume: item[5],
     }));
+
+    // Simulate real-time streaming by firing onChange for each point
+    if (onChange) {
+      for (const point of points) {
+        onChange(point);
+      }
+    }
+
+    return points;
   }
 }

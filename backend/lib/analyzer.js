@@ -2,82 +2,58 @@ import { SimpleMovingAverage } from "./sma.js";
 import { SignalGenerator } from "./signal-generator.js";
 
 export class Analyzer {
-  constructor(config = {}) {
-    this.cooldownWindow = config.cooldownWindow ?? 1;
-    this.fastSmaPeriod = config.fastSmaPeriod ?? 7;
-    this.slowSmaPeriod = config.slowSmaPeriod ?? 55;
-    this.sidewaysWindow = config.sidewaysWindow ?? 5;
-    this.sidewaysThresholdPercent = config.sidewaysThresholdPercent ?? 0;
-    this.volatilityWindow = config.volatilityWindow ?? 5;
-    this.maxVolatilityRangePercent = config.maxVolatilityRangePercent ?? 100;
-  }
-
-  analyze(data) {
-    let currentDay = null;
-    const slowSmaValues = [];
-
-    const fastSmaSmoother = new SimpleMovingAverage(this.fastSmaPeriod);
-    const slowSmaSmoother = new SimpleMovingAverage(this.slowSmaPeriod);
-    const signalGenerator = new SignalGenerator(
-      this.cooldownWindow,
-      this.sidewaysWindow,
-      this.volatilityWindow,
-      this.maxVolatilityRangePercent,
-      this.sidewaysThresholdPercent,
+  constructor(config) {
+    this.fastSmaSmoother = new SimpleMovingAverage(config.fastSmaPeriod);
+    this.slowSmaSmoother = new SimpleMovingAverage(config.slowSmaPeriod);
+    this.signalGenerator = new SignalGenerator(
+      config.cooldownWindow,
+      config.sidewaysWindow,
+      config.volatilityWindow,
+      config.maxVolatilityRangePercent,
+      config.sidewaysThresholdPercent,
     );
 
-    return data.map((point, index) => {
-      const [day, time] = point.date.split(" ");
+    this.currentDay = null;
+    this.previousSlowSma = null;
+  }
 
-      if (day !== currentDay) {
-        currentDay = day;
-        fastSmaSmoother.reset();
-        slowSmaSmoother.reset();
-        signalGenerator.reset();
-      }
+  /**
+   * Process a single data point in real-time.
+   * @param {{ date: string, close: number }} point
+   * @returns {object} analysis result for this point
+   */
+  next(point) {
+    const [day, time] = point.date.split(" ");
 
-      let slowSma = slowSmaSmoother.compute(point.close);
-      let fastSma = fastSmaSmoother.compute(point.close);
+    if (day !== this.currentDay) {
+      this.currentDay = day;
+      this.fastSmaSmoother.reset();
+      this.slowSmaSmoother.reset();
+      this.signalGenerator.reset();
+      this.previousSlowSma = null;
+    }
 
-      let { signal, units, runningProfit } = signalGenerator.generate(
-        fastSma,
-        slowSmaValues[slowSmaValues.length - 1],
-        slowSma,
-        time,
-        point.close,
-      );
+    const slowSma = this.slowSmaSmoother.compute(point.close);
+    const fastSma = this.fastSmaSmoother.compute(point.close);
 
-      slowSmaValues.push(slowSma);
+    const { signal, units, runningProfit } = this.signalGenerator.generate(
+      fastSma,
+      this.previousSlowSma,
+      slowSma,
+      time,
+      point.close,
+    );
 
-      return {
-        date: point.date,
-        values: [
-          {
-            label: "Close",
-            value: point.close,
-            runningProfit: runningProfit,
-            signal: signal,
-            color: "#8fb3ff",
-            enabled: false,
-          },
-          {
-            label: "SlowSMA",
-            value: slowSma,
-            runningProfit: runningProfit,
-            signal: signal,
-            color: "#7ee0b5",
-            enabled: true,
-          },
-          {
-            label: "FastSMA",
-            value: fastSma,
-            runningProfit: runningProfit,
-            signal: signal,
-            color: "#b79cff",
-            enabled: true,
-          },
-        ],
-      };
-    });
+    this.previousSlowSma = slowSma;
+
+    return {
+      date: point.date,
+      close: point.close,
+      fastSma,
+      slowSma,
+      signal,
+      units,
+      runningProfit,
+    };
   }
 }
