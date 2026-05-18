@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { Line } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -11,19 +11,6 @@ import {
 import { colors, merge } from '../utils/styles'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler)
-
-function generateTimeSlots() {
-  const slots = []
-  for (let h = 9; h <= 15; h++) {
-    const maxMin = h === 15 ? 30 : 59
-    for (let m = 0; m <= maxMin; m++) {
-      slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-    }
-  }
-  return slots
-}
-
-const TIME_SLOTS = generateTimeSlots()
 
 const chartOptions = {
   responsive: true,
@@ -92,7 +79,7 @@ const styles = {
   name: { fontSize: '0.875rem', color: colors.secondary, marginBottom: '0.25rem' },
   price: { fontSize: '2rem', fontWeight: '700', color: colors.dark, lineHeight: 1.2 },
   change: { fontSize: '0.875rem', fontWeight: '600', marginTop: '0.25rem' },
-  chart: { height: '25vh', width: '100%' },
+  chart: { height: '25vh', width: '100%', padding: '0 1rem' },
   labels: {
     display: 'flex',
     justifyContent: 'center',
@@ -120,56 +107,26 @@ const styles = {
   },
 }
 
-export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'AE', openPrice = 2712.90, signals = [] }) {
-  const [dataMap, setDataMap] = useState({ close: {}, fastSma: {}, slowSma: {} })
+export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'AE', ticks = [], signals = [] }) {
   const [visible, setVisible] = useState({ close: true, fastSma: false, slowSma: false })
-
-  const signalMap = {}
-  signals.forEach((s) => { signalMap[s.time] = s.signal })
   const chartRef = useRef(null)
 
-  const closePrices = TIME_SLOTS.map((t) => dataMap.close[t] ?? null)
-  const filledPrices = closePrices.filter((p) => p !== null)
-  const currentPrice = filledPrices.length > 0 ? filledPrices[filledPrices.length - 1] : openPrice
+  // Build signal map from signals prop
+  const signalMap = {}
+  signals.forEach((s) => { signalMap[s.time] = s.signal })
+
+  // Extract time labels and data from ticks
+  const timeLabels = ticks.map((t) => t.time)
+  const closePrices = ticks.map((t) => t.close)
+  const fastSmaValues = ticks.map((t) => t.fastSma ?? null)
+  const slowSmaValues = ticks.map((t) => t.slowSma ?? null)
+
+  const openPrice = closePrices.length > 0 ? closePrices[0] : 0
+  const currentPrice = closePrices.length > 0 ? closePrices[closePrices.length - 1] : 0
   const change = currentPrice - openPrice
-  const changePercent = (change / openPrice) * 100
+  const changePercent = openPrice !== 0 ? (change / openPrice) * 100 : 0
   const isPositive = change >= 0
   const changeColor = isPositive ? colors.green : colors.red
-
-  const addTick = useCallback((time, close, fastSma = null, slowSma = null) => {
-    setDataMap((prev) => ({
-      close: { ...prev.close, [time]: close },
-      fastSma: fastSma !== null ? { ...prev.fastSma, [time]: fastSma } : prev.fastSma,
-      slowSma: slowSma !== null ? { ...prev.slowSma, [time]: slowSma } : prev.slowSma,
-    }))
-  }, [])
-
-  // Simulate real-time data for demo
-  useEffect(() => {
-    let p = openPrice
-    let fastSma = openPrice
-    let slowSma = openPrice
-    let minute = 0
-    const interval = setInterval(() => {
-      if (minute >= TIME_SLOTS.length) { clearInterval(interval); return }
-      p += (Math.random() - 0.48) * 5
-      fastSma += (p - fastSma) * 0.3
-      slowSma += (p - slowSma) * 0.1
-      addTick(
-        TIME_SLOTS[minute],
-        parseFloat(p.toFixed(2)),
-        parseFloat(fastSma.toFixed(2)),
-        parseFloat(slowSma.toFixed(2)),
-      )
-      minute++
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [openPrice, addTick])
-
-  useEffect(() => {
-    window.__chartAddTick = addTick
-    return () => { delete window.__chartAddTick }
-  }, [addTick])
 
   function toggleSeries(key) {
     setVisible((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -177,7 +134,11 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
 
   function makeDataset(key) {
     const series = SERIES[key]
-    const data = TIME_SLOTS.map((t) => dataMap[key][t] ?? null)
+    let data
+    if (key === 'close') data = closePrices
+    else if (key === 'fastSma') data = fastSmaValues
+    else data = slowSmaValues
+
     const isClose = key === 'close'
     return {
       label: series.label,
@@ -195,20 +156,20 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
         : 'transparent',
       borderWidth: isClose ? 2 : 1.5,
       borderDash: [],
-      pointRadius: (ctx) => signalMap[TIME_SLOTS[ctx.dataIndex]] ? 5 : 0,
-      pointHoverRadius: (ctx) => signalMap[TIME_SLOTS[ctx.dataIndex]] ? 7 : 0,
+      pointRadius: (ctx) => signalMap[timeLabels[ctx.dataIndex]] ? 5 : 0,
+      pointHoverRadius: (ctx) => signalMap[timeLabels[ctx.dataIndex]] ? 7 : 0,
       pointBackgroundColor: (ctx) => {
-        const sig = signalMap[TIME_SLOTS[ctx.dataIndex]]
+        const sig = signalMap[timeLabels[ctx.dataIndex]]
         if (!sig) return 'transparent'
         if (isClose) return sig === 'BUY' ? colors.green : colors.red
         return series.color
       },
       pointBorderColor: (ctx) => {
-        const sig = signalMap[TIME_SLOTS[ctx.dataIndex]]
+        const sig = signalMap[timeLabels[ctx.dataIndex]]
         if (!sig) return 'transparent'
         return 'white'
       },
-      pointBorderWidth: (ctx) => signalMap[TIME_SLOTS[ctx.dataIndex]] ? 2 : 0,
+      pointBorderWidth: (ctx) => signalMap[timeLabels[ctx.dataIndex]] ? 2 : 0,
       tension: 0.4,
       fill: isClose,
       spanGaps: true,
@@ -217,7 +178,7 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
   }
 
   const chartData = {
-    labels: TIME_SLOTS,
+    labels: timeLabels,
     datasets: Object.keys(SERIES).map(makeDataset),
   }
 
