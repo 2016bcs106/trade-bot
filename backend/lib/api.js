@@ -126,6 +126,8 @@ export class DataFetcher {
                 close: item[4],
                 volume: item[5],
             }))
+            // .filter(item => item.date.split(" ")[1] >= '10:00')
+            // .filter(item => parseInt(item.date.split(" ")[1].split(":")[1].split("")[1]) % 5 === 0)
             .filter(item => moment(item.date.split(" ")[0], "DD-MM-YYYY").format("YYYY-MM-DD") === toDate);
     }
 }

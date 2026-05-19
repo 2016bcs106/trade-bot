@@ -170,7 +170,7 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
         return 'white'
       },
       pointBorderWidth: (ctx) => signalMap[timeLabels[ctx.dataIndex]] ? 2 : 0,
-      tension: 0.4,
+      tension: 0,
       fill: isClose,
       spanGaps: true,
       hidden: !visible[key],

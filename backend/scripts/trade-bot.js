@@ -32,6 +32,7 @@ if (dryRun) {
 
     let running = false;
     let resetDone = false;
+    let targetReached = false;
 
     console.log("Listening for config/enabled...");
 
@@ -60,6 +61,7 @@ async function startDryRun() {
 
     const ticks = [];
     const signals = [];
+    let targetReached = false;
 
     for (const point of testData) {
         const [date, time] = point.date.split(" ");
@@ -68,7 +70,11 @@ async function startDryRun() {
         ticks.push({ time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma });
 
         if (analysis.signal !== null) {
-            signals.push({ time, signal: analysis.signal, triggerPrice: analysis.close, gain: analysis.runningProfit, status: 'DRY_RUN' });
+            const status = targetReached ? 'dry-run' : 'success';
+            signals.push({ time, signal: analysis.signal, triggerPrice: analysis.close, gain: analysis.runningProfit, status });
+            if (!targetReached && (analysis.runningProfit > 10 || analysis.runningProfit < -10)) {
+                targetReached = true;
+            }
         }
     }
 
@@ -79,7 +85,8 @@ async function startDryRun() {
 
     console.log(`Processed ${testData.length} data points. Output: ${outputPath}`);
 
-    console.log(`==== Net gain: ${signals.slice(-1)[0].gain} ====`);
+    const lastSignal = signals.slice(-1)[0];
+    console.log(`==== Net gain: ${lastSignal ? lastSignal.gain : 0} ====`);
 }
 
 function wait(ms) {
@@ -142,16 +149,20 @@ async function startLive(dataFetcher, analyzer, isRunning, getResetDone, setRese
                 if (isRunning()) {
                     console.log("Bot is analyzing: ", time);
                     if (analysis.signal !== null) {
+                        const status = targetReached ? 'dry-run' : 'success';
                         await withTimeout(
                             dataFetcher.storeSignal(date, {
                                 time,
                                 signal: analysis.signal,
                                 triggerPrice: price,
                                 gain: analysis.runningProfit,
-                                status: 'DRY_RUN',
+                                status,
                             }),
                             "storeSignal",
                         );
+                        if (!targetReached && (analysis.runningProfit > 10 || analysis.runningProfit < -10)) {
+                            targetReached = true;
+                        }
                     }
                 } else {
                     console.log("Bot not running: ", time);
@@ -162,6 +173,7 @@ async function startLive(dataFetcher, analyzer, isRunning, getResetDone, setRese
                     await withTimeout(dataFetcher.clearTicks(), "clearTicks");
                     await withTimeout(dataFetcher.clearSignals(), "clearSignals");
                     analyzer.reset();
+                    targetReached = false;
                     setResetDone(true);
                     console.log("Reset complete.");
                 }

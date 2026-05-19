@@ -1,25 +1,17 @@
 import { SimpleMovingAverage } from "./sma.js";
-import { SignalGenerator } from "./signal-generator.js";
+import { SimpleSignalGenerator } from "./simple-signal-generator.js";
 
 export class Analyzer {
   constructor(config) {
     this.fastSmaSmoother = new SimpleMovingAverage(config.fastSmaPeriod);
     this.slowSmaSmoother = new SimpleMovingAverage(config.slowSmaPeriod);
-    this.signalGenerator = new SignalGenerator(
-      config.cooldownWindow,
-      config.sidewaysWindow,
-      config.volatilityWindow,
-      config.maxVolatilityRangePercent,
-      config.sidewaysThresholdPercent,
-    );
+    this.signalGenerator = new SimpleSignalGenerator();
 
     this.currentDay = null;
-    this.previousSlowSma = null;
   }
 
   reset() {
     this.currentDay = null;
-    this.previousSlowSma = null;
     this.fastSmaSmoother.reset();
     this.slowSmaSmoother.reset();
     this.signalGenerator.reset();
@@ -38,21 +30,19 @@ export class Analyzer {
       this.fastSmaSmoother.reset();
       this.slowSmaSmoother.reset();
       this.signalGenerator.reset();
-      this.previousSlowSma = null;
     }
 
     const slowSma = this.slowSmaSmoother.compute(point.close);
     const fastSma = this.fastSmaSmoother.compute(point.close);
 
-    const { signal, units, runningProfit } = this.signalGenerator.generate(
-      fastSma,
-      this.previousSlowSma,
-      slowSma,
-      time,
-      point.close,
-    );
+    // Peak/trough detection on 5-min intervals, reversal on every tick
+    const minute = parseInt(time.split(":")[1], 10);
+    const isExtremaTick = minute % 5 === 0;
 
-    this.previousSlowSma = slowSma;
+    const { signal, runningProfit } = this.signalGenerator.generate(
+      point.close,
+      isExtremaTick,
+    );
 
     return {
       date: point.date,
@@ -60,7 +50,6 @@ export class Analyzer {
       fastSma,
       slowSma,
       signal,
-      units,
       runningProfit,
     };
   }

@@ -3,7 +3,7 @@ import moment from "moment";
 const DEFAULTS = {
   pmlId: "1000001121",
   cooldownWindow: 1,
-  fastSmaPeriod: 7,
+  fastSmaPeriod: 3,
   slowSmaPeriod: 55,
   sidewaysWindow: 5,
   sidewaysThresholdPercent: 0,
