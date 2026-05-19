@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import { writeFileSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(__dirname, "..", ".env") });
@@ -11,6 +12,8 @@ import { Analyzer } from "../lib/analyzer.js";
 import moment from "moment";
 
 const config = new Config();
+const dryRun = process.argv.includes("--dryRun");
+const OP_TIMEOUT_MS = 15000;
 
 if (!config.isValid) {
     Config.printHelp();
@@ -20,27 +23,62 @@ if (!config.isValid) {
 console.log("Running with config:");
 console.log(JSON.stringify(config, null, 2));
 
-const dataFetcher = new DataFetcher();
-const analyzer = new Analyzer(config);
+if (dryRun) {
+    console.log("\n*** DRY RUN MODE — No data will be saved to Firebase ***\n");
+    await startDryRun();
+} else {
+    const dataFetcher = new DataFetcher();
+    const analyzer = new Analyzer(config);
 
-let running = false;
-let resetDone = false;
-const OP_TIMEOUT_MS = 15000;
+    let running = false;
+    let resetDone = false;
 
-console.log("Listening for config/enabled...");
+    console.log("Listening for config/enabled...");
 
-dataFetcher.onEnabledChange((enabled) => {
-    if (enabled === true && !running) {
-        console.log("Bot enabled.. starting..");
-        analyzer.reset();
-        running = true;
-    } else if (enabled === false && running) {
-        console.log("Bot disabled.. stopping..");
-        running = false;
-    } else if (enabled == null) {
-        console.log("Config not set.. waiting...");
+    dataFetcher.onEnabledChange((enabled) => {
+        if (enabled === true && !running) {
+            console.log("Bot enabled.. starting..");
+            analyzer.reset();
+            running = true;
+        } else if (enabled === false && running) {
+            console.log("Bot disabled.. stopping..");
+            running = false;
+        } else if (enabled == null) {
+            console.log("Config not set.. waiting...");
+        }
+    });
+
+    await startLive(dataFetcher, analyzer, () => running, () => resetDone, (v) => { resetDone = v; });
+}
+
+async function startDryRun() {
+    const dataFetcher = new DataFetcher();
+    const analyzer = new Analyzer(config);
+    const testData = await dataFetcher.getDryRunData(config.fromDate, config.toDate, config.pmlId);
+
+    analyzer.reset();
+
+    const ticks = [];
+    const signals = [];
+
+    for (const point of testData) {
+        const [date, time] = point.date.split(" ");
+        const analysis = analyzer.next(point);
+
+        ticks.push({ time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma });
+
+        if (analysis.signal !== null) {
+            signals.push({ time, signal: analysis.signal, triggerPrice: analysis.close, gain: analysis.runningProfit, status: 'DRY_RUN' });
+        }
     }
-});
+
+    // Write output JSON for the front-end
+    const outputPath = resolve(__dirname, "..", "..", "front-end", "public", "dry-run-output.json");
+    const output = { ticks, signals, generatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss") };
+    writeFileSync(outputPath, JSON.stringify(output, null, 2));
+
+    console.log(`Processed ${testData.length} data points. Output: ${outputPath}`);
+}
 
 function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,7 +101,7 @@ function extractLtp(lastTradedPrice) {
     return price;
 }
 
-async function start() {
+async function startLive(dataFetcher, analyzer, isRunning, getResetDone, setResetDone) {
     const accessToken = await withTimeout(
         dataFetcher.getAccessToken(),
         "getAccessToken",
@@ -99,7 +137,7 @@ async function start() {
                     "storeTick",
                 );
 
-                if (running) {
+                if (isRunning()) {
                     console.log("Bot is analyzing: ", time);
                     if (analysis.signal !== null) {
                         await withTimeout(
@@ -117,16 +155,16 @@ async function start() {
                     console.log("Bot not running: ", time);
                 }
             } else if (time >= '09:00' && time <= '09:14') {
-                if (!resetDone) {
+                if (!getResetDone()) {
                     console.log("Pre-market reset...");
                     await withTimeout(dataFetcher.clearTicks(), "clearTicks");
                     await withTimeout(dataFetcher.clearSignals(), "clearSignals");
                     analyzer.reset();
-                    resetDone = true;
+                    setResetDone(true);
                     console.log("Reset complete.");
                 }
             } else {
-                resetDone = false;
+                setResetDone(false);
                 console.log("Outside market hours: ", time);
             }
         } catch (error) {
@@ -142,14 +180,4 @@ async function start() {
     }
 
     console.log("Stopped.");
-}
-
-try {
-    await start();
-} catch (error) {
-    console.error(
-        `[Fatal] ${moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss")} - ${error?.message || error}`,
-        error,
-    );
-    process.exit(1);
 }

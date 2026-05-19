@@ -4,6 +4,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "node scripts/trade-bot.js",
+    "dry-run": "node scripts/trade-bot.js --dryRun",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

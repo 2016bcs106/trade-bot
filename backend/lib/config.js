@@ -9,8 +9,8 @@ const DEFAULTS = {
   sidewaysThresholdPercent: 0,
   volatilityWindow: 5,
   maxVolatilityRangePercent: 100,
-  date: moment().format("YYYY-MM-DD"),
-  lookbackDays: 30,
+  date: moment().utcOffset("+05:30").format("YYYY-MM-DD"),
+  lookbackDays: 1,
 };
 
 export class Config {

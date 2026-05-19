@@ -28,3 +28,6 @@ dist-ssr
 
 # Environment variables
 .env
+
+# Dry run output
+public/dry-run-output.json
