@@ -126,7 +126,7 @@ export class SignalGenerator {
     }
 
     // Signal Logic
-    else if (tradingEnabled && canTrade && this.index > 1 && !isSideways && !isTooVolatile) {
+    else if (tradingEnabled && canTrade && this.index > 1 && !isSideways && !isTooVolatile && value !== null && slowSma !== null && previousSlowSma !== null) {
       const previousClose = this.data[this.index - 1];
 
       // BUY: fast SMA crosses ABOVE slow SMA

@@ -78,6 +78,8 @@ async function startDryRun() {
     writeFileSync(outputPath, JSON.stringify(output, null, 2));
 
     console.log(`Processed ${testData.length} data points. Output: ${outputPath}`);
+
+    console.log(`==== Net gain: ${signals.slice(-1)[0].gain} ====`);
 }
 
 function wait(ms) {

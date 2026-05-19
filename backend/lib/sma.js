@@ -18,7 +18,10 @@ export class SimpleMovingAverage {
       this.sum -= this.data.shift();
     }
 
-    const currentPeriod = Math.min(this.data.length, this.period);
-    return Number((this.sum / currentPeriod).toFixed(2));
+    if (this.data.length < this.period) {
+      return null;
+    }
+
+    return Number((this.sum / this.period).toFixed(2));
   }
 }

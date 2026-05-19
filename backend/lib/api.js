@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { get, getDatabase, onValue, push, ref, remove } from "firebase/database";
+import moment from "moment";
 import fetch from "node-fetch";
 
 export class DataFetcher {
@@ -124,6 +125,7 @@ export class DataFetcher {
                 date: item[0],
                 close: item[4],
                 volume: item[5],
-            }));
+            }))
+            .filter(item => moment(item.date.split(" ")[0], "DD-MM-YYYY").format("YYYY-MM-DD") === toDate);
     }
 }
