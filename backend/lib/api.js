@@ -24,6 +24,23 @@ export class DataFetcher {
     }
 
     /**
+     * Listen for accessToken changes in Firebase.
+     * Calls callback(newToken) whenever the token value changes.
+     * Returns the unsubscribe function.
+     */
+    onAccessTokenChange(callback) {
+        let currentToken = null;
+        return onValue(ref(this.db, "auth/accessToken"), (snapshot) => {
+            const data = snapshot.val();
+            if (!data || !data.token) return;
+            if (data.token !== currentToken) {
+                currentToken = data.token;
+                callback(currentToken);
+            }
+        });
+    }
+
+    /**
      * Listen for config/enabled changes in Firebase.
      * Calls onEnabled(true/false) whenever the value changes.
      */

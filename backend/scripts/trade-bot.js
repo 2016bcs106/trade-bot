@@ -104,12 +104,21 @@ function extractLtp(lastTradedPrice) {
 }
 
 async function startLive(dataFetcher, analyzer, isRunning, getResetDone, setResetDone) {
-    const accessToken = await withTimeout(
+    let accessToken = await withTimeout(
         dataFetcher.getAccessToken(),
         "getAccessToken",
     );
 
+    // Listen for token changes and update in real-time
+    dataFetcher.onAccessTokenChange((newToken) => {
+        if (newToken !== accessToken) {
+            console.log(`🔑 [${moment().utcOffset("+05:30").format("HH:mm:ss")}] Access token updated from Firebase`);
+            accessToken = newToken;
+        }
+    });
+
     console.log(`Startup complete. Entering loop with operation timeout=${OP_TIMEOUT_MS}ms`);
+    console.log(`🔑 Listening for token changes in Firebase...`);
 
     setInterval(() => {
         console.log(`[Heartbeat] ${moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss")}`);
