@@ -24,8 +24,8 @@ export interface Prediction {
   /** Confidence score (0-1) if available, null otherwise */
   confidence: number | null;
 
-  /** ISO timestamp when prediction was generated */
-  generatedAt: number;
+  /** ISO timestamp when prediction was generated (YYYY-MM-DD HH:mm:ss) */
+  generatedAt: string;
 
   /** Actual intraday high (filled after market close), null until evaluated */
   actualHigh: number | null;
