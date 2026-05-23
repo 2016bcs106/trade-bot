@@ -4,15 +4,27 @@ import BaseScript from "./base-script.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 
 interface PaytmSearchResult {
-  symbol: string;
+  id: string;
   name: string;
-  security_id: string;
-  exchange: string;
   isin: string;
+  mcap: number;
+  industry_code: string;
+  industry_name: string;
+  exchange: string;
+  segment: string;
+  security_id: number;
+  symbol: string;
+  series: string;
+  instrument_type: string;
+  tick_size: number;
+  lot_size: number;
+  freeze_quantity: number;
 }
 
 interface PaytmSearchResponse {
-  data?: PaytmSearchResult[];
+  data?: {
+    results?: PaytmSearchResult[];
+  };
 }
 
 /**
@@ -93,28 +105,33 @@ class StockSyncScript extends BaseScript {
       const result = await this.searchPaytmMoney(symbol);
 
       if (!result) {
-        this.log.error(`No match found for symbol: ${symbol}`);
+        this.log.error(`No exact NSE match for symbol: ${symbol} — marking as sync_failed`);
         this.failed++;
         await this.firebase.setStock(symbol, {
           symbol,
           name: symbol,
-          securityId: "",
+          securityId: 0,
           exchange: "NSE",
           enabled: false,
           autoOptimize: false,
           currentProductionVersion: null,
           addedAt: stock.addedAt || Date.now(),
           updatedAt: Date.now(),
-          status: "not_found",
+          status: "sync_failed",
         } as any);
         return;
       }
 
       const config: StockConfig = {
-        symbol: result.symbol || symbol,
+        symbol: result.symbol,
         name: result.name,
         securityId: result.security_id,
-        exchange: result.exchange === "BSE" ? "BSE" : "NSE",
+        isin: result.isin,
+        industryName: result.industry_name !== "NULL" ? result.industry_name : undefined,
+        mcap: result.mcap,
+        tickSize: result.tick_size,
+        lotSize: result.lot_size,
+        exchange: "NSE",
         enabled: true,
         autoOptimize: true,
         currentProductionVersion: null,
@@ -135,10 +152,31 @@ class StockSyncScript extends BaseScript {
   private async searchPaytmMoney(query: string): Promise<PaytmSearchResult | null> {
     const url = `https://api-eq.paytmmoney.com/data/v2/suggest?is-advanced-user=false&search-scope=ALL&q=${encodeURIComponent(query)}`;
 
+    const ssoToken = process.env.PAYTM_MONEY_SSO_TOKEN;
+    const twoFaToken = process.env.PAYTM_MONEY_2FA_TOKEN;
+    const userId = process.env.PAYTM_MONEY_USER_ID;
+    const deviceId = process.env.PAYTM_MONEY_DEVICE_ID;
+
+    if (!ssoToken || !twoFaToken) {
+      throw new Error("Missing PAYTM_MONEY_SSO_TOKEN or PAYTM_MONEY_2FA_TOKEN in .env");
+    }
+
     const response = await fetch(url, {
       headers: {
-        "Accept": "application/json",
-        "User-Agent": "trade-bot/1.0",
+        "accept": "application/json",
+        "content-type": "application/json",
+        "origin": "https://www.paytmmoney.com",
+        "referer": "https://www.paytmmoney.com/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "x-pmngx-key": "paytmmoney",
+        "x-pmmodule-name": "paytmmoney",
+        "x-sso-token": ssoToken,
+        "x-2fa-token": twoFaToken,
+        "x-user-agent": JSON.stringify({
+          platform: "web",
+          user_id: userId || "",
+          device_id: deviceId || "",
+        }),
       },
     });
 
@@ -147,22 +185,17 @@ class StockSyncScript extends BaseScript {
     }
 
     const json = (await response.json()) as PaytmSearchResponse;
-    const results = json.data || [];
+    const results = json.data?.results || [];
 
     if (results.length === 0) return null;
 
-    // Find exact symbol match on NSE first, then BSE, then first result
+    // Strict: only NSE with exact symbol match
     const exactNSE = results.find(
       (r) => r.symbol.toUpperCase() === query.toUpperCase() && r.exchange === "NSE"
     );
-    if (exactNSE) return exactNSE;
 
-    const exactBSE = results.find(
-      (r) => r.symbol.toUpperCase() === query.toUpperCase() && r.exchange === "BSE"
-    );
-    if (exactBSE) return exactBSE;
-
-    return results[0];
+    // If no exact NSE match, return null (sync_failed)
+    return exactNSE || null;
   }
 }
 

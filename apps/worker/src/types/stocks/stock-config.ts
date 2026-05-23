@@ -10,7 +10,22 @@ export interface StockConfig {
   name: string;
 
   /** Paytm Money security ID for data fetching */
-  securityId: string;
+  securityId: number | string;
+
+  /** ISIN code (e.g., "INE040A01034") */
+  isin?: string;
+
+  /** Industry name (e.g., "Banks - Private Sector") */
+  industryName?: string;
+
+  /** Market cap in crores */
+  mcap?: number;
+
+  /** Tick size (price precision) */
+  tickSize?: number;
+
+  /** Lot size */
+  lotSize?: number;
 
   /** Exchange: NSE or BSE */
   exchange: "NSE" | "BSE";
