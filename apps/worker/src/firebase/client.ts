@@ -5,6 +5,10 @@ import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payloa
 import { TickData } from "../types/market-data/tick-data.ts";
 import { SignalData } from "../types/market-data/signal-data.ts";
 import { ScriptStatus } from "../types/script-status.ts";
+import { StockConfig } from "../types/stocks/index.ts";
+import { Prediction, EvaluationResult } from "../types/predictions/index.ts";
+import { ModelMetadata } from "../types/models/index.ts";
+import { AuditEvent } from "../types/audit/index.ts";
 
 const app = initializeApp({
   databaseURL: process.env.FIREBASE_DATABASE_URL,
@@ -93,6 +97,78 @@ export default class FirebaseClient {
 
   async clearSignals(): Promise<void> {
     await this._remove("signals");
+  }
+
+  // ─── Stocks ────────────────────────────────────────────────────────
+
+  async getStock(symbol: string): Promise<StockConfig | null> {
+    const data = await this._getValue(`stocks/${symbol}`);
+    return data as StockConfig | null;
+  }
+
+  async getAllStocks(): Promise<Record<string, StockConfig>> {
+    const data = await this._getValue("stocks");
+    return (data as Record<string, StockConfig>) || {};
+  }
+
+  async setStock(symbol: string, config: StockConfig): Promise<void> {
+    await this._setValue(`stocks/${symbol}`, config);
+  }
+
+  async updateStock(symbol: string, updates: Partial<StockConfig>): Promise<void> {
+    const current = await this.getStock(symbol);
+    if (!current) throw new Error(`Stock ${symbol} not found`);
+    await this._setValue(`stocks/${symbol}`, { ...current, ...updates, updatedAt: Date.now() });
+  }
+
+  async removeStock(symbol: string): Promise<void> {
+    await this._remove(`stocks/${symbol}`);
+  }
+
+  onStocksChange(callback: (stocks: Record<string, StockConfig> | null) => void): Unsubscribe {
+    return this._onChange("stocks", (value) => {
+      callback(value as Record<string, StockConfig> | null);
+    });
+  }
+
+  // ─── Predictions ───────────────────────────────────────────────────
+
+  async setPrediction(symbol: string, date: string, prediction: Prediction): Promise<void> {
+    await this._setValue(`predictions/${symbol}/${date}`, prediction);
+  }
+
+  async getPrediction(symbol: string, date: string): Promise<Prediction | null> {
+    const data = await this._getValue(`predictions/${symbol}/${date}`);
+    return data as Prediction | null;
+  }
+
+  async setEvaluation(symbol: string, date: string, evaluation: EvaluationResult): Promise<void> {
+    await this._setValue(`predictions/${symbol}/${date}/evaluation`, evaluation);
+  }
+
+  // ─── Models ────────────────────────────────────────────────────────
+
+  async setModelMetadata(symbol: string, version: string, metadata: ModelMetadata): Promise<void> {
+    await this._setValue(`models/${symbol}/${version}`, metadata);
+  }
+
+  async getModelMetadata(symbol: string, version: string): Promise<ModelMetadata | null> {
+    const data = await this._getValue(`models/${symbol}/${version}`);
+    return data as ModelMetadata | null;
+  }
+
+  async getAllModelVersions(symbol: string): Promise<Record<string, ModelMetadata>> {
+    const data = await this._getValue(`models/${symbol}`);
+    return (data as Record<string, ModelMetadata>) || {};
+  }
+
+  // ─── Audit ─────────────────────────────────────────────────────────
+
+  async pushAuditEvent(event: Omit<AuditEvent, "id">): Promise<string> {
+    const auditRef = push(ref(this.db, "audit"));
+    const id = auditRef.key!;
+    await set(auditRef, { ...event, id });
+    return id;
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────

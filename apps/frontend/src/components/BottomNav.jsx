@@ -1,9 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faServer } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faServer, faChartBar } from '@fortawesome/free-solid-svg-icons'
 
 const navItems = [
   { path: '/', label: 'Home', icon: faChartLine },
+  { path: '/stocks', label: 'Stocks', icon: faChartBar },
   { path: '/scripts', label: 'Scripts', icon: faServer },
 ]
 
