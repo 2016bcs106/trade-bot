@@ -4,6 +4,7 @@ import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscrib
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
 import { TickData } from "../types/market-data/tick-data.ts";
 import { SignalData } from "../types/market-data/signal-data.ts";
+import { ScriptStatus } from "../types/script-status.ts";
 
 const app = initializeApp({
   databaseURL: process.env.FIREBASE_DATABASE_URL,
@@ -60,6 +61,12 @@ export default class FirebaseClient {
       this._setValue("auth/readAccessToken", { token: readAccessToken, timestamp: updatedOn }),
       this._setValue("auth/updatedOn", updatedOn),
     ]);
+  }
+
+  // ─── Script Status ────────────────────────────────────────────────
+
+  async updateScriptStatus(scriptName: string, status: ScriptStatus): Promise<void> {
+    await this._setValue(`scripts/${scriptName}`, status);
   }
 
   // ─── Config ───────────────────────────────────────────────────────
