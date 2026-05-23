@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db, ref, set, remove, onValue } from '../utils/firebase'
-import { layout, text, card } from '../utils/styles'
+import { layout, text, colors } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faChartBar,
@@ -10,60 +10,97 @@ import {
   faCog,
   faPlus,
   faSync,
+  faChevronDown,
+  faChevronUp,
 } from '@fortawesome/free-solid-svg-icons'
 
 const styles = {
   container: {
-    padding: '1rem',
-    paddingBottom: '5rem',
+    paddingBottom: '7.5rem',
+  },
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0.75rem 1rem',
+    background: colors.white,
+    borderBottom: `1px solid ${colors.light}`,
+    gap: '0.75rem',
+    cursor: 'pointer',
+  },
+  symbolCol: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.75rem',
+    flex: 1,
+    minWidth: 0,
   },
-  // Stock card
-  stockCard: {
-    ...card.base,
-    padding: '1rem 1.25rem',
+  symbol: {
+    fontSize: '0.9rem',
+    fontWeight: '700',
+    color: colors.dark,
   },
-  cardTop: {
+  name: {
+    fontSize: '0.7rem',
+    color: colors.muted,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  statusBadge: {
+    fontSize: '0.6rem',
+    fontWeight: '700',
+    letterSpacing: '0.04em',
+    padding: '0.15rem 0.4rem',
+    borderRadius: '4px',
+    textAlign: 'center',
+    flexShrink: 0,
+  },
+  chevron: {
+    fontSize: '0.7rem',
+    color: colors.muted,
+    flexShrink: 0,
+    width: '14px',
+    textAlign: 'center',
+  },
+  details: {
+    padding: '0.6rem 1rem 0.8rem',
+    background: '#f8fafc',
+    borderBottom: `1px solid ${colors.light}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+  },
+  detailRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '0.5rem',
+    alignItems: 'center',
   },
-  symbolName: {
+  detailLabel: {
+    fontSize: '0.7rem',
+    color: colors.muted,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: '0.7rem',
+    color: colors.dark,
+    fontWeight: '600',
+  },
+  actionRow: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '0.15rem',
+    gap: '0.75rem',
+    marginTop: '0.25rem',
+    paddingTop: '0.4rem',
+    borderTop: `1px solid ${colors.light}`,
   },
-  symbol: { fontSize: '0.95rem', fontWeight: '700', color: 'var(--pm-text)' },
-  name: { fontSize: '0.75rem', color: 'var(--pm-text-muted)' },
-  actions: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
-  iconBtn: {
+  actionBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: '0.3rem',
-    borderRadius: '6px',
-    fontSize: '1.1rem',
-  },
-  metaRow: {
-    display: 'flex',
-    gap: '1rem',
-    flexWrap: 'wrap',
-    marginTop: '0.4rem',
-  },
-  badge: {
     fontSize: '0.7rem',
-    fontWeight: '500',
-    padding: '0.2rem 0.5rem',
-    borderRadius: '6px',
-    background: 'rgba(59, 130, 246, 0.1)',
-    color: 'var(--pm-primary)',
-  },
-  badgeDisabled: {
-    background: 'rgba(148, 163, 184, 0.1)',
-    color: 'var(--pm-text-muted)',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem',
+    padding: '0.2rem 0',
   },
   emptyState: {
     display: 'flex',
@@ -110,84 +147,105 @@ const styles = {
     alignItems: 'center',
     gap: '0.3rem',
   },
-  pendingBadge: {
-    fontSize: '0.7rem',
-    fontWeight: '500',
-    padding: '0.2rem 0.5rem',
-    borderRadius: '6px',
-    background: 'rgba(245, 158, 11, 0.15)',
-    color: '#f59e0b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.3rem',
-  },
 }
 
-function StockCard({ stock, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
+function getStatusStyle(stock) {
+  if (stock.status === 'pending_sync') {
+    return { background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', text: 'PENDING' }
+  }
+  if (stock.enabled) {
+    return { background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', text: 'ACTIVE' }
+  }
+  return { background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', text: 'OFF' }
+}
+
+function StockRow({ stock, isOpen, onToggle, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
+  const status = getStatusStyle(stock)
   const isPending = stock.status === 'pending_sync'
 
   return (
-    <div style={styles.stockCard}>
-      <div style={styles.cardTop}>
-        <div style={styles.symbolName}>
+    <>
+      <div style={styles.row} onClick={onToggle}>
+        <div style={styles.symbolCol}>
           <span style={styles.symbol}>{stock.symbol}</span>
-          {stock.name ? (
-            <span style={styles.name}>{stock.name}{stock.exchange ? ` · ${stock.exchange}` : ''}</span>
-          ) : (
-            <span style={styles.name}>—</span>
-          )}
+          <span style={styles.name}>{stock.name || '—'}</span>
         </div>
-        <div style={styles.actions}>
+        <span style={{ ...styles.statusBadge, background: status.background, color: status.color }}>
+          {status.text}
+        </span>
+        <span style={styles.chevron}>
+          <FontAwesomeIcon icon={isOpen ? faChevronUp : faChevronDown} />
+        </span>
+      </div>
+      {isOpen && (
+        <div style={styles.details}>
           {!isPending && (
-            <button
-              style={styles.iconBtn}
-              onClick={onToggleEnabled}
-              title={stock.enabled ? 'Disable predictions' : 'Enable predictions'}
-            >
-              <FontAwesomeIcon
-                icon={stock.enabled ? faToggleOn : faToggleOff}
-                style={{ color: stock.enabled ? '#22c55e' : '#94a3b8' }}
-              />
-            </button>
+            <>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Exchange</span>
+                <span style={styles.detailValue}>{stock.exchange || '—'}</span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Predictions</span>
+                <span style={styles.detailValue}>{stock.enabled ? 'Enabled' : 'Disabled'}</span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Optimization</span>
+                <span style={styles.detailValue}>{stock.autoOptimize ? 'Auto' : 'Manual'}</span>
+              </div>
+              {stock.currentProductionVersion && (
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Model Version</span>
+                  <span style={styles.detailValue}>{stock.currentProductionVersion}</span>
+                </div>
+              )}
+            </>
           )}
-          <button style={styles.iconBtn} onClick={onRemove} title="Remove stock">
-            <FontAwesomeIcon icon={faTrash} style={{ color: '#ef4444', fontSize: '0.85rem' }} />
-          </button>
-        </div>
-      </div>
-      <div style={styles.metaRow}>
-        {isPending ? (
-          <span style={styles.pendingBadge}>
-            <FontAwesomeIcon icon={faSync} />
-            Pending Sync
-          </span>
-        ) : (
-          <>
-            <span style={{ ...styles.badge, ...(stock.enabled ? {} : styles.badgeDisabled) }}>
-              {stock.enabled ? 'Predictions ON' : 'Predictions OFF'}
-            </span>
-            <span style={{ ...styles.badge, ...(stock.autoOptimize ? {} : styles.badgeDisabled) }}>
-              <button
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 'inherit', fontWeight: 'inherit', padding: 0 }}
-                onClick={onToggleAutoOptimize}
-              >
-                <FontAwesomeIcon icon={faCog} style={{ marginRight: '0.25rem' }} />
-                {stock.autoOptimize ? 'Auto-Optimize' : 'Manual'}
-              </button>
-            </span>
-            {stock.currentProductionVersion && (
-              <span style={styles.badge}>Model: {stock.currentProductionVersion}</span>
+          {isPending && (
+            <div style={styles.detailRow}>
+              <span style={styles.detailLabel}>Status</span>
+              <span style={{ ...styles.detailValue, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <FontAwesomeIcon icon={faSync} /> Pending Sync
+              </span>
+            </div>
+          )}
+          <div style={styles.actionRow}>
+            {!isPending && (
+              <>
+                <button
+                  style={{ ...styles.actionBtn, color: stock.enabled ? '#22c55e' : '#94a3b8' }}
+                  onClick={(e) => { e.stopPropagation(); onToggleEnabled() }}
+                >
+                  <FontAwesomeIcon icon={stock.enabled ? faToggleOn : faToggleOff} />
+                  {stock.enabled ? 'Disable' : 'Enable'}
+                </button>
+                <button
+                  style={{ ...styles.actionBtn, color: 'var(--pm-primary)' }}
+                  onClick={(e) => { e.stopPropagation(); onToggleAutoOptimize() }}
+                >
+                  <FontAwesomeIcon icon={faCog} />
+                  {stock.autoOptimize ? 'Set Manual' : 'Auto-Opt'}
+                </button>
+              </>
             )}
-          </>
-        )}
-      </div>
-    </div>
+            <button
+              style={{ ...styles.actionBtn, color: '#ef4444', marginLeft: 'auto' }}
+              onClick={(e) => { e.stopPropagation(); onRemove() }}
+            >
+              <FontAwesomeIcon icon={faTrash} />
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
 export default function Stocks() {
   const [stocks, setStocks] = useState(undefined)
   const [symbolInput, setSymbolInput] = useState('')
+  const [openSymbol, setOpenSymbol] = useState(null)
 
   useEffect(() => {
     const stocksRef = ref(db, 'stocks')
@@ -226,12 +284,11 @@ export default function Stocks() {
   }
 
   const handleRemove = async (stock) => {
-    if (window.confirm(`Remove ${stock.symbol} from tracking?`)) {
+    if (window.confirm(`Remove ${stock.symbol}?`)) {
       await remove(ref(db, `stocks/${stock.symbol}`))
     }
   }
 
-  // Loading state
   if (stocks === undefined) {
     return (
       <div style={layout.page}>
@@ -255,9 +312,11 @@ export default function Stocks() {
           </div>
         ) : (
           stockList.map((stock) => (
-            <StockCard
+            <StockRow
               key={stock.symbol}
               stock={stock}
+              isOpen={openSymbol === stock.symbol}
+              onToggle={() => setOpenSymbol(openSymbol === stock.symbol ? null : stock.symbol)}
               onToggleEnabled={() => handleToggleEnabled(stock)}
               onToggleAutoOptimize={() => handleToggleAutoOptimize(stock)}
               onRemove={() => handleRemove(stock)}
@@ -270,7 +329,7 @@ export default function Stocks() {
       <div style={styles.addBar}>
         <input
           style={styles.addInput}
-          placeholder="Enter stock symbol (e.g. RELIANCE)"
+          placeholder="e.g. RELIANCE"
           value={symbolInput}
           onChange={(e) => setSymbolInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
