@@ -1,3 +1,7 @@
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import moment from 'moment'
+import { db, ref, onValue } from '../utils/firebase'
 import { layout, card, text, button, divider, merge } from '../utils/styles'
 
 const qrContainer = {
@@ -18,7 +22,30 @@ const qrPlaceholder = {
 
 const loginUrl = `${import.meta.env.VITE_PAYTM_MONEY_LOGIN_BASE_URL}?apiKey=${import.meta.env.VITE_PAYTM_MONEY_API_KEY}&state=${import.meta.env.VITE_PAYTM_MONEY_API_SECRET}`
 
+function isTokenFreshToday(updatedOnTimestamp) {
+  if (!updatedOnTimestamp) return false
+
+  const updatedMoment = moment(updatedOnTimestamp)
+  const startOfTodayIST = moment().utcOffset('+05:30').startOf('day')
+
+  return updatedMoment.isSameOrAfter(startOfTodayIST)
+}
+
 export default function Login() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const updatedOnRef = ref(db, 'auth/updatedOn')
+    const unsubscribe = onValue(updatedOnRef, (snapshot) => {
+      const updatedOn = snapshot.val()
+      if (isTokenFreshToday(updatedOn)) {
+        navigate('/', { replace: true })
+      }
+    })
+
+    return () => unsubscribe()
+  }, [navigate])
+
   function handleLogin() {
     window.location.href = loginUrl
   }

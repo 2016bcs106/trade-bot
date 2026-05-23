@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "deploy": "cd front-end && npm run build && firebase deploy --only hosting",
+    "dev": "cd front-end && npm run dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

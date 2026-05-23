@@ -1,3 +1,5 @@
+import moment from 'moment'
+
 const AUTH_KEY = 'trade_bot_auth'
 
 export function getAuth() {
@@ -5,10 +7,10 @@ export function getAuth() {
     const data = JSON.parse(localStorage.getItem(AUTH_KEY))
     if (!data) return null
 
-    const now = new Date()
-    const expiry = new Date(data.expiry)
+    const now = moment().utcOffset('+05:30')
+    const expiry = moment(data.expiry).utcOffset('+05:30')
 
-    if (now >= expiry) {
+    if (now.isSameOrAfter(expiry)) {
       localStorage.removeItem(AUTH_KEY)
       return null
     }
@@ -21,9 +23,8 @@ export function getAuth() {
 }
 
 export function setAuth(requestToken) {
-  const now = new Date()
-  const midnight = new Date(now)
-  midnight.setHours(23, 59, 59, 999)
+  const now = moment().utcOffset('+05:30')
+  const midnight = now.clone().endOf('day')
 
   const data = {
     requestToken,

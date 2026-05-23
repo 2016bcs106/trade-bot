@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { db, ref, onChildAdded, off } from '../utils/firebase'
-import { clearAuth } from '../utils/auth'
-import { layout, text, button, header } from '../utils/styles'
+import { layout, text, header } from '../utils/styles'
 import PortfolioChart from '../components/PortfolioChart'
 import TradeList from '../components/TradeList'
 
@@ -42,31 +41,15 @@ export default function Home() {
     }
   }, [isDryRun])
 
-  function handleLogout() {
-    clearAuth()
-    window.location.href = '/login'
-  }
-
   return (
     <div style={layout.page}>
       <header style={header.bar}>
         <span style={text.logo}>Trade Bot</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {isDryRun ? (
-            <span style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
-              DRY RUN
-            </span>
-          ) : (
-            <button
-              style={button.outline}
-              onClick={handleLogout}
-              onMouseOver={(e) => e.target.style.background = 'var(--pm-bg)'}
-              onMouseOut={(e) => e.target.style.background = 'transparent'}
-            >
-              Logout
-            </button>
-          )}
-        </div>
+        {isDryRun && (
+          <span style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
+            DRY RUN
+          </span>
+        )}
       </header>
 
       <PortfolioChart ticks={ticks} signals={signals} />

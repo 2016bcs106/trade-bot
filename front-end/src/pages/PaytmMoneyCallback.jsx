@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { setAuth } from '../utils/auth'
+import moment from 'moment'
 import { db, ref, set, onValue } from '../utils/firebase'
 import { layout, text, card, merge } from '../utils/styles'
 
@@ -24,20 +24,21 @@ export default function PaytmMoneyCallback() {
 
     async function processCallback() {
       try {
-        const today = new Date().toISOString().split('T')[0]
+        const requestTime = moment().utcOffset('+05:30').valueOf()
+
         await set(ref(db, 'auth/requestToken'), {
           token: requestToken,
-          date: today,
-          timestamp: Date.now(),
+          date: moment().utcOffset('+05:30').format('YYYY-MM-DD'),
+          timestamp: requestTime,
         })
 
         setStatus('Waiting for access token...')
 
-        const accessTokenRef = ref(db, 'auth/accessToken')
-        unsubscribe = onValue(accessTokenRef, (snapshot) => {
-          const data = snapshot.val()
-          if (data && data.token) {
-            setAuth(data.token)
+        // Listen to updatedOn - navigate only when it's updated AFTER our request
+        const updatedOnRef = ref(db, 'auth/updatedOn')
+        unsubscribe = onValue(updatedOnRef, (snapshot) => {
+          const updatedOn = snapshot.val()
+          if (updatedOn && updatedOn >= requestTime) {
             cleanup()
             navigate('/', { replace: true })
           }

@@ -5,6 +5,7 @@ import { dirname, resolve } from 'path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: resolve(__dirname, '..', '.env') })
 import fetch from 'node-fetch'
+import moment from 'moment'
 import { initializeApp } from 'firebase/app'
 import { getDatabase, ref, set, onValue } from 'firebase/database'
 
@@ -47,20 +48,24 @@ onValue(requestTokenRef, async (snapshot) => {
 
     if (response.ok && result.access_token) {
       console.log('✅ Access token received!')
+      const now = moment().utcOffset('+05:30').valueOf()
+
       await set(ref(db, 'auth/accessToken'), {
         token: result.access_token,
-        timestamp: Date.now(),
+        timestamp: now,
       });
 
       await set(ref(db, 'auth/publicAccessToken'), {
         token: result.public_access_token,
-        timestamp: Date.now(),
+        timestamp: now,
       })
 
       await set(ref(db, 'auth/readAccessToken'), {
         token: result.read_access_token,
-        timestamp: Date.now(),
+        timestamp: now,
       })
+
+      await set(ref(db, 'auth/updatedOn'), now)
 
       console.log('💾 Access tokens saved to database.')
     } else {
