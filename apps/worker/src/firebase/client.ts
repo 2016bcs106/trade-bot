@@ -1,9 +1,9 @@
 import "../config/env.ts";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
-import { SaveAccessTokensPayload } from "../types/save-access-tokens-payload.ts";
-import { TickData } from "../types/tick-data.ts";
-import { SignalData } from "../types/signal-data.ts";
+import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
+import { TickData } from "../types/market-data/tick-data.ts";
+import { SignalData } from "../types/market-data/signal-data.ts";
 
 const app = initializeApp({
   databaseURL: process.env.FIREBASE_DATABASE_URL,

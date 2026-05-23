@@ -8,8 +8,8 @@ import TradingConfig from "../config/trading-config.ts";
 import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.ts";
 import FirebaseClient from "../firebase/client.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
-import { LtpResponse } from "../types/ltp-response.ts";
-import { AnalysisResult } from "../types/analysis-result.ts";
+import { LtpResponse } from "../types/market-data/ltp-response.ts";
+import { AnalysisResult } from "../types/analysis/analysis-result.ts";
 
 const log = createLogger("trade-bot");
 const __dirname = dirname(fileURLToPath(import.meta.url));

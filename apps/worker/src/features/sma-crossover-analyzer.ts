@@ -1,6 +1,6 @@
 import SimpleMovingAverage from "./simple-moving-average.ts";
 import CrossoverSignalGenerator from "../prediction/crossover-signal-generator.ts";
-import { AnalysisResult } from "../types/analysis-result.ts";
+import { AnalysisResult } from "../types/analysis/analysis-result.ts";
 import TradingConfig from "../config/trading-config.ts";
 
 interface DataPoint {
