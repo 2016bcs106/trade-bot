@@ -21,10 +21,13 @@ import "../config/env.js";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync, appendFileSync, statSync } from "fs";
+import moment from "moment";
+import createLogger from "../utils/logger.js";
 import TradingConfig from "../config/trading-config.js";
 import FirebaseClient from "../firebase/client.js";
 import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.js";
 
+const log = createLogger("live-stream");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = new TradingConfig("live-stream");
 
@@ -35,11 +38,7 @@ const dataDir = resolve(__dirname, "..", "..", "..", "..", "data");
 mkdirSync(dataDir, { recursive: true });
 
 function getDateIST() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-}
-
-function getTimeIST() {
-  return new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+  return moment().utcOffset("+05:30").format("YYYY-MM-DD");
 }
 
 function getOutputFilePath() {
@@ -62,7 +61,7 @@ function flushBuffer() {
 
   const today = getDateIST();
   if (today !== lastFlushDate) {
-    console.log(`\n📅 New trading day: ${today}`);
+    log.info(`New trading day: ${today}`);
     totalFlushedToday = 0;
     lastFlushDate = today;
   }
@@ -76,9 +75,9 @@ function flushBuffer() {
     totalFlushed += flushedCount;
     totalFlushedToday += flushedCount;
     buffer = [];
-    console.log(`  💾 [${getTimeIST()}] Flushed ${flushedCount} ticks → ${getFileSizeMB(filePath)}MB (total: ${totalFlushed})`);
+    log.info(`Flushed ${flushedCount} ticks — file=${getFileSizeMB(filePath)}MB total=${totalFlushed}`);
   } catch (err) {
-    console.error(`  ❌ [${getTimeIST()}] Flush error: ${err.message}`);
+    log.error("Flush error", err);
   }
 }
 
@@ -92,9 +91,9 @@ function logStats() {
   const ticksPerSec = ((tickCount - tickCountAtLastStats) / statsIntervalSec).toFixed(1);
   const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
 
-  console.log(
-    `  📊 [${getTimeIST()}] uptime=${uptimeMin}m | ticks=${tickCount} (today=${totalFlushedToday}) | ` +
-    `rate=${ticksPerSec}/s | buffer=${buffer.length} | file=${getFileSizeMB(getOutputFilePath())}MB | mem=${memUsageMB}MB`
+  log.info(
+    `Stats — uptime=${uptimeMin}m ticks=${tickCount} today=${totalFlushedToday} ` +
+    `rate=${ticksPerSec}/s buffer=${buffer.length} file=${getFileSizeMB(getOutputFilePath())}MB mem=${memUsageMB}MB`
   );
 
   tickCountAtLastStats = tickCount;
@@ -105,25 +104,17 @@ const firebase = new FirebaseClient();
 let currentToken = null;
 let streamer = null;
 
-// ─── Startup banner ─────────────────────────────────────────────────
-console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
-console.log(`║  Live Market Data Recorder                                   ║`);
-console.log(`╠══════════════════════════════════════════════════════════════╣`);
-console.log(`║  Scrip:    ${exchangeType}:${scripId} (${scripType})`.padEnd(64) + `║`);
-console.log(`║  Mode:     ${modeType}`.padEnd(64) + `║`);
-console.log(`║  Flush:    every ${flushIntervalSec}s or ${maxBufferSize} ticks`.padEnd(64) + `║`);
-console.log(`║  Stats:    every ${statsIntervalSec}s`.padEnd(64) + `║`);
-console.log(`║  Output:   ${dataDir}/`.padEnd(64) + `║`);
-console.log(`║  Started:  ${getDateIST()} ${getTimeIST()}`.padEnd(64) + `║`);
-console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
-console.log(`Press Ctrl+C to stop.\n`);
+// ─── Startup ────────────────────────────────────────────────────────
+log.info("Starting live market data recorder");
+log.info(`Config — scrip=${exchangeType}:${scripId}(${scripType}) mode=${modeType} flush=${flushIntervalSec}s buffer=${maxBufferSize} stats=${statsIntervalSec}s`);
+log.info(`Output directory: ${dataDir}`);
 
 // ─── Streamer lifecycle ─────────────────────────────────────────────
 function createStreamer(token) {
   const s = new PaytmMoneyWebSocket(token);
 
   s.on("connected", () => {
-    console.log(`  ✅ [${getTimeIST()}] Connected to WebSocket`);
+    log.info("WebSocket connected");
     s.subscribe({ scripType, exchangeType, scripId, modeType });
   });
 
@@ -133,9 +124,9 @@ function createStreamer(token) {
     if (buffer.length >= maxBufferSize) flushBuffer();
   });
 
-  s.on("error", (err) => console.error(`  ⚠️  [${getTimeIST()}] Error: ${err.message}`));
-  s.on("disconnected", ({ code }) => { flushBuffer(); console.log(`  🔌 [${getTimeIST()}] Disconnected (code=${code})`); });
-  s.on("reconnecting", (n) => console.log(`  🔄 [${getTimeIST()}] Reconnecting... attempt ${n}`));
+  s.on("error", (err) => log.error("WebSocket error", err));
+  s.on("disconnected", ({ code }) => { flushBuffer(); log.warn(`WebSocket disconnected — code=${code}`); });
+  s.on("reconnecting", (n) => log.info(`WebSocket reconnecting — attempt ${n}`));
 
   return s;
 }
@@ -146,9 +137,9 @@ firebase.onPublicAccessTokenChange((token) => {
   currentToken = token;
 
   if (isFirstConnect) {
-    console.log(`  🔑 [${getTimeIST()}] Token loaded from Firebase`);
+    log.info("Public access token loaded from Firebase");
   } else {
-    console.log(`  🔑 [${getTimeIST()}] Token updated — reconnecting...`);
+    log.info("Public access token updated — reconnecting WebSocket");
     flushBuffer();
     if (streamer) streamer.disconnect();
   }
@@ -168,14 +159,7 @@ function shutdown(reason) {
   flushBuffer();
 
   const uptimeMin = Math.round((Date.now() - startTime) / 1000 / 60);
-  console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
-  console.log(`║  Shutdown: ${reason}`.padEnd(64) + `║`);
-  console.log(`╠══════════════════════════════════════════════════════════════╣`);
-  console.log(`║  Uptime:       ${uptimeMin} minutes`.padEnd(64) + `║`);
-  console.log(`║  Total ticks:  ${tickCount}`.padEnd(64) + `║`);
-  console.log(`║  Written:      ${totalFlushed} ticks`.padEnd(64) + `║`);
-  console.log(`║  Today's file: ${getFileSizeMB(getOutputFilePath())} MB`.padEnd(64) + `║`);
-  console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
+  log.info(`Shutdown — reason=${reason} uptime=${uptimeMin}m ticks=${tickCount} written=${totalFlushed} file=${getFileSizeMB(getOutputFilePath())}MB`);
 
   if (streamer) streamer.disconnect();
   process.exit(0);
@@ -185,10 +169,9 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 process.on("uncaughtException", (err) => {
-  console.error(`  ❌ [${getTimeIST()}] Uncaught exception: ${err.message}`);
-  console.error(err.stack);
+  log.error("Uncaught exception", err);
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error(`  ❌ [${getTimeIST()}] Unhandled rejection:`, reason);
+  log.error("Unhandled rejection", reason instanceof Error ? reason : new Error(String(reason)));
 });

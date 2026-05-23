@@ -1,16 +1,18 @@
 import "../config/env.js";
 import moment from "moment";
+import createLogger from "../utils/logger.js";
 import FirebaseClient from "../firebase/client.js";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.js";
 
+const log = createLogger("access-token-generator");
 const firebase = new FirebaseClient();
 const paytm = new PaytmMoneyClient();
 
-console.log("🔄 Listening for requestToken changes...");
+log.info("Listening for requestToken changes...");
 
 firebase.onRequestTokenChange(async (requestToken) => {
-  console.log(`📥 New requestToken: ${requestToken}`);
-  console.log("🔑 Exchanging for access token...");
+  log.info(`New requestToken received: ${requestToken}`);
+  log.info("Exchanging for access token...");
 
   try {
     const result = await paytm.exchangeRequestToken(
@@ -20,7 +22,6 @@ firebase.onRequestTokenChange(async (requestToken) => {
     );
 
     if (result.access_token) {
-      console.log("✅ Access token received!");
       const updatedOn = moment().utcOffset("+05:30").valueOf();
 
       await firebase.saveAccessTokens({
@@ -30,11 +31,11 @@ firebase.onRequestTokenChange(async (requestToken) => {
         updatedOn,
       });
 
-      console.log("💾 Access tokens saved to database.");
+      log.info("Access tokens saved to database");
     } else {
-      console.error("❌ Token exchange failed:", result);
+      log.error("Token exchange failed", result);
     }
   } catch (error) {
-    console.error("❌ Error exchanging token:", error.message);
+    log.error("Error exchanging token", error);
   }
 });

@@ -3,11 +3,13 @@ import { writeFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import moment from "moment";
+import createLogger from "../utils/logger.js";
 import TradingConfig from "../config/trading-config.js";
 import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.js";
 import FirebaseClient from "../firebase/client.js";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.js";
 
+const log = createLogger("trade-bot");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = new TradingConfig("trade-bot");
 const OP_TIMEOUT_MS = 15000;
@@ -17,11 +19,10 @@ if (!config.isValid) {
   process.exit(0);
 }
 
-console.log("Running with config:");
-console.log(JSON.stringify(config, null, 2));
+log.info("Starting with config", config.toJSON());
 
 if (config.dryRun) {
-  console.log("\n*** DRY RUN MODE — No data will be saved to Firebase ***\n");
+  log.info("DRY RUN MODE — No data will be saved to Firebase");
   await startDryRun();
 } else {
   const firebase = new FirebaseClient();
@@ -31,18 +32,18 @@ if (config.dryRun) {
   let running = false;
   let resetDone = false;
 
-  console.log("Listening for config/enabled...");
+  log.info("Listening for config/enabled...");
 
   firebase.onEnabledChange((enabled) => {
     if (enabled === true && !running) {
-      console.log("Bot enabled.. starting..");
+      log.info("Bot enabled — starting analysis loop");
       analyzer.reset();
       running = true;
     } else if (enabled === false && running) {
-      console.log("Bot disabled.. stopping..");
+      log.info("Bot disabled — pausing analysis loop");
       running = false;
     } else if (enabled == null) {
-      console.log("Config not set.. waiting...");
+      log.warn("Config not set — waiting for enabled flag");
     }
   });
 
@@ -74,8 +75,8 @@ async function startDryRun() {
   const output = { ticks, signals, generatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss") };
   writeFileSync(outputPath, JSON.stringify(output, null, 2));
 
-  console.log(`Processed ${testData.length} data points. Output: ${outputPath}`);
-  console.log(`==== Net gain: ${signals.slice(-1)[0].gain} ====`);
+  log.info(`Processed ${testData.length} data points — output: ${outputPath}`);
+  log.info(`Net gain: ${signals.slice(-1)[0]?.gain ?? 0}`);
 }
 
 function wait(ms) {
@@ -94,26 +95,26 @@ function withTimeout(promise, label, timeoutMs = OP_TIMEOUT_MS) {
 function extractLtp(lastTradedPrice) {
   const price = lastTradedPrice?.data?.[0]?.last_price;
   if (typeof price !== "number" || Number.isNaN(price)) {
-    throw new Error(`Invalid LTP response shape: ${JSON.stringify(lastTradedPrice)}`);
+    throw new Error(`Invalid LTP response: ${JSON.stringify(lastTradedPrice)}`);
   }
   return price;
 }
 
 async function startLive(firebase, paytm, analyzer, isRunning, getResetDone, setResetDone) {
   let accessToken = await withTimeout(firebase.getAccessToken(), "getAccessToken");
+  log.info("Access token loaded from Firebase");
 
   firebase.onAccessTokenChange((newToken) => {
     if (newToken !== accessToken) {
-      console.log(`🔑 [${moment().utcOffset("+05:30").format("HH:mm:ss")}] Access token updated from Firebase`);
+      log.info("Access token updated from Firebase");
       accessToken = newToken;
     }
   });
 
-  console.log(`Startup complete. Entering loop with operation timeout=${OP_TIMEOUT_MS}ms`);
-  console.log(`🔑 Listening for token changes in Firebase...`);
+  log.info(`Entering main loop — operation timeout: ${OP_TIMEOUT_MS}ms`);
 
   setInterval(() => {
-    console.log(`[Heartbeat] ${moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss")}`);
+    log.info("Heartbeat — process alive");
   }, 300000);
 
   while (true) {
@@ -136,34 +137,32 @@ async function startLive(firebase, paytm, analyzer, isRunning, getResetDone, set
         );
 
         if (isRunning()) {
-          console.log("Bot is analyzing: ", time);
+          log.debug(`Tick processed — time=${time} price=${price} fastSma=${analysis.fastSma} slowSma=${analysis.slowSma}`);
           if (analysis.signal !== null) {
+            log.info(`Signal generated: ${analysis.signal} @ ${price} | gain=${analysis.runningProfit}`);
             await withTimeout(
               firebase.storeSignal(date, { time, signal: analysis.signal, triggerPrice: price, gain: analysis.runningProfit, status: "DRY_RUN" }),
               "storeSignal",
             );
           }
         } else {
-          console.log("Bot not running: ", time);
+          log.debug(`Tick stored but bot paused — time=${time}`);
         }
       } else if (time >= "09:00" && time <= "09:14") {
         if (!getResetDone()) {
-          console.log("Pre-market reset...");
+          log.info("Pre-market reset — clearing ticks and signals");
           await withTimeout(firebase.clearTicks(), "clearTicks");
           await withTimeout(firebase.clearSignals(), "clearSignals");
           analyzer.reset();
           setResetDone(true);
-          console.log("Reset complete.");
+          log.info("Pre-market reset complete");
         }
       } else {
         setResetDone(false);
-        console.log("Outside market hours: ", time);
+        log.debug(`Outside market hours — time=${time}`);
       }
     } catch (error) {
-      console.error(
-        `[Loop Error] ${moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss")} - ${error?.message || error}`,
-        error,
-      );
+      log.error("Loop error", error);
     }
 
     const elapsedTime = Date.now() - startTime;
