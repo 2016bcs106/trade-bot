@@ -1,0 +1,29 @@
+node_modules
+.env
+dist
+*.local
+
+# pnpm
+pnpm-lock.yaml
+
+# Logs
+logs
+*.log
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?
+
+# Firebase cache
+.firebase/
+
+# Data files (keep structure, ignore contents)
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+reports/*
+!reports/.gitkeep

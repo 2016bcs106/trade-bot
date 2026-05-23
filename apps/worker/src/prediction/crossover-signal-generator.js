@@ -1,4 +1,4 @@
-export class SignalGenerator {
+export default class CrossoverSignalGenerator {
   constructor(
     cooldownWindow = 1,
     sidewaysWindow = 5,
@@ -28,11 +28,8 @@ export class SignalGenerator {
   }
 
   applyTrade(tradeQty, tradePrice) {
-    if (tradeQty === 0) {
-      return;
-    }
+    if (tradeQty === 0) return;
 
-    // Open new position
     if (this.positionQty === 0) {
       this.positionQty = tradeQty;
       this.avgEntryPrice = tradePrice;
@@ -42,7 +39,6 @@ export class SignalGenerator {
 
     const sameDirection = this.positionQty * tradeQty > 0;
 
-    // Add on same side with weighted average
     if (sameDirection) {
       const totalQty = Math.abs(this.positionQty) + Math.abs(tradeQty);
       this.avgEntryPrice =
@@ -55,7 +51,6 @@ export class SignalGenerator {
       return;
     }
 
-    // Opposite side: close existing qty, maybe flip
     const closeQty = Math.min(Math.abs(this.positionQty), Math.abs(tradeQty));
     const positionSign = Math.sign(this.positionQty);
 
@@ -66,7 +61,6 @@ export class SignalGenerator {
 
     if (remainingTradeQty === 0) {
       this.positionQty += tradeQty;
-
       if (this.positionQty === 0) {
         this.avgEntryPrice = null;
       }
@@ -82,10 +76,7 @@ export class SignalGenerator {
     let signal = null;
     let units = 1;
 
-    // Trading Window
     const tradingEnabled = time >= "09:30" && time <= "15:15";
-
-    // Cooldown
     const canTrade = this.index - this.lastTradeIndex >= this.cooldownWindow;
 
     // Sideways Detection
@@ -99,10 +90,7 @@ export class SignalGenerator {
     const isSideways = rangePercent < this.sidewaysThresholdPercent;
 
     // Volatility Guard
-    const volatilityStart = Math.max(
-      0,
-      this.executionPrices.length - this.volatilityWindow + 1,
-    );
+    const volatilityStart = Math.max(0, this.executionPrices.length - this.volatilityWindow + 1);
     const volatilityWindowPrices = this.executionPrices.slice(volatilityStart);
     volatilityWindowPrices.push(executionPrice);
 
@@ -110,8 +98,7 @@ export class SignalGenerator {
     const minVolatilityPrice = Math.min(...volatilityWindowPrices);
     const volatilityRangePercent =
       ((maxVolatilityPrice - minVolatilityPrice) / minVolatilityPrice) * 100;
-    const isTooVolatile =
-      volatilityRangePercent > this.maxVolatilityRangePercent;
+    const isTooVolatile = volatilityRangePercent > this.maxVolatilityRangePercent;
 
     // Force Square Off
     if (time >= "15:14" && this.netUnits !== 0) {
@@ -124,18 +111,13 @@ export class SignalGenerator {
       this.lastAction = signal;
       this.lastTradeIndex = this.index;
     }
-
     // Signal Logic
     else if (tradingEnabled && canTrade && this.index > 1 && !isSideways && !isTooVolatile && value !== null && slowSma !== null && previousSlowSma !== null) {
       const previousClose = this.data[this.index - 1];
 
-      // BUY: fast SMA crosses ABOVE slow SMA
       const crossedAbove = previousClose <= previousSlowSma && value > slowSma;
-
-      // SELL: fast SMA crosses BELOW slow SMA
       const crossedBelow = previousClose >= previousSlowSma && value < slowSma;
 
-      // Units: first trade => 1, subsequent trades => 2
       units = this.tradeCount === 0 ? 1 : 2;
 
       if (crossedAbove && this.lastAction !== "BUY") {
@@ -153,7 +135,6 @@ export class SignalGenerator {
       }
     }
 
-    // Store Current Value
     this.data.push(value);
     this.executionPrices.push(executionPrice);
     this.index++;

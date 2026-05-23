@@ -1,11 +1,11 @@
-import { SimpleMovingAverage } from "./sma.js";
-import { SignalGenerator } from "./signal-generator.js";
+import SimpleMovingAverage from "./simple-moving-average.js";
+import CrossoverSignalGenerator from "../prediction/crossover-signal-generator.js";
 
-export class Analyzer {
+export default class SmaCrossoverAnalyzer {
   constructor(config) {
     this.fastSmaSmoother = new SimpleMovingAverage(config.fastSmaPeriod);
     this.slowSmaSmoother = new SimpleMovingAverage(config.slowSmaPeriod);
-    this.signalGenerator = new SignalGenerator(
+    this.signalGenerator = new CrossoverSignalGenerator(
       config.cooldownWindow,
       config.sidewaysWindow,
       config.volatilityWindow,
@@ -25,11 +25,6 @@ export class Analyzer {
     this.signalGenerator.reset();
   }
 
-  /**
-   * Process a single data point in real-time.
-   * @param {{ date: string, close: number }} point
-   * @returns {object} analysis result for this point
-   */
   next(point) {
     const [day, time] = point.date.split(" ");
 

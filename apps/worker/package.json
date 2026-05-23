@@ -1,12 +1,13 @@
 {
-  "name": "backend",
+  "name": "worker",
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node scripts/trade-bot.js",
-    "dry-run": "node scripts/trade-bot.js --dryRun",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/cli/trade-bot.js",
+    "dry-run": "node src/cli/trade-bot.js --dryRun",
+    "access-token": "node src/cli/access-token-generator.js",
+    "live-stream": "node src/cli/live-stream.js"
   },
   "keywords": [],
   "author": "",

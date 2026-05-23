@@ -1,4 +1,4 @@
-export class SimpleMovingAverage {
+export default class SimpleMovingAverage {
   constructor(period = 30) {
     this.period = period;
     this.data = [];

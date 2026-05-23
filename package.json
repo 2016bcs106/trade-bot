@@ -1,13 +1,12 @@
 {
   "name": "trade-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
   "scripts": {
-    "deploy": "cd front-end && npm run build && firebase deploy --only hosting",
-    "dev": "cd front-end && npm run dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "deploy": "pnpm --filter frontend build && cd apps/frontend && firebase deploy --only hosting"
   },
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  "description": "Quantitative research and intraday prediction platform"
 }
