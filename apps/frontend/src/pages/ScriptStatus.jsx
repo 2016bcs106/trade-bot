@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db, ref, onValue } from '../utils/firebase'
-import { layout, text, header, card, merge } from '../utils/styles'
+import { layout, text, card } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCircle, faServer, faClock, faExclamationTriangle, faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons'
 
@@ -215,10 +215,6 @@ export default function ScriptStatus() {
 
   return (
     <div style={layout.page}>
-      <header style={header.bar}>
-        <span style={text.logo}>Script Status</span>
-        <FontAwesomeIcon icon={faServer} style={{ color: 'var(--pm-text-muted)' }} />
-      </header>
 
       <div style={styles.container}>
         {!scripts ? (

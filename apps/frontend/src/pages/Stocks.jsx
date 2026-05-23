@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db, ref, set, get, remove, onValue } from '../utils/firebase'
-import { layout, text, header, card, button } from '../utils/styles'
+import { layout, text, card, button } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faChartBar,
@@ -365,10 +365,6 @@ export default function Stocks() {
 
   return (
     <div style={layout.page}>
-      <header style={header.bar}>
-        <span style={text.logo}>Stocks</span>
-        <FontAwesomeIcon icon={faChartBar} style={{ color: 'var(--pm-text-muted)' }} />
-      </header>
 
       <div style={styles.container}>
         <div style={styles.searchBar}>

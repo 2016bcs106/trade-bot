@@ -1,13 +1,13 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faServer, faChartBar, faBrain, faClipboardList, faCrosshairs } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faChartBar, faBrain, faClipboardList, faCrosshairs } from '@fortawesome/free-solid-svg-icons'
 
 const navItems = [
   { path: '/', label: 'Home', icon: faChartLine },
   { path: '/dashboard', label: 'Predict', icon: faCrosshairs },
   { path: '/stocks', label: 'Stocks', icon: faChartBar },
   { path: '/models', label: 'Models', icon: faBrain },
-  { path: '/scripts', label: 'Scripts', icon: faServer },
+  { path: '/audit', label: 'Audit', icon: faClipboardList },
 ]
 
 const hiddenPaths = ['/login', '/paytm-money-callback']

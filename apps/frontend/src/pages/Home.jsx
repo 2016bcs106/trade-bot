@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db, ref, onChildAdded, off } from '../utils/firebase'
-import { layout, text, header } from '../utils/styles'
+import { layout } from '../utils/styles'
 import PortfolioChart from '../components/PortfolioChart'
 import TradeList from '../components/TradeList'
 
@@ -43,14 +43,6 @@ export default function Home() {
 
   return (
     <div style={{ ...layout.page, paddingBottom: '4rem' }}>
-      <header style={header.bar}>
-        <span style={text.logo}>Trade Bot</span>
-        {isDryRun && (
-          <span style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', borderRadius: '4px', background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>
-            DRY RUN
-          </span>
-        )}
-      </header>
 
       <PortfolioChart ticks={ticks} signals={signals} />
 
