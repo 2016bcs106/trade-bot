@@ -1,13 +1,15 @@
-import "../config/env.js";
+import "../config/env.ts";
 import { writeFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import moment from "moment";
-import createLogger from "../utils/logger.js";
-import TradingConfig from "../config/trading-config.js";
-import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.js";
-import FirebaseClient from "../firebase/client.js";
-import PaytmMoneyClient from "../data/providers/paytm-money-client.js";
+import createLogger from "../utils/logger.ts";
+import TradingConfig from "../config/trading-config.ts";
+import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.ts";
+import FirebaseClient from "../firebase/client.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
+import { LtpResponse } from "../types/ltp-response.ts";
+import { AnalysisResult } from "../types/analysis-result.ts";
 
 const log = createLogger("trade-bot");
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -34,7 +36,7 @@ if (config.dryRun) {
 
   log.info("Listening for config/enabled...");
 
-  firebase.onEnabledChange((enabled) => {
+  firebase.onEnabledChange((enabled: boolean | null) => {
     if (enabled === true && !running) {
       log.info("Bot enabled — starting analysis loop");
       analyzer.reset();
@@ -47,21 +49,21 @@ if (config.dryRun) {
     }
   });
 
-  await startLive(firebase, paytm, analyzer, () => running, () => resetDone, (v) => { resetDone = v; });
+  await startLive(firebase, paytm, analyzer, () => running, () => resetDone, (v: boolean) => { resetDone = v; });
 }
 
-async function startDryRun() {
+async function startDryRun(): Promise<void> {
   const paytm = new PaytmMoneyClient();
   const analyzer = new SmaCrossoverAnalyzer(config);
-  const testData = await paytm.getHistoricalData(config.fromDate, config.toDate, config.pmlId);
+  const testData = await paytm.getHistoricalData(config.fromDate!, config.toDate!, config.pmlId!);
 
   analyzer.reset();
 
-  const ticks = [];
-  const signals = [];
+  const ticks: Array<{ time: string; close: number; fastSma: number | null; slowSma: number | null }> = [];
+  const signals: Array<{ time: string; signal: string; triggerPrice: number; gain: number; status: string }> = [];
 
   for (const point of testData) {
-    const [date, time] = point.date.split(" ");
+    const [, time] = point.date.split(" ");
     const analysis = analyzer.next(point);
 
     ticks.push({ time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma });
@@ -79,20 +81,20 @@ async function startDryRun() {
   log.info(`Net gain: ${signals.slice(-1)[0]?.gain ?? 0}`);
 }
 
-function wait(ms) {
+function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function withTimeout(promise, label, timeoutMs = OP_TIMEOUT_MS) {
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number = OP_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
-    new Promise((_, reject) =>
+    new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs),
     ),
   ]);
 }
 
-function extractLtp(lastTradedPrice) {
+function extractLtp(lastTradedPrice: LtpResponse): number {
   const price = lastTradedPrice?.data?.[0]?.last_price;
   if (typeof price !== "number" || Number.isNaN(price)) {
     throw new Error(`Invalid LTP response: ${JSON.stringify(lastTradedPrice)}`);
@@ -100,11 +102,18 @@ function extractLtp(lastTradedPrice) {
   return price;
 }
 
-async function startLive(firebase, paytm, analyzer, isRunning, getResetDone, setResetDone) {
+async function startLive(
+  firebase: FirebaseClient,
+  paytm: PaytmMoneyClient,
+  analyzer: SmaCrossoverAnalyzer,
+  isRunning: () => boolean,
+  getResetDone: () => boolean,
+  setResetDone: (v: boolean) => void,
+): Promise<void> {
   let accessToken = await withTimeout(firebase.getAccessToken(), "getAccessToken");
   log.info("Access token loaded from Firebase");
 
-  firebase.onAccessTokenChange((newToken) => {
+  firebase.onAccessTokenChange((newToken: string) => {
     if (newToken !== accessToken) {
       log.info("Access token updated from Firebase");
       accessToken = newToken;
@@ -129,7 +138,7 @@ async function startLive(firebase, paytm, analyzer, isRunning, getResetDone, set
           "fetchLTP",
         );
         const price = extractLtp(lastTradedPrice);
-        const analysis = analyzer.next({ date: `${date} ${time}`, close: price });
+        const analysis: AnalysisResult = analyzer.next({ date: `${date} ${time}`, close: price });
 
         await withTimeout(
           firebase.storeTick(date, { time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma }),

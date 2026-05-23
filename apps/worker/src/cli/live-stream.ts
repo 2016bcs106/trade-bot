@@ -5,7 +5,7 @@
  * buffers ticks in memory, and flushes to disk as NDJSON files.
  *
  * Usage:
- *   node src/cli/live-stream.js [options]
+ *   npx tsx src/cli/live-stream.ts [options]
  *
  * Options:
  *   --scripId=25          Security ID (default: 25)
@@ -17,46 +17,52 @@
  *   --statsInterval=300   Seconds between stats log (default: 300 = 5min)
  */
 
-import "../config/env.js";
+import "../config/env.ts";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync, appendFileSync, statSync } from "fs";
 import moment from "moment";
-import createLogger from "../utils/logger.js";
-import TradingConfig from "../config/trading-config.js";
-import FirebaseClient from "../firebase/client.js";
-import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.js";
+import createLogger from "../utils/logger.ts";
+import TradingConfig from "../config/trading-config.ts";
+import FirebaseClient from "../firebase/client.ts";
+import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.ts";
 
 const log = createLogger("live-stream");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const config = new TradingConfig("live-stream");
 
-const { scripId, scripType, exchangeType, modeType, flushInterval: flushIntervalSec, bufferSize: maxBufferSize, statsInterval: statsIntervalSec } = config;
+const scripId = config.scripId;
+const scripType = config.scripType;
+const exchangeType = config.exchangeType;
+const modeType = config.modeType!;
+const flushIntervalSec = config.flushInterval!;
+const maxBufferSize = config.bufferSize!;
+const statsIntervalSec = config.statsInterval!;
 
 // ─── Data directory setup ───────────────────────────────────────────
 const dataDir = resolve(__dirname, "..", "..", "..", "..", "data");
 mkdirSync(dataDir, { recursive: true });
 
-function getDateIST() {
+function getDateIST(): string {
   return moment().utcOffset("+05:30").format("YYYY-MM-DD");
 }
 
-function getOutputFilePath() {
+function getOutputFilePath(): string {
   return resolve(dataDir, `${exchangeType}_${scripId}_${getDateIST()}.ndjson`);
 }
 
-function getFileSizeMB(filePath) {
+function getFileSizeMB(filePath: string): string {
   try { return (statSync(filePath).size / (1024 * 1024)).toFixed(2); }
   catch { return "0.00"; }
 }
 
 // ─── In-memory buffer ───────────────────────────────────────────────
-let buffer = [];
+let buffer: Record<string, unknown>[] = [];
 let totalFlushed = 0;
 let totalFlushedToday = 0;
 let lastFlushDate = getDateIST();
 
-function flushBuffer() {
+function flushBuffer(): void {
   if (buffer.length === 0) return;
 
   const today = getDateIST();
@@ -86,14 +92,14 @@ let tickCount = 0;
 let tickCountAtLastStats = 0;
 const startTime = Date.now();
 
-function logStats() {
+function logStats(): void {
   const uptimeMin = Math.round((Date.now() - startTime) / 1000 / 60);
   const ticksPerSec = ((tickCount - tickCountAtLastStats) / statsIntervalSec).toFixed(1);
   const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
 
   log.info(
     `Stats — uptime=${uptimeMin}m ticks=${tickCount} today=${totalFlushedToday} ` +
-    `rate=${ticksPerSec}/s buffer=${buffer.length} file=${getFileSizeMB(getOutputFilePath())}MB mem=${memUsageMB}MB`
+    `rate=${ticksPerSec}/s buffer=${buffer.length} file=${getFileSizeMB(getOutputFilePath())}MB mem=${memUsageMB}MB`,
   );
 
   tickCountAtLastStats = tickCount;
@@ -101,8 +107,8 @@ function logStats() {
 
 // ─── Firebase + Streamer ────────────────────────────────────────────
 const firebase = new FirebaseClient();
-let currentToken = null;
-let streamer = null;
+let currentToken: string | null = null;
+let streamer: PaytmMoneyWebSocket | null = null;
 
 // ─── Startup ────────────────────────────────────────────────────────
 log.info("Starting live market data recorder");
@@ -110,7 +116,7 @@ log.info(`Config — scrip=${exchangeType}:${scripId}(${scripType}) mode=${modeT
 log.info(`Output directory: ${dataDir}`);
 
 // ─── Streamer lifecycle ─────────────────────────────────────────────
-function createStreamer(token) {
+function createStreamer(token: string): PaytmMoneyWebSocket {
   const s = new PaytmMoneyWebSocket(token);
 
   s.on("connected", () => {
@@ -118,21 +124,21 @@ function createStreamer(token) {
     s.subscribe({ scripType, exchangeType, scripId, modeType });
   });
 
-  s.on("tick", (data) => {
+  s.on("tick", (data: Record<string, unknown>) => {
     tickCount++;
     buffer.push({ ...data, received_at: new Date().toISOString() });
     if (buffer.length >= maxBufferSize) flushBuffer();
   });
 
-  s.on("error", (err) => log.error("WebSocket error", err));
-  s.on("disconnected", ({ code }) => { flushBuffer(); log.warn(`WebSocket disconnected — code=${code}`); });
-  s.on("reconnecting", (n) => log.info(`WebSocket reconnecting — attempt ${n}`));
+  s.on("error", (err: Error) => log.error("WebSocket error", err));
+  s.on("disconnected", ({ code }: { code: number }) => { flushBuffer(); log.warn(`WebSocket disconnected — code=${code}`); });
+  s.on("reconnecting", (n: number) => log.info(`WebSocket reconnecting — attempt ${n}`));
 
   return s;
 }
 
 // ─── Listen to token changes ────────────────────────────────────────
-firebase.onPublicAccessTokenChange((token) => {
+firebase.onPublicAccessTokenChange((token: string) => {
   const isFirstConnect = currentToken === null;
   currentToken = token;
 
@@ -153,7 +159,7 @@ const flushTimer = setInterval(flushBuffer, flushIntervalSec * 1000);
 const statsTimer = setInterval(logStats, statsIntervalSec * 1000);
 
 // ─── Graceful shutdown ──────────────────────────────────────────────
-function shutdown(reason) {
+function shutdown(reason: string): void {
   clearInterval(flushTimer);
   clearInterval(statsTimer);
   flushBuffer();
@@ -168,10 +174,10 @@ function shutdown(reason) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-process.on("uncaughtException", (err) => {
+process.on("uncaughtException", (err: Error) => {
   log.error("Uncaught exception", err);
 });
 
-process.on("unhandledRejection", (reason) => {
+process.on("unhandledRejection", (reason: unknown) => {
   log.error("Unhandled rejection", reason instanceof Error ? reason : new Error(String(reason)));
 });

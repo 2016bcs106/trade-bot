@@ -1,21 +1,25 @@
 export default class SimpleMovingAverage {
-  constructor(period = 30) {
+  private period: number;
+  private data: number[];
+  private sum: number;
+
+  constructor(period: number = 30) {
     this.period = period;
     this.data = [];
     this.sum = 0;
   }
 
-  reset() {
+  reset(): void {
     this.data = [];
     this.sum = 0;
   }
 
-  compute(value) {
+  compute(value: number): number | null {
     this.data.push(value);
     this.sum += value;
 
     if (this.data.length > this.period) {
-      this.sum -= this.data.shift();
+      this.sum -= this.data.shift()!;
     }
 
     if (this.data.length < this.period) {

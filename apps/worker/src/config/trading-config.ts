@@ -1,13 +1,11 @@
 import moment from "moment";
 
-// ─── Common defaults (shared across all scripts) ────────────────────
 const COMMON_DEFAULTS = {
   scripId: "25",
   scripType: "EQUITY",
   exchangeType: "NSE",
 };
 
-// ─── Trade bot specific defaults ────────────────────────────────────
 const TRADE_BOT_DEFAULTS = {
   pmlId: "1000001121",
   cooldownWindow: 1,
@@ -21,7 +19,6 @@ const TRADE_BOT_DEFAULTS = {
   lookbackDays: 1,
 };
 
-// ─── Live stream specific defaults ──────────────────────────────────
 const LIVE_STREAM_DEFAULTS = {
   modeType: "FULL",
   flushInterval: 60,
@@ -29,24 +26,41 @@ const LIVE_STREAM_DEFAULTS = {
   statsInterval: 300,
 };
 
-/**
- * Unified configuration for all CLI scripts.
- * Parses CLI args and initializes config based on the script context.
- *
- * Usage:
- *   const config = new TradingConfig("trade-bot");
- *   const config = new TradingConfig("live-stream");
- */
+export type ScriptName = "trade-bot" | "live-stream";
+
 export default class TradingConfig {
-  constructor(script = "trade-bot", argv = process.argv.slice(2)) {
+  // Common
+  scripId: string;
+  scripType: string;
+  exchangeType: string;
+  isValid: boolean = true;
+
+  // Trade bot
+  pmlId?: string;
+  cooldownWindow?: number;
+  fastSmaPeriod?: number;
+  slowSmaPeriod?: number;
+  sidewaysWindow?: number;
+  sidewaysThresholdPercent?: number;
+  volatilityWindow?: number;
+  maxVolatilityRangePercent?: number;
+  dryRun?: boolean;
+  fromDate?: string;
+  toDate?: string;
+
+  // Live stream
+  modeType?: string;
+  flushInterval?: number;
+  bufferSize?: number;
+  statsInterval?: number;
+
+  constructor(script: ScriptName = "trade-bot", argv: string[] = process.argv.slice(2)) {
     const args = TradingConfig.parseArgs(argv);
 
-    // Common params
     this.scripId = args.scripId || COMMON_DEFAULTS.scripId;
     this.scripType = args.scripType || COMMON_DEFAULTS.scripType;
     this.exchangeType = args.exchangeType || COMMON_DEFAULTS.exchangeType;
 
-    // Script-specific initialization
     if (script === "trade-bot") {
       this._initTradeBot(args);
     } else if (script === "live-stream") {
@@ -54,7 +68,7 @@ export default class TradingConfig {
     }
   }
 
-  _initTradeBot(args) {
+  private _initTradeBot(args: Record<string, string>): void {
     const date = args.date || TRADE_BOT_DEFAULTS.date;
     const lookbackDays = args.lookbackDays != null ? Number(args.lookbackDays) : TRADE_BOT_DEFAULTS.lookbackDays;
 
@@ -70,8 +84,8 @@ export default class TradingConfig {
 
     const end = moment(date, "YYYY-MM-DD", true);
 
-    const invalidPositiveInt = (v) => Number.isNaN(v) || !Number.isInteger(v) || v <= 0;
-    const invalidNonNegative = (v) => Number.isNaN(v) || v < 0;
+    const invalidPositiveInt = (v: number) => Number.isNaN(v) || !Number.isInteger(v) || v <= 0;
+    const invalidNonNegative = (v: number) => Number.isNaN(v) || v < 0;
 
     this.isValid = !(
       !end.isValid() ||
@@ -91,7 +105,7 @@ export default class TradingConfig {
     }
   }
 
-  _initLiveStream(args) {
+  private _initLiveStream(args: Record<string, string>): void {
     this.modeType = args.modeType || LIVE_STREAM_DEFAULTS.modeType;
     this.flushInterval = args.flushInterval != null ? Number(args.flushInterval) : LIVE_STREAM_DEFAULTS.flushInterval;
     this.bufferSize = args.bufferSize != null ? Number(args.bufferSize) : LIVE_STREAM_DEFAULTS.bufferSize;
@@ -99,7 +113,7 @@ export default class TradingConfig {
     this.isValid = true;
   }
 
-  static parseArgs(argv) {
+  static parseArgs(argv: string[]): Record<string, string> {
     return Object.fromEntries(
       argv
         .filter((arg) => arg.startsWith("--") && arg.includes("="))
@@ -110,7 +124,7 @@ export default class TradingConfig {
     );
   }
 
-  static printHelp(script = "trade-bot") {
+  static printHelp(script: ScriptName = "trade-bot"): void {
     if (script === "trade-bot") {
       console.log(
         "Usage: node trade-bot.js [--date=YYYY-MM-DD] [--lookbackDays=N] [--pmlId=ID] [--cooldownWindow=N] [--fastSmaPeriod=N] [--slowSmaPeriod=N] [--sidewaysWindow=N] [--sidewaysThresholdPercent=VALUE] [--volatilityWindow=N] [--maxVolatilityRangePercent=VALUE] [--dryRun]"
@@ -124,8 +138,8 @@ export default class TradingConfig {
     }
   }
 
-  toJSON() {
-    const base = {
+  toJSON(): Record<string, unknown> {
+    const base: Record<string, unknown> = {
       scripId: this.scripId,
       scripType: this.scripType,
       exchangeType: this.exchangeType,

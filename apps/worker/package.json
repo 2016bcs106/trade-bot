@@ -1,13 +1,13 @@
 {
   "name": "worker",
   "version": "1.0.0",
-  "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/cli/trade-bot.js",
-    "dry-run": "node src/cli/trade-bot.js --dryRun",
-    "access-token": "node src/cli/access-token-generator.js",
-    "live-stream": "node src/cli/live-stream.js"
+    "start": "tsx src/cli/trade-bot.ts",
+    "dry-run": "tsx src/cli/trade-bot.ts --dryRun",
+    "access-token": "tsx src/cli/access-token-generator.ts",
+    "live-stream": "tsx src/cli/live-stream.ts",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -19,5 +19,11 @@
     "moment": "^2.30.1",
     "node-fetch": "^3.3.2",
     "ws": "^8.20.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
   }
 }
