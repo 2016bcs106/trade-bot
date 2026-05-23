@@ -36,6 +36,6 @@ export interface EvaluationResult {
    */
   rangeContainment: boolean;
 
-  /** ISO timestamp when evaluation was completed */
-  evaluatedAt: number;
+  /** IST timestamp when evaluation was completed (YYYY-MM-DD HH:mm:ss) */
+  evaluatedAt: string;
 }
