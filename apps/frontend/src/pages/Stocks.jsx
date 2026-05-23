@@ -178,14 +178,28 @@ function getStatusStyle(stock) {
   if (stock.status === 'pending_sync') {
     return { background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', text: 'PENDING' }
   }
+  if (stock.status === 'sync_failed') {
+    return { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', text: 'FAILED' }
+  }
   if (stock.enabled) {
     return { background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', text: 'ACTIVE' }
   }
   return { background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', text: 'OFF' }
 }
 
+function DetailRow({ label, value }) {
+  if (value === undefined || value === null || value === '') return null
+  return (
+    <div style={styles.detailRow}>
+      <span style={styles.detailLabel}>{label}</span>
+      <span style={styles.detailValue}>{value}</span>
+    </div>
+  )
+}
+
 function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
   const isPending = stock.status === 'pending_sync'
+  const isFailed = stock.status === 'sync_failed'
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -204,37 +218,32 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
               <FontAwesomeIcon icon={faSync} /> Pending Sync
             </span>
           </div>
+        ) : isFailed ? (
+          <div style={styles.detailRow}>
+            <span style={styles.detailLabel}>Status</span>
+            <span style={{ ...styles.detailValue, color: '#ef4444' }}>
+              Sync Failed — symbol not found on NSE
+            </span>
+          </div>
         ) : (
           <>
-            {stock.name && (
-              <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Name</span>
-                <span style={styles.detailValue}>{stock.name}</span>
-              </div>
-            )}
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Exchange</span>
-              <span style={styles.detailValue}>{stock.exchange || '—'}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Predictions</span>
-              <span style={styles.detailValue}>{stock.enabled ? 'Enabled' : 'Disabled'}</span>
-            </div>
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Optimization</span>
-              <span style={styles.detailValue}>{stock.autoOptimize ? 'Auto' : 'Manual'}</span>
-            </div>
-            {stock.currentProductionVersion && (
-              <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Model Version</span>
-                <span style={styles.detailValue}>{stock.currentProductionVersion}</span>
-              </div>
-            )}
+            <DetailRow label="Name" value={stock.name} />
+            <DetailRow label="Exchange" value={stock.exchange} />
+            <DetailRow label="Security ID" value={stock.securityId} />
+            <DetailRow label="ISIN" value={stock.isin} />
+            <DetailRow label="Industry" value={stock.industryName} />
+            <DetailRow label="Market Cap (₹ Cr)" value={stock.mcap ? stock.mcap.toLocaleString('en-IN') : undefined} />
+            <DetailRow label="Tick Size" value={stock.tickSize} />
+            <DetailRow label="Lot Size" value={stock.lotSize} />
+            <DetailRow label="Predictions" value={stock.enabled ? 'Enabled' : 'Disabled'} />
+            <DetailRow label="Optimization" value={stock.autoOptimize ? 'Auto' : 'Manual'} />
+            <DetailRow label="Model Version" value={stock.currentProductionVersion} />
+            <DetailRow label="Added" value={stock.addedAt ? new Date(stock.addedAt).toLocaleDateString('en-IN') : undefined} />
           </>
         )}
 
         <div style={styles.actionRow}>
-          {!isPending && (
+          {!isPending && !isFailed && (
             <>
               <button
                 style={{ ...styles.actionBtn, color: stock.enabled ? '#22c55e' : '#94a3b8' }}
@@ -254,7 +263,7 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
           )}
           <button
             style={{ ...styles.actionBtn, color: '#ef4444', marginLeft: 'auto' }}
-            onClick={() => { onRemove(); onClose() }}
+            onClick={onRemove}
           >
             <FontAwesomeIcon icon={faTrash} />
             Remove
@@ -278,7 +287,11 @@ export default function Stocks() {
     return () => unsubscribe()
   }, [])
 
-  const stockList = stocks ? Object.values(stocks) : []
+  const stockList = stocks
+    ? Object.entries(stocks)
+        .map(([key, val]) => ({ ...val, _key: key }))
+        .sort((a, b) => (b.updatedAt || b.addedAt || 0) - (a.updatedAt || a.addedAt || 0))
+    : []
   const existingSymbols = stocks ? Object.keys(stocks) : []
 
   const handleAdd = async () => {
@@ -297,19 +310,21 @@ export default function Stocks() {
   }
 
   const handleToggleEnabled = async (stock) => {
-    await set(ref(db, `stocks/${stock.symbol}/enabled`), !stock.enabled)
-    await set(ref(db, `stocks/${stock.symbol}/updatedAt`), Date.now())
+    const key = stock._key || stock.symbol
+    await set(ref(db, `stocks/${key}/enabled`), !stock.enabled)
+    await set(ref(db, `stocks/${key}/updatedAt`), Date.now())
   }
 
   const handleToggleAutoOptimize = async (stock) => {
-    await set(ref(db, `stocks/${stock.symbol}/autoOptimize`), !stock.autoOptimize)
-    await set(ref(db, `stocks/${stock.symbol}/updatedAt`), Date.now())
+    const key = stock._key || stock.symbol
+    await set(ref(db, `stocks/${key}/autoOptimize`), !stock.autoOptimize)
+    await set(ref(db, `stocks/${key}/updatedAt`), Date.now())
   }
 
   const handleRemove = async (stock) => {
-    if (window.confirm(`Remove ${stock.symbol}?`)) {
-      await remove(ref(db, `stocks/${stock.symbol}`))
-    }
+    const key = stock._key || stock.symbol
+    setSelectedStock(null)
+    await remove(ref(db, `stocks/${key}`))
   }
 
   if (stocks === undefined) {
@@ -336,15 +351,20 @@ export default function Stocks() {
         ) : (
           stockList.map((stock) => {
             const status = getStatusStyle(stock)
+            const ts = stock.updatedAt || stock.addedAt
+            const timeStr = ts ? new Date(ts).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : ''
             return (
-              <div key={stock.symbol} style={styles.row} onClick={() => setSelectedStock(stock)}>
+              <div key={stock._key} style={styles.row} onClick={() => setSelectedStock(stock)}>
                 <div style={styles.symbolCol}>
                   <span style={styles.symbol}>{stock.symbol}</span>
                   <span style={styles.name}>{stock.name || '—'}</span>
                 </div>
-                <span style={{ ...styles.statusBadge, background: status.background, color: status.color }}>
-                  {status.text}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                  <span style={{ ...styles.statusBadge, background: status.background, color: status.color }}>
+                    {status.text}
+                  </span>
+                  {timeStr && <span style={{ fontSize: '0.6rem', color: colors.muted }}>{timeStr}</span>}
+                </div>
               </div>
             )
           })

@@ -189,12 +189,15 @@ class StockSyncScript extends BaseScript {
 
     if (results.length === 0) return null;
 
-    // Strict: only NSE with exact symbol match
+    // Strict: only NSE equity with exact symbol match
     const exactNSE = results.find(
-      (r) => r.symbol.toUpperCase() === query.toUpperCase() && r.exchange === "NSE"
+      (r) =>
+        r.symbol.toUpperCase() === query.toUpperCase() &&
+        r.exchange === "NSE" &&
+        r.instrument_type === "ES"
     );
 
-    // If no exact NSE match, return null (sync_failed)
+    // If no exact NSE equity match, return null (sync_failed)
     return exactNSE || null;
   }
 }
