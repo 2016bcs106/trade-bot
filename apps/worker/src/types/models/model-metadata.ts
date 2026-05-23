@@ -21,17 +21,14 @@ export interface ModelMetadata {
   /** Performance metrics from walk-forward validation */
   metrics: ModelMetrics;
 
-  /** ISO timestamp when training started */
-  trainedAt: number;
+  /** IST timestamp when model was created (YYYY-MM-DD HH:mm:ss) */
+  createdAt: string;
 
-  /** ISO timestamp when model was promoted to production (null if never promoted) */
-  promotedAt: number | null;
+  /** IST timestamp when model was promoted to production (null if never promoted) */
+  promotedAt: string | null;
 
-  /** ISO timestamp when model was retired (null if still active) */
-  retiredAt: number | null;
-
-  /** Relative path to serialized model file (e.g., "models/RELIANCE/v3.json") */
-  modelPath: string;
+  /** IST timestamp when model was retired (null if still active) */
+  retiredAt: string | null;
 }
 
 /** Model lifecycle states */
