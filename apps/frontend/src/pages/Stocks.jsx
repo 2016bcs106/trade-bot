@@ -10,8 +10,7 @@ import {
   faCog,
   faPlus,
   faSync,
-  faChevronDown,
-  faChevronUp,
+  faTimes,
 } from '@fortawesome/free-solid-svg-icons'
 
 const styles = {
@@ -54,33 +53,58 @@ const styles = {
     textAlign: 'center',
     flexShrink: 0,
   },
-  chevron: {
-    fontSize: '0.7rem',
-    color: colors.muted,
-    flexShrink: 0,
-    width: '14px',
-    textAlign: 'center',
+  // Modal
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 200,
+    padding: '1rem',
   },
-  details: {
-    padding: '0.6rem 1rem 0.8rem',
-    background: '#f8fafc',
-    borderBottom: `1px solid ${colors.light}`,
+  modal: {
+    background: colors.white,
+    borderRadius: '12px',
+    width: '100%',
+    maxWidth: '340px',
+    padding: '1.25rem',
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.5rem',
+    gap: '0.75rem',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: '1rem',
+    fontWeight: '700',
+    color: colors.dark,
+  },
+  modalClose: {
+    background: 'none',
+    border: 'none',
+    fontSize: '1.1rem',
+    color: colors.muted,
+    cursor: 'pointer',
+    padding: '0.2rem',
   },
   detailRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: '0.3rem 0',
   },
   detailLabel: {
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     color: colors.muted,
     fontWeight: '500',
   },
   detailValue: {
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     color: colors.dark,
     fontWeight: '600',
   },
@@ -88,19 +112,20 @@ const styles = {
     display: 'flex',
     gap: '0.75rem',
     marginTop: '0.25rem',
-    paddingTop: '0.4rem',
+    paddingTop: '0.6rem',
     borderTop: `1px solid ${colors.light}`,
+    flexWrap: 'wrap',
   },
   actionBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     fontWeight: '600',
     display: 'flex',
     alignItems: 'center',
-    gap: '0.25rem',
-    padding: '0.2rem 0',
+    gap: '0.3rem',
+    padding: '0.3rem 0',
   },
   emptyState: {
     display: 'flex',
@@ -159,93 +184,91 @@ function getStatusStyle(stock) {
   return { background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', text: 'OFF' }
 }
 
-function StockRow({ stock, isOpen, onToggle, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
-  const status = getStatusStyle(stock)
+function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
   const isPending = stock.status === 'pending_sync'
 
   return (
-    <>
-      <div style={styles.row} onClick={onToggle}>
-        <div style={styles.symbolCol}>
-          <span style={styles.symbol}>{stock.symbol}</span>
-          <span style={styles.name}>{stock.name || '—'}</span>
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <span style={styles.modalTitle}>{stock.symbol}</span>
+          <button style={styles.modalClose} onClick={onClose}>
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
         </div>
-        <span style={{ ...styles.statusBadge, background: status.background, color: status.color }}>
-          {status.text}
-        </span>
-        <span style={styles.chevron}>
-          <FontAwesomeIcon icon={isOpen ? faChevronUp : faChevronDown} />
-        </span>
-      </div>
-      {isOpen && (
-        <div style={styles.details}>
+
+        {isPending ? (
+          <div style={styles.detailRow}>
+            <span style={styles.detailLabel}>Status</span>
+            <span style={{ ...styles.detailValue, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <FontAwesomeIcon icon={faSync} /> Pending Sync
+            </span>
+          </div>
+        ) : (
+          <>
+            {stock.name && (
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Name</span>
+                <span style={styles.detailValue}>{stock.name}</span>
+              </div>
+            )}
+            <div style={styles.detailRow}>
+              <span style={styles.detailLabel}>Exchange</span>
+              <span style={styles.detailValue}>{stock.exchange || '—'}</span>
+            </div>
+            <div style={styles.detailRow}>
+              <span style={styles.detailLabel}>Predictions</span>
+              <span style={styles.detailValue}>{stock.enabled ? 'Enabled' : 'Disabled'}</span>
+            </div>
+            <div style={styles.detailRow}>
+              <span style={styles.detailLabel}>Optimization</span>
+              <span style={styles.detailValue}>{stock.autoOptimize ? 'Auto' : 'Manual'}</span>
+            </div>
+            {stock.currentProductionVersion && (
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Model Version</span>
+                <span style={styles.detailValue}>{stock.currentProductionVersion}</span>
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={styles.actionRow}>
           {!isPending && (
             <>
-              <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Exchange</span>
-                <span style={styles.detailValue}>{stock.exchange || '—'}</span>
-              </div>
-              <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Predictions</span>
-                <span style={styles.detailValue}>{stock.enabled ? 'Enabled' : 'Disabled'}</span>
-              </div>
-              <div style={styles.detailRow}>
-                <span style={styles.detailLabel}>Optimization</span>
-                <span style={styles.detailValue}>{stock.autoOptimize ? 'Auto' : 'Manual'}</span>
-              </div>
-              {stock.currentProductionVersion && (
-                <div style={styles.detailRow}>
-                  <span style={styles.detailLabel}>Model Version</span>
-                  <span style={styles.detailValue}>{stock.currentProductionVersion}</span>
-                </div>
-              )}
+              <button
+                style={{ ...styles.actionBtn, color: stock.enabled ? '#22c55e' : '#94a3b8' }}
+                onClick={onToggleEnabled}
+              >
+                <FontAwesomeIcon icon={stock.enabled ? faToggleOn : faToggleOff} />
+                {stock.enabled ? 'Disable' : 'Enable'}
+              </button>
+              <button
+                style={{ ...styles.actionBtn, color: 'var(--pm-primary)' }}
+                onClick={onToggleAutoOptimize}
+              >
+                <FontAwesomeIcon icon={faCog} />
+                {stock.autoOptimize ? 'Set Manual' : 'Auto-Opt'}
+              </button>
             </>
           )}
-          {isPending && (
-            <div style={styles.detailRow}>
-              <span style={styles.detailLabel}>Status</span>
-              <span style={{ ...styles.detailValue, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                <FontAwesomeIcon icon={faSync} /> Pending Sync
-              </span>
-            </div>
-          )}
-          <div style={styles.actionRow}>
-            {!isPending && (
-              <>
-                <button
-                  style={{ ...styles.actionBtn, color: stock.enabled ? '#22c55e' : '#94a3b8' }}
-                  onClick={(e) => { e.stopPropagation(); onToggleEnabled() }}
-                >
-                  <FontAwesomeIcon icon={stock.enabled ? faToggleOn : faToggleOff} />
-                  {stock.enabled ? 'Disable' : 'Enable'}
-                </button>
-                <button
-                  style={{ ...styles.actionBtn, color: 'var(--pm-primary)' }}
-                  onClick={(e) => { e.stopPropagation(); onToggleAutoOptimize() }}
-                >
-                  <FontAwesomeIcon icon={faCog} />
-                  {stock.autoOptimize ? 'Set Manual' : 'Auto-Opt'}
-                </button>
-              </>
-            )}
-            <button
-              style={{ ...styles.actionBtn, color: '#ef4444', marginLeft: 'auto' }}
-              onClick={(e) => { e.stopPropagation(); onRemove() }}
-            >
-              <FontAwesomeIcon icon={faTrash} />
-              Remove
-            </button>
-          </div>
+          <button
+            style={{ ...styles.actionBtn, color: '#ef4444', marginLeft: 'auto' }}
+            onClick={() => { onRemove(); onClose() }}
+          >
+            <FontAwesomeIcon icon={faTrash} />
+            Remove
+          </button>
         </div>
-      )}
-    </>
+      </div>
+    </div>
   )
 }
 
 export default function Stocks() {
   const [stocks, setStocks] = useState(undefined)
   const [symbolInput, setSymbolInput] = useState('')
-  const [openSymbol, setOpenSymbol] = useState(null)
+  const [selectedStock, setSelectedStock] = useState(null)
 
   useEffect(() => {
     const stocksRef = ref(db, 'stocks')
@@ -311,17 +334,20 @@ export default function Stocks() {
             </span>
           </div>
         ) : (
-          stockList.map((stock) => (
-            <StockRow
-              key={stock.symbol}
-              stock={stock}
-              isOpen={openSymbol === stock.symbol}
-              onToggle={() => setOpenSymbol(openSymbol === stock.symbol ? null : stock.symbol)}
-              onToggleEnabled={() => handleToggleEnabled(stock)}
-              onToggleAutoOptimize={() => handleToggleAutoOptimize(stock)}
-              onRemove={() => handleRemove(stock)}
-            />
-          ))
+          stockList.map((stock) => {
+            const status = getStatusStyle(stock)
+            return (
+              <div key={stock.symbol} style={styles.row} onClick={() => setSelectedStock(stock)}>
+                <div style={styles.symbolCol}>
+                  <span style={styles.symbol}>{stock.symbol}</span>
+                  <span style={styles.name}>{stock.name || '—'}</span>
+                </div>
+                <span style={{ ...styles.statusBadge, background: status.background, color: status.color }}>
+                  {status.text}
+                </span>
+              </div>
+            )
+          })
         )}
       </div>
 
@@ -339,6 +365,17 @@ export default function Stocks() {
           Add
         </button>
       </div>
+
+      {/* Stock detail modal */}
+      {selectedStock && (
+        <StockDetailModal
+          stock={selectedStock}
+          onClose={() => setSelectedStock(null)}
+          onToggleEnabled={() => handleToggleEnabled(selectedStock)}
+          onToggleAutoOptimize={() => handleToggleAutoOptimize(selectedStock)}
+          onRemove={() => handleRemove(selectedStock)}
+        />
+      )}
     </div>
   )
 }
