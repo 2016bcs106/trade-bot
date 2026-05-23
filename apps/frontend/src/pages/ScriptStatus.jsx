@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { db, ref, onValue } from '../utils/firebase'
 import { layout, text, header, card, merge } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircle, faServer, faClock, faExclamationTriangle } from '@fortawesome/free-solid-svg-icons'
+import { faCircle, faServer, faClock, faExclamationTriangle, faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons'
 
 const statusColors = {
   running: '#22c55e',
@@ -48,17 +48,46 @@ const styles = {
   metaRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'baseline',
     padding: '0.3rem 0',
+    gap: '1rem',
   },
   metaLabel: {
     fontSize: '0.75rem',
     color: 'var(--pm-text-muted)',
+    flexShrink: 0,
   },
   metaValue: {
     fontSize: '0.75rem',
     fontWeight: '500',
     color: 'var(--pm-text)',
+    textAlign: 'right',
+    wordBreak: 'break-all',
+  },
+  collapsibleHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    padding: '0.3rem 0',
+    cursor: 'pointer',
+    border: 'none',
+    background: 'none',
+    width: '100%',
+    textAlign: 'left',
+  },
+  jsonBlock: {
+    fontSize: '0.7rem',
+    fontFamily: 'monospace',
+    background: 'var(--pm-bg)',
+    border: '1px solid var(--pm-border)',
+    borderRadius: '6px',
+    padding: '0.6rem 0.75rem',
+    marginTop: '0.25rem',
+    marginBottom: '0.25rem',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    color: 'var(--pm-text)',
+    overflowX: 'auto',
   },
   errorBox: {
     marginTop: '0.5rem',
@@ -97,6 +126,30 @@ function getRelativeTime(ms) {
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
+function CollapsibleJson({ label, value }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={styles.collapsibleHeader}
+      >
+        <FontAwesomeIcon
+          icon={expanded ? faChevronDown : faChevronRight}
+          style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', width: '0.6rem' }}
+        />
+        <span style={styles.metaLabel}>{label}</span>
+      </button>
+      {expanded && (
+        <pre style={styles.jsonBlock}>
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 function ScriptCard({ name, data }) {
   const status = data.status || 'stopped'
   const color = statusColors[status] || statusColors.stopped
@@ -129,12 +182,14 @@ function ScriptCard({ name, data }) {
       </div>
 
       {data.metadata && Object.entries(data.metadata).map(([key, value]) => (
-        <div key={key} style={styles.metaRow}>
-          <span style={styles.metaLabel}>{key}</span>
-          <span style={styles.metaValue}>
-            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-          </span>
-        </div>
+        typeof value === 'object' && value !== null ? (
+          <CollapsibleJson key={key} label={key} value={value} />
+        ) : (
+          <div key={key} style={styles.metaRow}>
+            <span style={styles.metaLabel}>{key}</span>
+            <span style={styles.metaValue}>{String(value)}</span>
+          </div>
+        )
       ))}
 
       {data.error && (
