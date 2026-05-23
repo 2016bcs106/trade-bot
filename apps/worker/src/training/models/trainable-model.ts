@@ -1,0 +1,33 @@
+import { ModelMetrics, TrainingInfo } from "../../types/models/model-metadata.ts";
+
+/**
+ * Interface for all trainable ML models.
+ * Each model must predict both HIGH and LOW targets.
+ */
+export interface TrainableModel {
+  /** Fit the model on training data */
+  fit(X: number[][], yHigh: number[], yLow: number[]): void;
+
+  /** Predict the daily high from feature vector */
+  predictHigh(x: number[]): number;
+
+  /** Predict the daily low from feature vector */
+  predictLow(x: number[]): number;
+
+  /** Serialize model weights to JSON string for persistence */
+  serialize(): string;
+
+  /** Get hyperparameters used for training info */
+  getHyperparameters(): Record<string, unknown>;
+}
+
+/**
+ * Result of a successful model training.
+ */
+export interface TrainingResult {
+  modelType: "linear-regression" | "random-forest";
+  symbol: string;
+  serializedModel: string;
+  training: TrainingInfo;
+  metrics: ModelMetrics;
+}
