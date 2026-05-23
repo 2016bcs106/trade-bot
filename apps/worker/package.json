@@ -19,11 +19,13 @@
     "ml-random-forest": "^2.1.0",
     "ml-regression-multivariate-linear": "^2.0.4",
     "moment": "^2.30.1",
+    "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
     "ws": "^8.20.1"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "@types/node-cron": "^3.0.11",
     "@types/ws": "^8.18.1",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
