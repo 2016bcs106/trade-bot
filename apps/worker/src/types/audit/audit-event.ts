@@ -15,8 +15,8 @@ export interface AuditEvent {
   /** Human-readable description of what happened */
   description: string;
 
-  /** ISO timestamp when the event occurred */
-  timestamp: number;
+  /** IST timestamp when the event occurred (YYYY-MM-DD HH:mm:ss) */
+  timestamp: string;
 
   /** Additional context/metadata specific to the event type */
   metadata: Record<string, unknown>;
