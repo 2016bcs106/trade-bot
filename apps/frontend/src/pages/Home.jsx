@@ -42,7 +42,7 @@ export default function Home() {
   }, [isDryRun])
 
   return (
-    <div style={layout.page}>
+    <div style={{ ...layout.page, paddingBottom: '4rem' }}>
       <header style={header.bar}>
         <span style={text.logo}>Trade Bot</span>
         {isDryRun && (
