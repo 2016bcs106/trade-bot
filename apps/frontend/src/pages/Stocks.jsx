@@ -1,34 +1,41 @@
 import { useState, useEffect } from 'react'
-import { db, ref, set, get, remove, onValue } from '../utils/firebase'
+import { db, ref, set, remove, onValue } from '../utils/firebase'
 import { layout, text, card, button } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faChartBar,
-  faPlus,
   faTrash,
   faToggleOn,
   faToggleOff,
   faCog,
   faSearch,
   faTimes,
+  faPlus,
+  faSpinner,
 } from '@fortawesome/free-solid-svg-icons'
 
 const styles = {
   container: {
     padding: '1rem',
-    paddingBottom: '5rem',
+    paddingBottom: '7rem',
     display: 'flex',
     flexDirection: 'column',
     gap: '0.75rem',
   },
-  searchBar: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
+  // Bottom search bar
+  searchBarWrapper: {
+    position: 'fixed',
+    bottom: '3.5rem',
+    left: 0,
+    right: 0,
+    padding: '0.6rem 1rem',
+    background: 'var(--pm-bg)',
+    borderTop: '1px solid var(--pm-border)',
+    zIndex: 999,
   },
   searchInput: {
-    flex: 1,
-    padding: '0.7rem 1rem',
+    width: '100%',
+    padding: '0.7rem 1rem 0.7rem 2.2rem',
     border: '1px solid var(--pm-border)',
     borderRadius: '10px',
     fontSize: '0.85rem',
@@ -36,8 +43,84 @@ const styles = {
     color: 'var(--pm-text)',
     outline: 'none',
   },
-  addButton: {
+  searchIcon: {
+    position: 'absolute',
+    left: '1.8rem',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: 'var(--pm-text-muted)',
+    fontSize: '0.8rem',
+  },
+  clearBtn: {
+    position: 'absolute',
+    right: '1.8rem',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--pm-text-muted)',
+  },
+  // Search results overlay
+  searchResults: {
+    position: 'fixed',
+    bottom: '6.5rem',
+    left: '1rem',
+    right: '1rem',
+    maxHeight: '40vh',
+    overflowY: 'auto',
+    background: 'var(--pm-card-bg)',
+    borderRadius: '12px',
+    border: '1px solid var(--pm-border)',
+    boxShadow: '0 -4px 12px rgba(0,0,0,0.1)',
+    zIndex: 1001,
+  },
+  searchResultItem: {
     padding: '0.7rem 1rem',
+    borderBottom: '1px solid var(--pm-border)',
+    cursor: 'pointer',
+  },
+  resultSymbol: { fontSize: '0.85rem', fontWeight: '600', color: 'var(--pm-text)' },
+  resultName: { fontSize: '0.7rem', color: 'var(--pm-text-muted)' },
+  // Stock detail modal
+  modal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    padding: '1rem',
+  },
+  modalContent: {
+    ...card.base,
+    padding: '1.5rem',
+    width: '100%',
+    maxWidth: '400px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+  },
+  modalTitle: { fontSize: '1.1rem', fontWeight: '700', color: 'var(--pm-text)' },
+  detailRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '0.3rem 0',
+  },
+  detailLabel: { fontSize: '0.75rem', color: 'var(--pm-text-muted)' },
+  detailValue: { fontSize: '0.75rem', fontWeight: '600', color: 'var(--pm-text)' },
+  modalActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'flex-end',
+    marginTop: '0.5rem',
+  },
+  addButton: {
+    padding: '0.6rem 1.2rem',
     background: 'var(--pm-primary)',
     color: '#ffffff',
     border: 'none',
@@ -45,11 +128,11 @@ const styles = {
     fontSize: '0.85rem',
     fontWeight: '600',
     cursor: 'pointer',
-    whiteSpace: 'nowrap',
     display: 'flex',
     alignItems: 'center',
     gap: '0.4rem',
   },
+  // Stock card
   stockCard: {
     ...card.base,
     padding: '1rem 1.25rem',
@@ -65,20 +148,9 @@ const styles = {
     flexDirection: 'column',
     gap: '0.15rem',
   },
-  symbol: {
-    fontSize: '0.95rem',
-    fontWeight: '700',
-    color: 'var(--pm-text)',
-  },
-  name: {
-    fontSize: '0.75rem',
-    color: 'var(--pm-text-muted)',
-  },
-  actions: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
-  },
+  symbol: { fontSize: '0.95rem', fontWeight: '700', color: 'var(--pm-text)' },
+  name: { fontSize: '0.75rem', color: 'var(--pm-text-muted)' },
+  actions: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
   iconBtn: {
     background: 'none',
     border: 'none',
@@ -86,7 +158,6 @@ const styles = {
     padding: '0.3rem',
     borderRadius: '6px',
     fontSize: '1.1rem',
-    transition: 'background 0.2s',
   },
   metaRow: {
     display: 'flex',
@@ -114,146 +185,68 @@ const styles = {
     padding: '3rem 1rem',
     gap: '0.75rem',
   },
-  modal: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2000,
-    padding: '1rem',
-  },
-  modalContent: {
-    ...card.base,
-    padding: '1.5rem',
-    width: '100%',
-    maxWidth: '400px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem',
-  },
-  modalTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '600',
-    color: 'var(--pm-text)',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.3rem',
-  },
-  inputLabel: {
-    fontSize: '0.75rem',
-    fontWeight: '500',
-    color: 'var(--pm-text-muted)',
-  },
-  input: {
-    padding: '0.6rem 0.8rem',
-    border: '1px solid var(--pm-border)',
-    borderRadius: '8px',
-    fontSize: '0.85rem',
-    background: 'var(--pm-card-bg)',
-    color: 'var(--pm-text)',
-    outline: 'none',
-  },
-  selectRow: {
-    display: 'flex',
-    gap: '0.5rem',
-  },
-  select: {
-    padding: '0.6rem 0.8rem',
-    border: '1px solid var(--pm-border)',
-    borderRadius: '8px',
-    fontSize: '0.85rem',
-    background: 'var(--pm-card-bg)',
-    color: 'var(--pm-text)',
-    outline: 'none',
-  },
-  modalActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    justifyContent: 'flex-end',
-  },
 }
 
-function AddStockModal({ onClose, onAdd, existingSymbols }) {
-  const [symbol, setSymbol] = useState('')
-  const [name, setName] = useState('')
-  const [securityId, setSecurityId] = useState('')
-  const [exchange, setExchange] = useState('NSE')
-  const [error, setError] = useState('')
+/**
+ * Placeholder for Paytm Money stock search API.
+ * TODO: Replace with actual API call when endpoint is provided.
+ */
+async function searchStocksAPI(query) {
+  // Simulated delay + mock results for now
+  await new Promise((r) => setTimeout(r, 300))
 
-  const handleAdd = () => {
-    const sym = symbol.trim().toUpperCase()
-    if (!sym) return setError('Symbol is required')
-    if (!name.trim()) return setError('Name is required')
-    if (!securityId.trim()) return setError('Security ID is required')
-    if (existingSymbols.includes(sym)) return setError('Stock already tracked')
-    setError('')
-    onAdd({ symbol: sym, name: name.trim(), securityId: securityId.trim(), exchange })
-  }
+  // Return mock results based on query
+  const mockStocks = [
+    { symbol: 'RELIANCE', name: 'Reliance Industries Ltd', exchange: 'NSE', securityId: '2885' },
+    { symbol: 'TCS', name: 'Tata Consultancy Services Ltd', exchange: 'NSE', securityId: '11536' },
+    { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd', exchange: 'NSE', securityId: '1333' },
+    { symbol: 'INFY', name: 'Infosys Ltd', exchange: 'NSE', securityId: '1594' },
+    { symbol: 'ICICIBANK', name: 'ICICI Bank Ltd', exchange: 'NSE', securityId: '4963' },
+    { symbol: 'HINDUNILVR', name: 'Hindustan Unilever Ltd', exchange: 'NSE', securityId: '1394' },
+    { symbol: 'SBIN', name: 'State Bank of India', exchange: 'NSE', securityId: '3045' },
+    { symbol: 'BHARTIARTL', name: 'Bharti Airtel Ltd', exchange: 'NSE', securityId: '10604' },
+    { symbol: 'ITC', name: 'ITC Ltd', exchange: 'NSE', securityId: '1660' },
+    { symbol: 'KOTAKBANK', name: 'Kotak Mahindra Bank Ltd', exchange: 'NSE', securityId: '1922' },
+  ]
 
+  if (!query.trim()) return []
+  const q = query.toLowerCase()
+  return mockStocks.filter(
+    (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
+  )
+}
+
+function StockDetailModal({ stock, onClose, onAdd, alreadyTracked }) {
   return (
     <div style={styles.modal} onClick={onClose}>
       <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-        <span style={styles.modalTitle}>Add Stock</span>
+        <span style={styles.modalTitle}>{stock.symbol}</span>
 
-        <div style={styles.inputGroup}>
-          <span style={styles.inputLabel}>Symbol</span>
-          <input
-            style={styles.input}
-            placeholder="e.g. RELIANCE"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            autoFocus
-          />
+        <div style={styles.detailRow}>
+          <span style={styles.detailLabel}>Name</span>
+          <span style={styles.detailValue}>{stock.name}</span>
+        </div>
+        <div style={styles.detailRow}>
+          <span style={styles.detailLabel}>Exchange</span>
+          <span style={styles.detailValue}>{stock.exchange}</span>
+        </div>
+        <div style={styles.detailRow}>
+          <span style={styles.detailLabel}>Security ID</span>
+          <span style={styles.detailValue}>{stock.securityId}</span>
         </div>
 
-        <div style={styles.inputGroup}>
-          <span style={styles.inputLabel}>Name</span>
-          <input
-            style={styles.input}
-            placeholder="e.g. Reliance Industries Ltd"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-
-        <div style={styles.selectRow}>
-          <div style={{ ...styles.inputGroup, flex: 1 }}>
-            <span style={styles.inputLabel}>Security ID</span>
-            <input
-              style={styles.input}
-              placeholder="Paytm Money ID"
-              value={securityId}
-              onChange={(e) => setSecurityId(e.target.value)}
-            />
+        {alreadyTracked ? (
+          <div style={{ fontSize: '0.75rem', color: '#eab308', textAlign: 'center', padding: '0.5rem' }}>
+            Already tracked
           </div>
-          <div style={styles.inputGroup}>
-            <span style={styles.inputLabel}>Exchange</span>
-            <select
-              style={styles.select}
-              value={exchange}
-              onChange={(e) => setExchange(e.target.value)}
-            >
-              <option value="NSE">NSE</option>
-              <option value="BSE">BSE</option>
-            </select>
+        ) : (
+          <div style={styles.modalActions}>
+            <button style={button.outline} onClick={onClose}>Cancel</button>
+            <button style={styles.addButton} onClick={() => onAdd(stock)}>
+              <FontAwesomeIcon icon={faPlus} /> Add to Watchlist
+            </button>
           </div>
-        </div>
-
-        {error && <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{error}</span>}
-
-        <div style={styles.modalActions}>
-          <button style={button.outline} onClick={onClose}>Cancel</button>
-          <button style={{ ...styles.addButton, padding: '0.6rem 1.2rem' }} onClick={handleAdd}>
-            <FontAwesomeIcon icon={faPlus} /> Add
-          </button>
-        </div>
+        )}
       </div>
     </div>
   )
@@ -278,11 +271,7 @@ function StockCard({ stock, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
               style={{ color: stock.enabled ? '#22c55e' : '#94a3b8' }}
             />
           </button>
-          <button
-            style={styles.iconBtn}
-            onClick={onRemove}
-            title="Remove stock"
-          >
+          <button style={styles.iconBtn} onClick={onRemove} title="Remove stock">
             <FontAwesomeIcon icon={faTrash} style={{ color: '#ef4444', fontSize: '0.85rem' }} />
           </button>
         </div>
@@ -310,8 +299,10 @@ function StockCard({ stock, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
 
 export default function Stocks() {
   const [stocks, setStocks] = useState(null)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [filter, setFilter] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [selectedStock, setSelectedStock] = useState(null)
 
   useEffect(() => {
     const stocksRef = ref(db, 'stocks')
@@ -321,30 +312,41 @@ export default function Stocks() {
     return () => unsubscribe()
   }, [])
 
-  const stockList = stocks
-    ? Object.values(stocks).filter((s) =>
-        s.symbol.toLowerCase().includes(filter.toLowerCase()) ||
-        s.name.toLowerCase().includes(filter.toLowerCase())
-      )
-    : []
+  // Debounced search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      setSearching(true)
+      const results = await searchStocksAPI(searchQuery)
+      setSearchResults(results)
+      setSearching(false)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   const existingSymbols = stocks ? Object.keys(stocks) : []
+  const stockList = stocks ? Object.values(stocks) : []
 
-  const handleAdd = async ({ symbol, name, securityId, exchange }) => {
+  const handleAdd = async (stock) => {
     const now = Date.now()
     const config = {
-      symbol,
-      name,
-      securityId,
-      exchange,
+      symbol: stock.symbol,
+      name: stock.name,
+      securityId: stock.securityId,
+      exchange: stock.exchange,
       enabled: true,
       autoOptimize: true,
       currentProductionVersion: null,
       addedAt: now,
       updatedAt: now,
     }
-    await set(ref(db, `stocks/${symbol}`), config)
-    setShowAddModal(false)
+    await set(ref(db, `stocks/${stock.symbol}`), config)
+    setSelectedStock(null)
+    setSearchQuery('')
+    setSearchResults([])
   }
 
   const handleToggleEnabled = async (stock) => {
@@ -365,45 +367,16 @@ export default function Stocks() {
 
   return (
     <div style={layout.page}>
-
       <div style={styles.container}>
-        <div style={styles.searchBar}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <FontAwesomeIcon
-              icon={faSearch}
-              style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--pm-text-muted)', fontSize: '0.8rem' }}
-            />
-            <input
-              style={{ ...styles.searchInput, paddingLeft: '2.2rem' }}
-              placeholder="Filter stocks..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-            {filter && (
-              <button
-                style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pm-text-muted)' }}
-                onClick={() => setFilter('')}
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            )}
-          </div>
-          <button style={styles.addButton} onClick={() => setShowAddModal(true)}>
-            <FontAwesomeIcon icon={faPlus} /> Add
-          </button>
-        </div>
-
         {stockList.length === 0 ? (
           <div style={styles.emptyState}>
             <FontAwesomeIcon icon={faChartBar} style={{ fontSize: '2rem', color: 'var(--pm-text-muted)' }} />
             <span style={text.muted}>
-              {stocks === null ? 'Loading...' : filter ? 'No matching stocks' : 'No stocks tracked yet'}
+              {stocks === null ? 'Loading...' : 'No stocks tracked yet'}
             </span>
-            {!filter && stocks !== null && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--pm-text-muted)' }}>
-                Tap "Add" to start tracking a stock
-              </span>
-            )}
+            <span style={{ fontSize: '0.75rem', color: 'var(--pm-text-muted)' }}>
+              Search below to add stocks
+            </span>
           </div>
         ) : (
           stockList.map((stock) => (
@@ -418,11 +391,57 @@ export default function Stocks() {
         )}
       </div>
 
-      {showAddModal && (
-        <AddStockModal
-          onClose={() => setShowAddModal(false)}
+      {/* Search results popup */}
+      {searchResults.length > 0 && (
+        <div style={styles.searchResults}>
+          {searchResults.map((result) => (
+            <div
+              key={result.symbol}
+              style={styles.searchResultItem}
+              onClick={() => {
+                setSelectedStock(result)
+                setSearchResults([])
+              }}
+            >
+              <div style={styles.resultSymbol}>{result.symbol}</div>
+              <div style={styles.resultName}>{result.name} · {result.exchange}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bottom search bar */}
+      <div style={styles.searchBarWrapper}>
+        <div style={{ position: 'relative' }}>
+          <FontAwesomeIcon
+            icon={searching ? faSpinner : faSearch}
+            style={styles.searchIcon}
+            spin={searching}
+          />
+          <input
+            style={styles.searchInput}
+            placeholder="Search stocks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              style={styles.clearBtn}
+              onClick={() => { setSearchQuery(''); setSearchResults([]) }}
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Stock detail modal */}
+      {selectedStock && (
+        <StockDetailModal
+          stock={selectedStock}
+          onClose={() => setSelectedStock(null)}
           onAdd={handleAdd}
-          existingSymbols={existingSymbols}
+          alreadyTracked={existingSymbols.includes(selectedStock.symbol)}
         />
       )}
     </div>
