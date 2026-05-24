@@ -57,7 +57,7 @@ export default class ModelTrainer {
     securityId: string,
     fromDate: string,
     toDate: string,
-    modelType: ModelType | "auto" = "random-forest",
+    modelType: ModelType | "auto" = "linear-regression",
     validationRatio: number = 0.2,
   ): Promise<TrainingResult | null> {
     const startTime = Date.now();

@@ -341,7 +341,12 @@ export default function Stocks() {
   const handleRemove = async (stock) => {
     const key = stock._key || stock.symbol
     setSelectedSymbol(null)
-    await remove(ref(db, `stocks/${key}`))
+    // Remove stock config + associated models + predictions from Firebase
+    await Promise.all([
+      remove(ref(db, `stocks/${key}`)),
+      remove(ref(db, `models/${key}`)),
+      remove(ref(db, `predictions/${key}`)),
+    ])
   }
 
   if (stocks === undefined) {
