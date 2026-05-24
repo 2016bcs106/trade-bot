@@ -39,22 +39,19 @@ class TrainingListenerScript extends BaseScript {
 
     this.log.info("Training listener started — watching pending_trainings/");
 
-    // First, process any existing pending entries
+    // First, process any existing entries (regardless of status)
     const existing = await this.firebase.getAllPendingTrainings();
-    const pendingKeys = Object.entries(existing)
-      .filter(([, e]) => e.status === "pending")
-      .map(([key]) => key);
+    const existingKeys = Object.keys(existing);
 
-    if (pendingKeys.length > 0) {
-      this.log.info(`Found ${pendingKeys.length} existing pending entries — processing...`);
-      for (const key of pendingKeys) {
+    if (existingKeys.length > 0) {
+      this.log.info(`Found ${existingKeys.length} existing entries — processing...`);
+      for (const key of existingKeys) {
         await this.processEntry(key, existing[key]);
       }
     }
 
-    // Then listen for new additions
+    // Then listen for new additions (process all, no status filter)
     this.firebase.onPendingTrainingAdded(async (key, entry) => {
-      if (entry.status !== "pending") return;
       this.log.info(`New pending training: ${entry.symbol} (${entry.modelType}, ${entry.lookbackDays}d)`);
       await this.processEntry(key, entry);
     });
