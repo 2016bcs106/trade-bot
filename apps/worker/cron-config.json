@@ -16,7 +16,7 @@
   },
   {
     "name": "minute-tick-collector",
-    "schedule": "* * * * *",
+    "schedule": "45 3 * * 1-5",
     "command": "src/cli/minute-tick-collector.ts"
   }
 ]
