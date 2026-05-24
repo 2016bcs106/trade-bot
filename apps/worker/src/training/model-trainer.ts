@@ -120,7 +120,7 @@ export default class ModelTrainer {
     const metrics = this.evaluateModel(model, valSet);
     const durationMs = Date.now() - startTime;
 
-    logger.info(`Training complete in ${durationMs}ms — MAE: ${metrics.mae.toFixed(2)}, MAPE: ${metrics.mape.toFixed(2)}%`);
+    logger.info(`Training complete in ${durationMs}ms — MAE: ${metrics.mae.toFixed(2)}, MAPE: ${metrics.mape.toFixed(2)}%, Dir: ${metrics.directionalAccuracy.toFixed(1)}%, R²: ${metrics.r2.toFixed(3)}`);
 
     // Step 7: Build result
     return {
@@ -166,7 +166,7 @@ export default class ModelTrainer {
       }
 
       const metrics = this.evaluateModel(model, valSet);
-      logger.info(`[auto] ${mt}: MAE=${metrics.mae.toFixed(2)}, MAPE=${metrics.mape.toFixed(2)}%`);
+      logger.info(`[auto] ${mt}: MAE=${metrics.mae.toFixed(2)}, MAPE=${metrics.mape.toFixed(2)}%, Dir=${metrics.directionalAccuracy.toFixed(1)}%`);
 
       if (!bestResult || metrics.mae < bestResult.metrics.mae) {
         const durationMs = Date.now() - startTime;
@@ -276,12 +276,20 @@ export default class ModelTrainer {
       totalHighPctErr += sample.targetHigh > 0 ? (highErr / sample.targetHigh) * 100 : 0;
       totalLowPctErr += sample.targetLow > 0 ? (lowErr / sample.targetLow) * 100 : 0;
 
+      // Directional accuracy: did the model correctly predict whether
+      // today's midpoint (avg of high/low) would be above or below prev close?
       const predMid = (predHigh + predLow) / 2;
       const actualMid = (sample.targetHigh + sample.targetLow) / 2;
-      if ((predMid > actualMid) === (sample.features.cumulativeReturn > 0)) {
-        directionalCorrect++;
+      const prevClose = sample.features.prevClose1;
+      if (prevClose > 0) {
+        const predDirection = predMid > prevClose; // model predicts bullish day
+        const actualDirection = actualMid > prevClose; // day was actually bullish
+        if (predDirection === actualDirection) {
+          directionalCorrect++;
+        }
       }
 
+      // Range containment: does predicted range fully contain actual range?
       if (sample.targetHigh <= predHigh && sample.targetLow >= predLow) {
         rangeContained++;
       }
