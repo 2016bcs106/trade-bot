@@ -28,8 +28,11 @@ export async function handlePredict(): Promise<void> {
   const modelManager = new ModelManager();
   const predictionEngine = new PredictionEngine();
   const provider = new PaytmMoneyHistoricalProvider();
-  const today = moment().utcOffset("+05:30").format("YYYY-MM-DD");
-  const yesterday = moment(today).subtract(1, "day").format("YYYY-MM-DD");
+
+  // Support --date=YYYY-MM-DD for adhoc/backtest predictions
+  const targetDate = config.date || moment().utcOffset("+05:30").format("YYYY-MM-DD");
+  const prevDate = moment(targetDate).subtract(1, "day").format("YYYY-MM-DD");
+  logger.info(`Prediction date: ${targetDate}`);
 
   for (const sym of symbols) {
     const stock = await firebase.getStock(sym);
@@ -44,10 +47,10 @@ export async function handlePredict(): Promise<void> {
       continue;
     }
 
-    // Fetch today's candles from API
+    // Fetch target date candles from API
     const candles = await provider.fetchOHLCV({
       symbol: sym, securityId: pmlId, exchange: "NSE",
-      fromDate: today, toDate: today, interval: "MINUTE",
+      fromDate: targetDate, toDate: targetDate, interval: "MINUTE",
     });
 
     if (candles.length < 30) {
@@ -55,10 +58,10 @@ export async function handlePredict(): Promise<void> {
       continue;
     }
 
-    // Fetch yesterday's candles for previous day context
+    // Fetch previous day candles for context
     const prevCandles = await provider.fetchOHLCV({
       symbol: sym, securityId: pmlId, exchange: "NSE",
-      fromDate: yesterday, toDate: yesterday, interval: "MINUTE",
+      fromDate: prevDate, toDate: prevDate, interval: "MINUTE",
     });
 
     const prevDay: PreviousDayContext | null = prevCandles.length > 0
@@ -79,7 +82,7 @@ export async function handlePredict(): Promise<void> {
 
     // Generate prediction
     const prediction = predictionEngine.predict(
-      sym, today, candles, prevDay, stock.currentProductionVersion, modelType,
+      sym, targetDate, candles, prevDay, stock.currentProductionVersion, modelType,
     );
 
     if (!prediction) {
@@ -87,7 +90,7 @@ export async function handlePredict(): Promise<void> {
       continue;
     }
 
-    await firebase.setPrediction(sym, today, prediction);
+    await firebase.setPrediction(sym, targetDate, prediction);
     logger.info(`✓ ${sym}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}`);
   }
 }

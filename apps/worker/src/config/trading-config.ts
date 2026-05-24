@@ -59,6 +59,7 @@ export default class TradingConfig {
   all?: boolean;
   model?: string;
   lookbackDays?: number;
+  date?: string;
 
   constructor(script: ScriptName = "trade-bot", argv: string[] = process.argv.slice(2)) {
     const args = TradingConfig.parseArgs(argv);
@@ -126,6 +127,7 @@ export default class TradingConfig {
     this.all = args.all === "true" || process.argv.includes("--all");
     this.model = args.model || "random-forest";
     this.lookbackDays = args.lookbackDays != null ? Number(args.lookbackDays) : 1825; // 5 years
+    this.date = args.date || undefined; // optional adhoc date (YYYY-MM-DD)
     this.isValid = !!(this.symbol || this.all);
   }
 
