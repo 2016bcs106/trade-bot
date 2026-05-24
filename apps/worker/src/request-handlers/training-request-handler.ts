@@ -9,7 +9,7 @@ const logger = createLogger("handler:train");
  * Handles "train" requests — trains a model for a stock using historical data.
  *
  * Stock status transitions:
- * - On start: status → "training_in_progress"
+ * - On start: status → "pending_training"
  * - On success: status → "ready"
  * - On failure (first training, no production model): status → "training_failed"
  * - On failure (has existing production model): status stays "ready", logs error
