@@ -186,11 +186,13 @@ async function processEntry(
           const predDate = moment(date, "YYYY-MM-DD");
           const marketCloseTime = predDate.clone().hour(15).minute(30);
           if (now.isAfter(marketCloseTime)) {
-            // Use full day candles to compute actual high/low
+            // Use full day candles to compute actual high/low/close
             const actualHigh = Math.max(...candles.map((c) => c.high));
             const actualLow = Math.min(...candles.map((c) => c.low));
+            const actualClose = candles[candles.length - 1].close;
             prediction.actualHigh = actualHigh;
             prediction.actualLow = actualLow;
+            prediction.actualClose = actualClose;
             prediction.evaluated = true;
           }
 
