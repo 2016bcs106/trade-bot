@@ -1,9 +1,15 @@
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseDate } from "./time.ts";
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { Prediction } from "../types/predictions/prediction.ts";
 import { EvaluationResult } from "../types/predictions/evaluation-result.ts";
 import EvaluationEngine from "../evaluation/evaluation-engine.ts";
 import FirebaseClient from "../firebase/client.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = resolve(__dirname, "..", "..", "..", "data");
 
 /**
  * Expand a date range into business days (Mon-Fri).
@@ -66,4 +72,25 @@ export async function evaluateAndSave(
   }
 
   return result;
+}
+
+/**
+ * Load candles from local file written by minute-tick-collector.
+ * File: data/{SYMBOL}.json — JSON array of OHLCV candles for today.
+ * Filters to only return candles matching the requested date.
+ */
+export function loadLocalCandles(symbol: string, date: string): OHLCV[] {
+  const filePath = resolve(DATA_DIR, `${symbol}.json`);
+
+  if (!existsSync(filePath)) {
+    return [];
+  }
+
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const candles: OHLCV[] = JSON.parse(content);
+    return candles.filter((c) => c.timestamp.startsWith(date));
+  } catch {
+    return [];
+  }
 }

@@ -1,16 +1,9 @@
-import { readFileSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { now, parseDate, todayDate } from "../utils/time.ts";
+import { now, parseDate } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
-import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
-import { getBusinessDays, evaluateAndSave } from "../utils/market-utils.ts";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "data");
+import { getBusinessDays, evaluateAndSave, loadLocalCandles } from "../utils/market-utils.ts";
 
 const logger = createLogger("handler:predict");
 
@@ -63,7 +56,7 @@ export class PredictionRequestHandler implements RequestHandler {
     for (const date of dates) {
       try {
         const candles = dataSource === "local"
-          ? this.loadLocalCandles(symbol, date)
+          ? loadLocalCandles(symbol, date)
           : await client.fetchOHLCV(pmlId, date, date);
 
         if (candles.length < 30) {
@@ -117,31 +110,5 @@ export class PredictionRequestHandler implements RequestHandler {
     }
 
     logger.info(`✓ Completed ${symbol}: ${fromDate} → ${toDate} (${processed}/${dates.length} dates)`);
-  }
-
-  /**
-   * Load candles from local file written by minute-tick-collector.
-   * File: data/{SYMBOL}.json — JSON array of OHLCV candles for today.
-   * Filters to only return candles matching the requested date.
-   */
-  private loadLocalCandles(symbol: string, date: string): OHLCV[] {
-    const filePath = resolve(DATA_DIR, `${symbol}.json`);
-
-    if (!existsSync(filePath)) {
-      logger.warn(`Local data file not found: ${filePath}`);
-      return [];
-    }
-
-    try {
-      const content = readFileSync(filePath, "utf-8");
-      const candles: OHLCV[] = JSON.parse(content);
-
-      // Filter candles for the requested date
-      return candles.filter((c) => c.timestamp.startsWith(date));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`Failed to read local candles for ${symbol}: ${msg}`);
-      return [];
-    }
   }
 }
