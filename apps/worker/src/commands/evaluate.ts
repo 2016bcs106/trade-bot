@@ -64,9 +64,11 @@ export async function handleEvaluate(): Promise<void> {
 
     const actualHigh = Math.max(...candles.map((c) => c.high));
     const actualLow = Math.min(...candles.map((c) => c.low));
+    const actualClose = candles[candles.length - 1].close;
 
     prediction.actualHigh = actualHigh;
     prediction.actualLow = actualLow;
+    prediction.actualClose = actualClose;
     prediction.evaluated = true;
 
     const result = evaluationEngine.evaluate(prediction);

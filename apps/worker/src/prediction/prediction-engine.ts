@@ -79,6 +79,7 @@ export default class PredictionEngine {
       referencePriceTime,
       actualHigh: null,
       actualLow: null,
+      actualClose: null,
       evaluated: false,
     };
   }

@@ -221,6 +221,13 @@ export default function Dashboard() {
               {/* Table for predicted stocks */}
               {row.status === 'predicted' && (
                 <div style={{ background: 'var(--pm-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--pm-border)' }}>
+                  {/* Close row - shown above table when available */}
+                  {row.actualClose != null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}>Close</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: '700', color: row.actualClose >= (refPrice || 0) ? '#22c55e' : '#ef4444' }}>₹{row.actualClose.toFixed(2)}</span>
+                    </div>
+                  )}
                   {/* Column headers */}
                   <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.25rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
                     <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}></span>
@@ -390,6 +397,13 @@ export default function Dashboard() {
 
                     {/* Table: rows=High/Low/Return, cols=Predicted/Actual/Error */}
                     <div style={{ background: 'var(--pm-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--pm-border)' }}>
+                      {/* Close row */}
+                      {pred.actualClose != null && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
+                          <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}>Close</span>
+                          <span style={{ fontSize: '0.7rem', fontWeight: '700', color: pred.actualClose >= (refP || 0) ? '#22c55e' : '#ef4444' }}>₹{pred.actualClose.toFixed(2)}</span>
+                        </div>
+                      )}
                       {/* Column headers */}
                       <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
                         <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}></span>

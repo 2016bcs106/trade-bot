@@ -90,6 +90,14 @@ export async function handlePredict(): Promise<void> {
       continue;
     }
 
+    // For historical backfills where we have full-day data, fill actuals immediately
+    if (candles.length >= 300) {
+      prediction.actualHigh = Math.max(...candles.map((c) => c.high));
+      prediction.actualLow = Math.min(...candles.map((c) => c.low));
+      prediction.actualClose = candles[candles.length - 1].close;
+      prediction.evaluated = true;
+    }
+
     await firebase.setPrediction(sym, targetDate, prediction);
     logger.info(`✓ ${sym}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}`);
   }

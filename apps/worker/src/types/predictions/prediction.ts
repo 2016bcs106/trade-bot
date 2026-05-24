@@ -39,6 +39,9 @@ export interface Prediction {
   /** Actual intraday low (filled after market close), null until evaluated */
   actualLow: number | null;
 
+  /** Actual closing price (filled after market close), null until evaluated */
+  actualClose: number | null;
+
   /** Whether evaluation has been completed for this prediction */
   evaluated: boolean;
 }
