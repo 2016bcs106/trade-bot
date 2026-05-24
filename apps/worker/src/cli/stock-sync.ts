@@ -1,6 +1,7 @@
 import "../config/env.ts";
 import { getDatabase, ref, push, set, onChildAdded, onChildChanged } from "firebase/database";
 import BaseScript from "./base-script.ts";
+import { nowISO } from "../utils/time.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 
 interface PaytmSearchResult {
@@ -83,7 +84,7 @@ class StockSyncScript extends BaseScript {
     await new Promise(() => {});
   }
 
-  private async handlePendingStock(stock: { symbol: string; addedAt?: number }): Promise<void> {
+  private async handlePendingStock(stock: { symbol: string; addedAt?: string | number }): Promise<void> {
     const { symbol } = stock;
 
     // Prevent duplicate processing
@@ -97,7 +98,7 @@ class StockSyncScript extends BaseScript {
     }
   }
 
-  private async syncStock(stock: { symbol: string; addedAt?: number }): Promise<void> {
+  private async syncStock(stock: { symbol: string; addedAt?: string | number }): Promise<void> {
     const { symbol } = stock;
     this.log.info(`Syncing: ${symbol}`);
 
@@ -115,8 +116,8 @@ class StockSyncScript extends BaseScript {
           enabled: false,
           autoOptimize: false,
           currentProductionVersion: null,
-          addedAt: stock.addedAt || Date.now(),
-          updatedAt: Date.now(),
+          addedAt: typeof stock.addedAt === "string" ? stock.addedAt : nowISO(),
+          updatedAt: nowISO(),
           status: "sync_failed",
         } as any);
         return;
@@ -136,13 +137,13 @@ class StockSyncScript extends BaseScript {
         enabled: true,
         autoOptimize: true,
         currentProductionVersion: null,
-        addedAt: stock.addedAt || Date.now(),
-        updatedAt: Date.now(),
+        addedAt: typeof stock.addedAt === "string" ? stock.addedAt : nowISO(),
+        updatedAt: nowISO(),
       };
 
       await this.firebase.setStock(symbol, config);
       this.synced++;
-      this.lastSyncAt = new Date().toISOString();
+      this.lastSyncAt = nowISO();
       this.log.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
 
       // ─── Step 2: Queue training (5 years of data) ──────────────────
@@ -228,7 +229,7 @@ class StockSyncScript extends BaseScript {
       modelType: "linear-regression",
       lookbackDays: 1825, // 5 years
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: nowISO(),
     });
     this.log.info(`  → Queued training for ${symbol} (5yr lookback)`);
   }

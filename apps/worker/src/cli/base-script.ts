@@ -1,4 +1,4 @@
-import moment from "moment";
+import { nowISO } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient from "../firebase/client.ts";
 import { ScriptStatus } from "../types/script-status.ts";
@@ -18,13 +18,13 @@ const HEARTBEAT_INTERVAL_MS = 60_000;
 export default abstract class BaseScript {
   protected firebase: FirebaseClient;
   protected log!: Logger;
-  private startedAt: number;
+  private startedAt: string;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastError: string | null = null;
 
   constructor() {
     this.firebase = new FirebaseClient();
-    this.startedAt = moment().utcOffset("+05:30").valueOf();
+    this.startedAt = nowISO();
   }
 
   /** Unique name for this script (used as Firebase key) */
@@ -60,7 +60,7 @@ export default abstract class BaseScript {
   private async reportStatus(status: ScriptStatus["status"]): Promise<void> {
     const payload: ScriptStatus = {
       status,
-      lastHeartbeat: moment().utcOffset("+05:30").valueOf(),
+      lastHeartbeat: nowISO(),
       startedAt: this.startedAt,
       error: this.lastError,
       metadata: this.getMetadata(),

@@ -2,8 +2,8 @@ import "../config/env.ts";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync, appendFileSync, statSync } from "fs";
-import moment from "moment";
 import BaseScript from "./base-script.ts";
+import { nowMs, nowISO, todayDate } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.ts";
 
@@ -18,7 +18,7 @@ class LiveStreamScript extends BaseScript {
   private lastFlushDate = this.getDateIST();
   private tickCount = 0;
   private tickCountAtLastStats = 0;
-  private startTime = Date.now();
+  private startTime = nowMs();
   private currentToken: string | null = null;
   private streamer: PaytmMoneyWebSocket | null = null;
 
@@ -32,7 +32,7 @@ class LiveStreamScript extends BaseScript {
       totalFlushed: this.totalFlushed,
       totalFlushedToday: this.totalFlushedToday,
       bufferSize: this.buffer.length,
-      uptimeMinutes: Math.round((Date.now() - this.startTime) / 1000 / 60),
+      uptimeMinutes: Math.round((nowMs() - this.startTime) / 1000 / 60),
       outputFile: this.getOutputFilePath(),
       fileSizeMB: this.getFileSizeMB(this.getOutputFilePath()),
       config: this.config.toJSON(),
@@ -85,7 +85,7 @@ class LiveStreamScript extends BaseScript {
 
     s.on("tick", (data: Record<string, unknown>) => {
       this.tickCount++;
-      this.buffer.push({ ...data, received_at: new Date().toISOString() });
+      this.buffer.push({ ...data, received_at: nowISO() });
       if (this.buffer.length >= maxBufferSize) this.flushBuffer();
     });
 
@@ -122,7 +122,7 @@ class LiveStreamScript extends BaseScript {
   }
 
   private logStats(): void {
-    const uptimeMin = Math.round((Date.now() - this.startTime) / 1000 / 60);
+    const uptimeMin = Math.round((nowMs() - this.startTime) / 1000 / 60);
     const statsInterval = this.config.statsInterval!;
     const ticksPerSec = ((this.tickCount - this.tickCountAtLastStats) / statsInterval).toFixed(1);
     const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
@@ -136,7 +136,7 @@ class LiveStreamScript extends BaseScript {
   }
 
   private getDateIST(): string {
-    return moment().utcOffset("+05:30").format("YYYY-MM-DD");
+    return todayDate();
   }
 
   private getOutputFilePath(): string {

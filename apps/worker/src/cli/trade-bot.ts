@@ -2,8 +2,8 @@ import "../config/env.ts";
 import { writeFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import moment from "moment";
 import BaseScript from "./base-script.ts";
+import { now, nowMs, nowFormatted } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
@@ -88,7 +88,7 @@ class TradeBotScript extends BaseScript {
     }
 
     const outputPath = resolve(__dirname, "..", "..", "..", "frontend", "public", "dry-run-output.json");
-    const output = { ticks, signals, generatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss") };
+    const output = { ticks, signals, generatedAt: nowFormatted() };
     writeFileSync(outputPath, JSON.stringify(output, null, 2));
 
     this.log.info(`Processed ${testData.length} data points — output: ${outputPath}`);
@@ -109,10 +109,10 @@ class TradeBotScript extends BaseScript {
     this.log.info(`Entering main loop — operation timeout: ${OP_TIMEOUT_MS}ms`);
 
     while (true) {
-      const startTime = Date.now();
+      const startTime = nowMs();
       try {
-        const date = moment().utcOffset("+05:30").format("YYYY-MM-DD");
-        const time = moment().utcOffset("+05:30").format("HH:mm");
+        const date = now().format("YYYY-MM-DD");
+        const time = now().format("HH:mm");
 
         if (time >= "09:15" && time <= "15:30") {
           const lastTradedPrice = await this.withTimeout(
@@ -158,7 +158,7 @@ class TradeBotScript extends BaseScript {
         this.log.error("Loop error", error);
       }
 
-      const elapsedTime = Date.now() - startTime;
+      const elapsedTime = nowMs() - startTime;
       const waitTime = 60000 - elapsedTime;
       await this.wait(Math.max(0, waitTime));
     }

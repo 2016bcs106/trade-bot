@@ -43,8 +43,8 @@ export interface StockConfig {
   currentProductionVersion: string | null;
 
   /** ISO timestamp when this stock was added to tracking */
-  addedAt: number;
+  addedAt: string;
 
   /** ISO timestamp of last config update */
-  updatedAt: number;
+  updatedAt: string;
 }

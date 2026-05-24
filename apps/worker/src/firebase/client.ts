@@ -1,4 +1,5 @@
 import "../config/env.ts";
+import { nowISO } from "../utils/time.ts";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, get, set, push, remove, onValue, onChildAdded, Database, Unsubscribe } from "firebase/database";
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
@@ -118,7 +119,7 @@ export default class FirebaseClient {
   async updateStock(symbol: string, updates: Partial<StockConfig>): Promise<void> {
     const current = await this.getStock(symbol);
     if (!current) throw new Error(`Stock ${symbol} not found`);
-    await this._setValue(`stocks/${symbol}`, { ...current, ...updates, updatedAt: Date.now() });
+    await this._setValue(`stocks/${symbol}`, { ...current, ...updates, updatedAt: nowISO() });
   }
 
   async removeStock(symbol: string): Promise<void> {

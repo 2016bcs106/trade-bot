@@ -4,6 +4,7 @@ import { getDatabase, ref, remove, get, set } from "firebase/database";
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { nowFilenameSafe } from "../utils/time.ts";
 import ModelManager from "../model-management/model-manager.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +54,7 @@ async function snapshot(paths: string[]): Promise<string> {
     mkdirSync(BACKUP_DIR, { recursive: true });
   }
 
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const ts = nowFilenameSafe();
   const filename = `backup-${ts}.json`;
   const filepath = resolve(BACKUP_DIR, filename);
   writeFileSync(filepath, JSON.stringify(data, null, 2));

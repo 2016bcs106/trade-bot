@@ -1,6 +1,6 @@
-import moment from "moment";
 import { getDatabase, ref, push, set } from "firebase/database";
 import BaseScript from "./base-script.ts";
+import { now, nowISO } from "../utils/time.ts";
 import { PendingTrainingEntry } from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
@@ -79,8 +79,8 @@ class TrainingListenerScript extends BaseScript {
         throw new Error(`Stock ${symbol} has no pmlId — re-run stock-sync`);
       }
 
-      const toDate = moment().utcOffset("+05:30").format("YYYY-MM-DD");
-      const fromDate = moment().utcOffset("+05:30").subtract(lookbackDays, "days").format("YYYY-MM-DD");
+      const toDate = now().format("YYYY-MM-DD");
+      const fromDate = now().subtract(lookbackDays, "days").format("YYYY-MM-DD");
 
       this.log.info(`Training ${symbol}: ${modelType}, ${fromDate} → ${toDate}`);
 
@@ -151,9 +151,9 @@ class TrainingListenerScript extends BaseScript {
 
   private async queuePredictions(symbol: string): Promise<void> {
     const db = getDatabase();
-    const now = moment().utcOffset("+05:30");
-    const fromDate = now.clone().subtract(30, "days").format("YYYY-MM-DD");
-    const toDate = now.format("YYYY-MM-DD");
+    const current = now();
+    const fromDate = current.clone().subtract(30, "days").format("YYYY-MM-DD");
+    const toDate = current.format("YYYY-MM-DD");
 
     const newRef = push(ref(db, "pending_predictions"));
     await set(newRef, {
@@ -161,7 +161,7 @@ class TrainingListenerScript extends BaseScript {
       fromDate,
       toDate,
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: nowISO(),
     });
     this.log.info(`  → Queued predictions for ${symbol} (${fromDate} → ${toDate})`);
   }
