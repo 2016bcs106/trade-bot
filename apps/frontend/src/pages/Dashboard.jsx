@@ -84,23 +84,34 @@ const styles = {
 
 export default function Dashboard() {
   const [predictions, setPredictions] = useState({})
+  const [stocks, setStocks] = useState({})
   const [selectedSymbol, setSelectedSymbol] = useState(null)
   const [history, setHistory] = useState(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
 
   useEffect(() => {
     const predRef = ref(db, 'predictions')
-    const unsub = onValue(predRef, (snap) => setPredictions(snap.val() || {}))
-    return () => unsub()
+    const unsubPred = onValue(predRef, (snap) => setPredictions(snap.val() || {}))
+    const stocksRef = ref(db, 'stocks')
+    const unsubStocks = onValue(stocksRef, (snap) => setStocks(snap.val() || {}))
+    return () => { unsubPred(); unsubStocks() }
   }, [])
 
   const today = new Date().toISOString().split('T')[0]
 
-  // Today's predictions across all symbols
-  const todayPredictions = Object.entries(predictions).flatMap(([symbol, dates]) => {
-    const todayData = dates?.[today]
-    if (!todayData) return []
-    return [{ symbol, ...todayData }]
+  // Get enabled stocks and merge with today's predictions
+  const enabledSymbols = Object.entries(stocks)
+    .filter(([, s]) => s.enabled)
+    .map(([symbol]) => symbol)
+    .sort()
+
+  // Build list: prediction if exists, otherwise show as scheduled
+  const rows = enabledSymbols.map((symbol) => {
+    const todayData = predictions[symbol]?.[today]
+    if (todayData) {
+      return { symbol, ...todayData, status: 'predicted' }
+    }
+    return { symbol, status: 'scheduled' }
   })
 
   // Open history modal
@@ -131,24 +142,34 @@ export default function Dashboard() {
     <div style={styles.container}>
       <div style={styles.sectionTitle}>Today's Predictions</div>
       <div style={styles.card}>
-        {todayPredictions.length === 0 ? (
-          <div style={styles.empty}>No predictions for {today}</div>
+        {rows.length === 0 ? (
+          <div style={styles.empty}>No enabled stocks</div>
         ) : (
-          todayPredictions.map((pred, i) => (
+          rows.map((row, i) => (
             <div
-              key={pred.symbol}
-              style={i === todayPredictions.length - 1 ? styles.predRowLast : styles.predRow}
-              onClick={() => openHistory(pred.symbol)}
+              key={row.symbol}
+              style={i === rows.length - 1 ? styles.predRowLast : styles.predRow}
+              onClick={() => openHistory(row.symbol)}
             >
               <div>
-                <div style={styles.symbol}>{pred.symbol}</div>
+                <div style={styles.symbol}>{row.symbol}</div>
                 <div style={styles.subtext}>
-                  {pred.modelVersion} • {pred.modelType}
+                  {row.status === 'predicted'
+                    ? `${row.modelVersion} • ${row.modelType}`
+                    : 'Prediction pending'}
                 </div>
               </div>
               <div style={styles.predValues}>
-                <div style={styles.predHigh}>H: ₹{pred.predictedHigh?.toFixed(2)}</div>
-                <div style={styles.predLow}>L: ₹{pred.predictedLow?.toFixed(2)}</div>
+                {row.status === 'predicted' ? (
+                  <>
+                    <div style={styles.predHigh}>H: ₹{row.predictedHigh?.toFixed(2)}</div>
+                    <div style={styles.predLow}>L: ₹{row.predictedLow?.toFixed(2)}</div>
+                  </>
+                ) : (
+                  <span style={{ fontSize: '0.65rem', fontWeight: '600', color: '#f59e0b', background: 'rgba(245,158,11,0.12)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                    Scheduled
+                  </span>
+                )}
               </div>
             </div>
           ))
