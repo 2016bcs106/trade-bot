@@ -197,6 +197,20 @@ function DetailRow({ label, value }) {
   )
 }
 
+function ToggleRow({ label, enabled, onToggle }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0' }}>
+      <span style={{ fontSize: '0.75rem', fontWeight: '500', color: colors.dark }}>{label}</span>
+      <button
+        onClick={onToggle}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.3rem', color: enabled ? '#22c55e' : '#94a3b8', padding: 0 }}
+      >
+        <FontAwesomeIcon icon={enabled ? faToggleOn : faToggleOff} />
+      </button>
+    </div>
+  )
+}
+
 function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimize, onRemove }) {
   const isPending = stock.status === 'pending_sync'
   const isFailed = stock.status === 'sync_failed'
@@ -227,6 +241,10 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
           </div>
         ) : (
           <>
+            {/* Stock Details Section */}
+            <div style={{ fontSize: '0.6rem', fontWeight: '700', textTransform: 'uppercase', color: colors.muted, letterSpacing: '0.05em', marginTop: '0.25rem' }}>
+              Stock Details
+            </div>
             <DetailRow label="Name" value={stock.name} />
             <DetailRow label="Exchange" value={stock.exchange} />
             <DetailRow label="Security ID" value={stock.securityId} />
@@ -235,38 +253,25 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
             <DetailRow label="Market Cap (₹ Cr)" value={stock.mcap ? stock.mcap.toLocaleString('en-IN') : undefined} />
             <DetailRow label="Tick Size" value={stock.tickSize} />
             <DetailRow label="Lot Size" value={stock.lotSize} />
-            <DetailRow label="Predictions" value={stock.enabled ? 'Enabled' : 'Disabled'} />
-            <DetailRow label="Optimization" value={stock.autoOptimize ? 'Auto' : 'Manual'} />
-            <DetailRow label="Model Version" value={stock.currentProductionVersion} />
             <DetailRow label="Added" value={stock.addedAt ? new Date(stock.addedAt).toLocaleDateString('en-IN') : undefined} />
+
+            {/* Configuration Section */}
+            <div style={{ fontSize: '0.6rem', fontWeight: '700', textTransform: 'uppercase', color: colors.muted, letterSpacing: '0.05em', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: `1px solid ${colors.light}` }}>
+              Configuration
+            </div>
+            <ToggleRow label="Predictions Enabled" enabled={!!stock.enabled} onToggle={onToggleEnabled} />
+            <ToggleRow label="Auto Model Selection" enabled={!!stock.autoOptimize} onToggle={onToggleAutoOptimize} />
+            <DetailRow label="Active Model" value={stock.currentProductionVersion || '—'} />
           </>
         )}
 
-        <div style={styles.actionRow}>
-          {!isPending && !isFailed && (
-            <>
-              <button
-                style={{ ...styles.actionBtn, color: stock.enabled ? '#22c55e' : '#94a3b8' }}
-                onClick={onToggleEnabled}
-              >
-                <FontAwesomeIcon icon={stock.enabled ? faToggleOn : faToggleOff} />
-                {stock.enabled ? 'Disable' : 'Enable'}
-              </button>
-              <button
-                style={{ ...styles.actionBtn, color: 'var(--pm-primary)' }}
-                onClick={onToggleAutoOptimize}
-              >
-                <FontAwesomeIcon icon={faCog} />
-                {stock.autoOptimize ? 'Set Manual' : 'Auto-Opt'}
-              </button>
-            </>
-          )}
+        <div style={{ ...styles.actionRow, justifyContent: 'flex-end' }}>
           <button
-            style={{ ...styles.actionBtn, color: '#ef4444', marginLeft: 'auto' }}
+            style={{ ...styles.actionBtn, color: '#ef4444' }}
             onClick={onRemove}
           >
             <FontAwesomeIcon icon={faTrash} />
-            Remove
+            Remove Stock
           </button>
         </div>
       </div>
