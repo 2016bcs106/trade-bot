@@ -122,7 +122,12 @@ export default function Home() {
         </div>
       )}
 
-      <PortfolioChart ticks={ticks} signals={signals} />
+      <PortfolioChart
+        name={stocks[selectedSymbol]?.name || selectedSymbol || 'Select Stock'}
+        ticker={selectedSymbol || '?'}
+        ticks={ticks}
+        signals={signals}
+      />
 
       <TradeList signals={signals} />
     </div>
