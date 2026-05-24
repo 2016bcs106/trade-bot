@@ -73,6 +73,9 @@ export async function handleTrain(): Promise<void> {
       // First model → always promote to production
       modelManager.promote(sym, version);
       await firebase.updateStock(sym, { currentProductionVersion: version });
+      // Update Firebase metadata to reflect production state
+      const updatedMeta = modelManager.loadMetadata(sym, version);
+      if (updatedMeta) await firebase.setModelMetadata(sym, version, updatedMeta);
       logger.info(`Promoted ${sym} ${version} to production (first model)`);
     } else if (stock.autoOptimize) {
       // Auto-optimize enabled → promote if new model is better (lower MAE)
