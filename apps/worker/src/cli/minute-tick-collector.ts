@@ -269,6 +269,7 @@ class MinuteTickCollector extends BaseScript {
 
     const filePath = resolve(DATA_DIR, `${symbol}.json`);
     writeFileSync(filePath, JSON.stringify(candles, null, 2), "utf-8");
+    this.log.info(`Flushed ${candles.length} candles → ${filePath}`);
   }
 
   /**
