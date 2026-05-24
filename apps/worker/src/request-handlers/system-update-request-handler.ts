@@ -2,6 +2,7 @@ import { execSync } from "child_process";
 import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
@@ -30,10 +31,11 @@ interface CronEntry {
  *
  * 1. Git add + stash (avoid conflicts)
  * 2. Git pull --rebase (get latest code)
- * 3. pnpm --filter frontend deploy (build + firebase hosting)
- * 4. Remove all trade-bot crons from crontab
- * 5. Re-add crons based on cron-config.json (from latest code)
- * 6. Kill all running trade-bot processes (including self)
+ * 3. Check which files changed — determine if backend restart is needed
+ * 4. pnpm --filter frontend deploy (if frontend files changed)
+ * 5. Remove + reinstall crons (only if backend files changed)
+ * 6. Wait until XX:XX:55 to minimize downtime (cron fires at :00)
+ * 7. Kill all running trade-bot processes (only if backend files changed)
  *
  * IMPORTANT: This handler returns normally so the orchestrator can
  * remove the request from the queue before the kill step terminates everything.
@@ -49,40 +51,67 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     this.exec("git add -A", PROJECT_ROOT);
     this.exec("git stash", PROJECT_ROOT);
 
+    // Record the commit before pull so we can diff
+    const beforeHash = this.exec("git rev-parse HEAD", PROJECT_ROOT).trim();
+
     // ─── Step 2: Git pull --rebase ───────────────────────────────────
     logger.info("Step 2: Pulling latest code...");
     this.exec("git pull --rebase origin master", PROJECT_ROOT);
 
-    // ─── Step 3: Deploy frontend ─────────────────────────────────────
-    logger.info("Step 3: Deploying frontend...");
-    try {
-      this.exec("pnpm --filter frontend deploy", PROJECT_ROOT);
-      logger.info("  ✓ Frontend deployed");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
+    const afterHash = this.exec("git rev-parse HEAD", PROJECT_ROOT).trim();
+
+    // ─── Step 3: Determine what changed ──────────────────────────────
+    const changedFiles = this.getChangedFiles(beforeHash, afterHash);
+    const hasBackendChanges = changedFiles.some(
+      (f) => f.startsWith("apps/worker/") || f === "pnpm-workspace.yaml" || f === "package.json",
+    );
+    const hasFrontendChanges = changedFiles.some((f) => f.startsWith("apps/frontend/"));
+
+    logger.info(`Step 3: ${changedFiles.length} files changed — backend: ${hasBackendChanges}, frontend: ${hasFrontendChanges}`);
+
+    // ─── Step 4: Deploy frontend (only if frontend files changed) ────
+    if (hasFrontendChanges) {
+      logger.info("Step 4: Deploying frontend...");
+      try {
+        this.exec("pnpm --filter frontend deploy", PROJECT_ROOT);
+        logger.info("  ✓ Frontend deployed");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
+      }
+    } else {
+      logger.info("Step 4: No frontend changes — skipping deploy");
     }
 
-    // ─── Step 4: Remove all trade-bot crons ──────────────────────────
-    logger.info("Step 4: Removing existing trade-bot crons...");
+    // If no backend changes, we're done — no need to restart processes
+    if (!hasBackendChanges) {
+      logger.info("=== SYSTEM UPDATE COMPLETE — no backend changes, skipping restart ===");
+      return;
+    }
+
+    // ─── Step 5: Remove all trade-bot crons ──────────────────────────
+    logger.info("Step 5: Removing existing trade-bot crons...");
     this.removeTradeBotCrons();
 
-    // ─── Step 5: Install new crons from config ───────────────────────
-    logger.info("Step 5: Installing new crons from cron-config.json...");
+    // ─── Step 6: Install new crons from config ───────────────────────
+    logger.info("Step 6: Installing new crons from cron-config.json...");
     this.installCronsFromConfig();
 
-    // ─── Step 6: Remove this request from Firebase before killing ────
+    // ─── Step 7: Remove this request from Firebase before killing ────
     if (_request._key) {
-      logger.info("Step 6: Removing request from queue...");
+      logger.info("Step 7: Removing request from queue...");
       await _ctx.firebase.removeRequest(_request._key);
     }
 
-    // ─── Step 7: Kill all running trade-bot processes ────────────────
-    logger.info("Step 7: Killing all running trade-bot processes...");
+    // ─── Step 8: Wait until XX:XX:55 then kill processes ─────────────
+    // Cron fires at :00, so killing at :55 gives ~5 seconds of downtime
+    await this.waitUntilSecond55();
+
+    logger.info("Step 8: Killing all running trade-bot processes...");
     logger.info("=== SYSTEM UPDATE COMPLETE — restarting via cron ===");
 
     // Small delay to ensure logs flush
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 500));
 
     // Kill all trade-bot processes (including self)
     try {
@@ -96,6 +125,42 @@ export class SystemUpdateRequestHandler implements RequestHandler {
 
     // If somehow we survive, exit
     process.exit(0);
+  }
+
+  /**
+   * Get list of files changed between two git commits.
+   */
+  private getChangedFiles(fromHash: string, toHash: string): string[] {
+    if (fromHash === toHash) return [];
+    try {
+      const output = execSync(`git diff --name-only ${fromHash} ${toHash}`, {
+        cwd: PROJECT_ROOT,
+        encoding: "utf-8",
+        timeout: 10_000,
+      });
+      return output.trim().split("\n").filter(Boolean);
+    } catch {
+      // If diff fails, assume everything changed (safe fallback)
+      return ["apps/worker/unknown"];
+    }
+  }
+
+  /**
+   * Wait until the current minute reaches second 55.
+   * This minimizes downtime since cron will restart processes at the next :00.
+   * If already past :55, proceeds immediately.
+   */
+  private async waitUntilSecond55(): Promise<void> {
+    const currentSecond = now().second();
+
+    if (currentSecond >= 55) {
+      logger.info(`  Current second: ${currentSecond} — proceeding immediately`);
+      return;
+    }
+
+    const waitMs = (55 - currentSecond) * 1000;
+    logger.info(`  Current second: ${currentSecond} — waiting ${55 - currentSecond}s until :55...`);
+    await new Promise((r) => setTimeout(r, waitMs));
   }
 
   private exec(command: string, cwd: string): string {
