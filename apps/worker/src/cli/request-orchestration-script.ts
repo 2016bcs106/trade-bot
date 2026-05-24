@@ -2,15 +2,16 @@ import BaseScript from "./base-script.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler } from "../request-handlers/request-handler.ts";
 import { PredictionRequestHandler } from "../request-handlers/prediction-request-handler.ts";
+import { StockSyncRequestHandler } from "../request-handlers/stock-sync-request-handler.ts";
+import { TrainingRequestHandler } from "../request-handlers/training-request-handler.ts";
 
 /**
  * Registry: maps request type → handler instance.
  */
 const handlerRegistry: Record<string, RequestHandler> = {
   predict: new PredictionRequestHandler(),
-  // TODO: Register additional handlers here
-  // train: new TrainingRequestHandler(),
-  // evaluate: new EvaluationRequestHandler(),
+  stock_sync: new StockSyncRequestHandler(),
+  train: new TrainingRequestHandler(),
 };
 
 /**

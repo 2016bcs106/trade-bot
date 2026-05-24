@@ -47,4 +47,7 @@ export interface StockConfig {
 
   /** ISO timestamp of last config update */
   updatedAt: string;
+
+  /** Lifecycle status of this stock */
+  status?: "pending_sync" | "sync_failed" | "synced" | "pending_training" | "training_failed" | "ready";
 }

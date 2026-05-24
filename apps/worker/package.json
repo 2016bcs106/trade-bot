@@ -6,7 +6,6 @@
     "start": "tsx src/cli/trade-bot.ts",
     "dry-run": "tsx src/cli/trade-bot.ts --dryRun",
     "access-token": "tsx src/cli/access-token-generator.ts",
-    "stock-sync": "tsx src/cli/stock-sync.ts",
     "live-stream": "tsx src/cli/live-stream.ts",
     "train": "tsx src/cli/ml-cli.ts train",
     "predict": "tsx src/cli/ml-cli.ts predict",
@@ -15,7 +14,6 @@
     "optimize": "tsx src/cli/ml-cli.ts optimize",
     "scheduler": "tsx src/cli/ml-cli.ts scheduler:start",
     "scheduler:list": "tsx src/cli/ml-cli.ts scheduler:list",
-    "training-listener": "tsx src/cli/training-listener.ts",
     "request-handler": "tsx src/cli/request-orchestration-script.ts",
     "cleanup": "tsx src/cli/cleanup.ts",
     "typecheck": "tsc --noEmit"
