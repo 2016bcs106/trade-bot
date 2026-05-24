@@ -67,12 +67,25 @@ export async function handleTrain(): Promise<void> {
       await firebase.setModelMetadata(sym, version, metadata);
     }
 
-    // If this is the first model, promote to production
+    // Auto-promotion logic
     const currentProd = modelManager.getProductionVersion(sym);
     if (!currentProd) {
+      // First model → always promote to production
       modelManager.promote(sym, version);
       await firebase.updateStock(sym, { currentProductionVersion: version });
       logger.info(`Promoted ${sym} ${version} to production (first model)`);
+    } else if (stock.autoOptimize) {
+      // Auto-optimize enabled → promote if new model is better (lower MAE)
+      const prodMetadata = modelManager.loadMetadata(sym, currentProd);
+      if (prodMetadata && result.metrics.mae < prodMetadata.metrics.mae) {
+        modelManager.promote(sym, version);
+        await firebase.updateStock(sym, { currentProductionVersion: version });
+        await firebase.setModelMetadata(sym, version, modelManager.loadMetadata(sym, version)!);
+        await firebase.setModelMetadata(sym, currentProd, modelManager.loadMetadata(sym, currentProd)!);
+        logger.info(`Auto-promoted ${sym} ${version} → production (MAE: ${result.metrics.mae.toFixed(2)} < ${prodMetadata.metrics.mae.toFixed(2)})`);
+      } else {
+        logger.info(`Shadow ${sym} ${version} not promoted (MAE not better than production ${currentProd})`);
+      }
     }
   }
 }

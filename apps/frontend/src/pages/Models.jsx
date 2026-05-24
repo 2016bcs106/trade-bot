@@ -16,31 +16,25 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '0.75rem',
+    marginBottom: '0.5rem',
   },
-  symbolName: { fontSize: '0.95rem', fontWeight: '700', color: 'var(--pm-text)' },
-  versionRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.5rem 0',
-    borderBottom: '1px solid var(--pm-border)',
-  },
-  versionName: { fontSize: '0.8rem', fontWeight: '600', color: 'var(--pm-text)' },
-  versionMeta: { fontSize: '0.65rem', color: 'var(--pm-text-muted)' },
+  symbolName: { fontSize: '1rem', fontWeight: '700', color: 'var(--pm-text)' },
+  versionBadge: { fontSize: '0.7rem', fontWeight: '600', color: 'var(--pm-text-muted)' },
+  modelType: { fontSize: '0.75rem', color: 'var(--pm-text-muted)', marginBottom: '0.5rem' },
   badge: { padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.6rem', fontWeight: '600' },
   badgeProduction: { background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' },
   badgeShadow: { background: 'rgba(234, 179, 8, 0.15)', color: '#eab308' },
   badgeRetired: { background: 'rgba(107, 114, 128, 0.15)', color: '#6b7280' },
   metricsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(4, 1fr)',
     gap: '0.4rem',
-    marginTop: '0.4rem',
+    marginTop: '0.6rem',
   },
   metric: { textAlign: 'center' },
-  metricValue: { fontSize: '0.75rem', fontWeight: '700', color: 'var(--pm-text)' },
+  metricValue: { fontSize: '0.8rem', fontWeight: '700', color: 'var(--pm-text)' },
   metricLabel: { fontSize: '0.55rem', color: 'var(--pm-text-muted)' },
+  trainInfo: { fontSize: '0.65rem', color: 'var(--pm-text-muted)', marginTop: '0.5rem' },
   empty: { textAlign: 'center', padding: '2rem', color: 'var(--pm-text-muted)', fontSize: '0.85rem' },
 }
 
@@ -63,66 +57,69 @@ export default function Models() {
     return () => unsub()
   }, [])
 
-  const symbols = Object.keys(models)
+  // Get only the latest version per symbol
+  const latestModels = Object.entries(models).map(([symbol, versions]) => {
+    const sorted = Object.entries(versions || {})
+      .sort(([a], [b]) => {
+        const numA = parseInt(a.replace('v', ''))
+        const numB = parseInt(b.replace('v', ''))
+        return numB - numA
+      })
+    if (sorted.length === 0) return null
+    const [version, meta] = sorted[0]
+    return { symbol, version, meta, totalVersions: sorted.length }
+  }).filter(Boolean)
 
   return (
     <div style={styles.container}>
 
-      {symbols.length === 0 ? (
+      {latestModels.length === 0 ? (
         <div style={styles.empty}>No models trained yet. Use the CLI to train models.</div>
       ) : (
-        symbols.map((symbol) => {
-          const versions = Object.entries(models[symbol] || {})
-            .sort(([a], [b]) => {
-              const numA = parseInt(a.replace('v', ''))
-              const numB = parseInt(b.replace('v', ''))
-              return numB - numA
-            })
-
-          return (
-            <div key={symbol} style={styles.card}>
-              <div style={styles.symbolHeader}>
-                <span style={styles.symbolName}>{symbol}</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted)' }}>
-                  {versions.length} version{versions.length !== 1 ? 's' : ''}
+        latestModels.map(({ symbol, version, meta, totalVersions }) => (
+          <div key={symbol} style={styles.card}>
+            <div style={styles.symbolHeader}>
+              <span style={styles.symbolName}>{symbol}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={styles.versionBadge}>{version}</span>
+                <span style={{ ...styles.badge, ...getBadgeStyle(meta.state) }}>
+                  {meta.state}
                 </span>
               </div>
-
-              {versions.map(([version, meta]) => (
-                <div key={version}>
-                  <div style={styles.versionRow}>
-                    <div>
-                      <div style={styles.versionName}>{version}</div>
-                      <div style={styles.versionMeta}>
-                        {meta.modelType} • {meta.createdAt || 'unknown'}
-                      </div>
-                    </div>
-                    <span style={{ ...styles.badge, ...getBadgeStyle(meta.state) }}>
-                      {meta.state}
-                    </span>
-                  </div>
-
-                  {meta.metrics && (
-                    <div style={styles.metricsGrid}>
-                      <div style={styles.metric}>
-                        <div style={styles.metricValue}>{meta.metrics.mae?.toFixed(2)}</div>
-                        <div style={styles.metricLabel}>MAE</div>
-                      </div>
-                      <div style={styles.metric}>
-                        <div style={styles.metricValue}>{meta.metrics.mape?.toFixed(1)}%</div>
-                        <div style={styles.metricLabel}>MAPE</div>
-                      </div>
-                      <div style={styles.metric}>
-                        <div style={styles.metricValue}>{meta.metrics.directionalAccuracy?.toFixed(0)}%</div>
-                        <div style={styles.metricLabel}>Dir. Acc</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
-          )
-        })
+
+            <div style={styles.modelType}>
+              {meta.modelType} • trained {meta.createdAt || 'unknown'} • {totalVersions} version{totalVersions !== 1 ? 's' : ''} total
+            </div>
+
+            {meta.metrics && (
+              <div style={styles.metricsGrid}>
+                <div style={styles.metric}>
+                  <div style={styles.metricValue}>₹{meta.metrics.mae?.toFixed(1)}</div>
+                  <div style={styles.metricLabel}>MAE</div>
+                </div>
+                <div style={styles.metric}>
+                  <div style={styles.metricValue}>{meta.metrics.mape?.toFixed(2)}%</div>
+                  <div style={styles.metricLabel}>MAPE</div>
+                </div>
+                <div style={styles.metric}>
+                  <div style={styles.metricValue}>{meta.metrics.directionalAccuracy?.toFixed(0)}%</div>
+                  <div style={styles.metricLabel}>Direction</div>
+                </div>
+                <div style={styles.metric}>
+                  <div style={styles.metricValue}>{meta.metrics.r2?.toFixed(3)}</div>
+                  <div style={styles.metricLabel}>R²</div>
+                </div>
+              </div>
+            )}
+
+            {meta.training && (
+              <div style={styles.trainInfo}>
+                {meta.training.sampleCount} samples • {meta.training.featureCount} features • {meta.training.dataStartDate} → {meta.training.dataEndDate}
+              </div>
+            )}
+          </div>
+        ))
       )}
     </div>
   )
