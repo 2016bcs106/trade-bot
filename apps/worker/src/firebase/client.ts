@@ -239,8 +239,11 @@ export default class FirebaseClient {
 
 export interface PendingPredictionEntry {
   symbol: string;
-  date: string;
+  fromDate: string;
+  toDate: string;
   status: "pending" | "processing" | "completed" | "failed";
   createdAt: string;
+  processedDates?: number;
+  totalDates?: number;
   error?: string;
 }

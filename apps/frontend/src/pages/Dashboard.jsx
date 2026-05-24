@@ -219,28 +219,39 @@ export default function Dashboard() {
                   <button
                     disabled={!genFrom || !genTo || generating}
                     onClick={async () => {
+                      // Validation
+                      const start = new Date(genFrom)
+                      const end = new Date(genTo)
+                      const today = new Date()
+                      today.setHours(23, 59, 59, 999)
+
+                      if (end > today || start > today) {
+                        alert('Dates must be today or in the past')
+                        return
+                      }
+                      if (start > end) {
+                        alert('From date must be before To date')
+                        return
+                      }
+                      const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+                      if (diffDays > 30) {
+                        alert('Maximum date range is 30 days')
+                        return
+                      }
+
                       setGenerating(true)
                       try {
-                        // Generate all business days in range
-                        const dates = []
-                        const start = new Date(genFrom)
-                        const end = new Date(genTo)
-                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                          const day = d.getDay()
-                          if (day !== 0 && day !== 6) dates.push(d.toISOString().split('T')[0])
-                        }
-                        // Push each date as pending prediction
+                        // Push single entry with date range
                         const pendingRef = ref(db, 'pending_predictions')
-                        for (const date of dates) {
-                          const newRef = push(pendingRef)
-                          await set(newRef, {
-                            symbol: selectedSymbol,
-                            date,
-                            status: 'pending',
-                            createdAt: new Date().toISOString(),
-                          })
-                        }
-                        alert(`Queued ${dates.length} predictions for ${selectedSymbol}`)
+                        const newRef = push(pendingRef)
+                        await set(newRef, {
+                          symbol: selectedSymbol,
+                          fromDate: genFrom,
+                          toDate: genTo,
+                          status: 'pending',
+                          createdAt: new Date().toISOString(),
+                        })
+                        alert(`Queued predictions for ${selectedSymbol}: ${genFrom} → ${genTo}`)
                       } catch (e) {
                         console.error(e)
                         alert('Failed to queue predictions')
