@@ -1,6 +1,6 @@
 import "../config/env.ts";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
+import { getDatabase, ref, get, set, push, remove, onValue, onChildAdded, Database, Unsubscribe } from "firebase/database";
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
 import { TickData } from "../types/market-data/tick-data.ts";
 import { SignalData } from "../types/market-data/signal-data.ts";
@@ -205,4 +205,42 @@ export default class FirebaseClient {
       }
     });
   }
+
+  // ─── Pending Predictions ─────────────────────────────────────────────
+
+  /**
+   * Listen for new entries in pending_predictions/.
+   * Each entry: { symbol, date, status, createdAt }
+   * Calls callback for each newly added child.
+   */
+  onPendingPredictionAdded(callback: (key: string, entry: PendingPredictionEntry) => void): Unsubscribe {
+    return onChildAdded(ref(this.db, "pending_predictions"), (snapshot) => {
+      const key = snapshot.key;
+      const val = snapshot.val();
+      if (key && val) callback(key, val as PendingPredictionEntry);
+    });
+  }
+
+  async updatePendingPrediction(key: string, update: Partial<PendingPredictionEntry>): Promise<void> {
+    const current = await this._getValue(`pending_predictions/${key}`) as PendingPredictionEntry | null;
+    if (current) {
+      await this._setValue(`pending_predictions/${key}`, { ...current, ...update });
+    }
+  }
+
+  async removePendingPrediction(key: string): Promise<void> {
+    await this._remove(`pending_predictions/${key}`);
+  }
+
+  async getAllPendingPredictions(): Promise<Record<string, PendingPredictionEntry>> {
+    return (await this._getValue("pending_predictions") as Record<string, PendingPredictionEntry>) || {};
+  }
+}
+
+export interface PendingPredictionEntry {
+  symbol: string;
+  date: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  createdAt: string;
+  error?: string;
 }

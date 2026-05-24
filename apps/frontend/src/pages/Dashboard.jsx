@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { db, ref, onValue, get, query, orderByKey, endAt } from '../utils/firebase'
+import { db, ref, onValue, get, query, orderByKey, endAt, push, set } from '../utils/firebase'
 
 const styles = {
   container: { padding: '1rem', paddingBottom: '5rem' },
@@ -88,6 +88,9 @@ export default function Dashboard() {
   const [selectedSymbol, setSelectedSymbol] = useState(null)
   const [history, setHistory] = useState(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [genFrom, setGenFrom] = useState('')
+  const [genTo, setGenTo] = useState('')
+  const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     const predRef = ref(db, 'predictions')
@@ -196,6 +199,66 @@ export default function Dashboard() {
               <button style={styles.modalClose} onClick={() => setSelectedSymbol(null)}>×</button>
             </div>
             <div style={styles.modalBody}>
+              {/* Generate predictions section */}
+              <div style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--pm-border)', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--pm-text)', marginBottom: '0.5rem' }}>Generate Predictions</div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="date"
+                    value={genFrom}
+                    onChange={(e) => setGenFrom(e.target.value)}
+                    style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted)' }}>→</span>
+                  <input
+                    type="date"
+                    value={genTo}
+                    onChange={(e) => setGenTo(e.target.value)}
+                    style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
+                  />
+                  <button
+                    disabled={!genFrom || !genTo || generating}
+                    onClick={async () => {
+                      setGenerating(true)
+                      try {
+                        // Generate all business days in range
+                        const dates = []
+                        const start = new Date(genFrom)
+                        const end = new Date(genTo)
+                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                          const day = d.getDay()
+                          if (day !== 0 && day !== 6) dates.push(d.toISOString().split('T')[0])
+                        }
+                        // Push each date as pending prediction
+                        const pendingRef = ref(db, 'pending_predictions')
+                        for (const date of dates) {
+                          const newRef = push(pendingRef)
+                          await set(newRef, {
+                            symbol: selectedSymbol,
+                            date,
+                            status: 'pending',
+                            createdAt: new Date().toISOString(),
+                          })
+                        }
+                        alert(`Queued ${dates.length} predictions for ${selectedSymbol}`)
+                      } catch (e) {
+                        console.error(e)
+                        alert('Failed to queue predictions')
+                      }
+                      setGenerating(false)
+                    }}
+                    style={{
+                      padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none',
+                      background: (!genFrom || !genTo || generating) ? '#555' : '#22c55e',
+                      color: '#fff', fontSize: '0.7rem', fontWeight: '600', cursor: 'pointer',
+                      opacity: (!genFrom || !genTo || generating) ? 0.5 : 1,
+                    }}
+                  >
+                    {generating ? '...' : 'Queue'}
+                  </button>
+                </div>
+              </div>
+
               {loadingHistory ? (
                 <div style={styles.loadingText}>Loading...</div>
               ) : history && history.length === 0 ? (

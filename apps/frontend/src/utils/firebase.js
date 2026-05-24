@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getDatabase, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt } from 'firebase/database'
+import { getDatabase, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt, push } from 'firebase/database'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,4 +14,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 const db = getDatabase(app)
 
-export { db, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt }
+export { db, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt, push }
