@@ -171,7 +171,7 @@ export default function Models() {
       await set(newRef, {
         symbol,
         modelType: 'auto',
-        lookbackDays: 90,
+        lookbackDays: 1825, // 5 years
         status: 'pending',
         createdAt: new Date().toISOString(),
       })

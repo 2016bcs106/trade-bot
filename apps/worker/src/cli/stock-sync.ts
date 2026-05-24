@@ -1,5 +1,6 @@
 import "../config/env.ts";
-import { getDatabase, ref, onChildAdded, onChildChanged } from "firebase/database";
+import { getDatabase, ref, push, set, onChildAdded, onChildChanged } from "firebase/database";
+import moment from "moment";
 import BaseScript from "./base-script.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 
@@ -144,6 +145,12 @@ class StockSyncScript extends BaseScript {
       this.synced++;
       this.lastSyncAt = new Date().toISOString();
       this.log.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
+
+      // ─── Step 2: Queue training (5 years of data) ──────────────────
+      await this.queueTraining(symbol);
+
+      // ─── Step 3: Queue predictions (last 30 days) ──────────────────
+      await this.queuePredictions(symbol);
     } catch (error) {
       this.failed++;
       this.log.error(`Failed to sync ${symbol}`, error);
@@ -200,6 +207,42 @@ class StockSyncScript extends BaseScript {
 
     // If no exact NSE equity match, return null (sync_failed)
     return exactNSE || null;
+  }
+
+  /**
+   * Queue model training with 5 years of historical data.
+   */
+  private async queueTraining(symbol: string): Promise<void> {
+    const db = getDatabase();
+    const newRef = push(ref(db, "pending_trainings"));
+    await set(newRef, {
+      symbol,
+      modelType: "auto",
+      lookbackDays: 1825, // 5 years
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    });
+    this.log.info(`  → Queued training for ${symbol} (5yr lookback)`);
+  }
+
+  /**
+   * Queue predictions for the last 30 days.
+   */
+  private async queuePredictions(symbol: string): Promise<void> {
+    const db = getDatabase();
+    const now = moment().utcOffset("+05:30");
+    const fromDate = now.clone().subtract(30, "days").format("YYYY-MM-DD");
+    const toDate = now.format("YYYY-MM-DD");
+
+    const newRef = push(ref(db, "pending_predictions"));
+    await set(newRef, {
+      symbol,
+      fromDate,
+      toDate,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    });
+    this.log.info(`  → Queued predictions for ${symbol} (${fromDate} → ${toDate})`);
   }
 }
 
