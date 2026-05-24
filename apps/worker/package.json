@@ -9,8 +9,6 @@
     "train": "tsx src/cli/ml-cli.ts train",
     "predict": "tsx src/cli/ml-cli.ts predict",
     "evaluate": "tsx src/cli/ml-cli.ts evaluate",
-    "retrain": "tsx src/cli/ml-cli.ts retrain",
-    "optimize": "tsx src/cli/ml-cli.ts optimize",
     "request-handler": "tsx src/cli/request-orchestration-script.ts",
     "typecheck": "tsc --noEmit"
   },

@@ -4,18 +4,17 @@ import createLogger from "../utils/logger.ts";
 import { handleTrain } from "../commands/train.ts";
 import { handlePredict } from "../commands/predict.ts";
 import { handleEvaluate } from "../commands/evaluate.ts";
-import { handleOptimize } from "../commands/optimize.ts";
 
 const logger = createLogger("ml-cli");
 
-const COMMANDS = ["train", "predict", "evaluate", "retrain", "optimize"] as const;
+const COMMANDS = ["train", "predict", "evaluate"] as const;
 type Command = typeof COMMANDS[number];
 
 /**
  * ML CLI — thin dispatcher that delegates to command handlers.
  * All --key=value args are parsed by TradingConfig("ml") inside each handler.
  *
- * Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--model=random-forest] [--lookbackDays=90]
+ * Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--lookbackDays=90]
  */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -36,10 +35,6 @@ async function main(): Promise<void> {
       return handlePredict();
     case "evaluate":
       return handleEvaluate();
-    case "retrain":
-      return handleTrain();
-    case "optimize":
-      return handleOptimize();
   }
 }
 
@@ -53,8 +48,6 @@ Commands:
   train             Train a new linear-regression model
   predict           Generate prediction for today
   evaluate          Evaluate predictions against actuals
-  retrain           Force shadow model retraining
-  optimize          Run optimization review
 
 Options:
   --symbol=SYMBOL   Stock symbol (e.g., --symbol=RELIANCE)
