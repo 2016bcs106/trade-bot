@@ -1,11 +1,10 @@
-import moment from "moment";
+import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
-import { ModelType } from "../training/models/trainable-model.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:train");
@@ -14,7 +13,7 @@ const logger = createLogger("cmd:train");
  * Train a new model for one or all enabled stocks.
  * Fetches data live from Paytm Money API, trains, saves to disk + Firebase.
  *
- * Usage: pnpm train --symbol=ADANIENT [--model=random-forest|linear-regression] [--lookbackDays=90]
+ * Usage: pnpm train --symbol=ADANIENT [--lookbackDays=90]
  */
 export async function handleTrain(): Promise<void> {
   const config = new TradingConfig("ml");
@@ -25,7 +24,6 @@ export async function handleTrain(): Promise<void> {
     process.exit(1);
   }
 
-  const modelType = (config.model || "random-forest") as ModelType | "auto";
   const lookbackDays = config.lookbackDays || 90;
 
   const firebase = new FirebaseClient();
@@ -33,8 +31,8 @@ export async function handleTrain(): Promise<void> {
   const trainer = new ModelTrainer(provider);
   const modelManager = new ModelManager();
 
-  const toDate = moment().utcOffset("+05:30").format("YYYY-MM-DD");
-  const fromDate = moment().utcOffset("+05:30").subtract(lookbackDays, "days").format("YYYY-MM-DD");
+  const toDate = now().format("YYYY-MM-DD");
+  const fromDate = now().subtract(lookbackDays, "days").format("YYYY-MM-DD");
 
   for (const sym of symbols) {
     const stock = await firebase.getStock(sym);
@@ -49,8 +47,8 @@ export async function handleTrain(): Promise<void> {
       continue;
     }
 
-    logger.info(`Training ${sym} (pmlId: ${pmlId}, model: ${modelType}, lookback: ${lookbackDays}d)...`);
-    const result = await trainer.train(sym, pmlId, fromDate, toDate, modelType);
+    logger.info(`Training ${sym} (pmlId: ${pmlId}, model: linear-regression, lookback: ${lookbackDays}d)...`);
+    const result = await trainer.train(sym, pmlId, fromDate, toDate);
 
     if (!result) {
       logger.error(`Training failed for ${sym}`);

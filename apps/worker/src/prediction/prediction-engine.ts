@@ -7,9 +7,6 @@ import { Prediction } from "../types/predictions/prediction.ts";
 import FeatureEngineer from "../features/feature-engineer.ts";
 import { TrainableModel } from "../training/models/trainable-model.ts";
 import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
-import { RandomForestModel } from "../training/models/random-forest-model.ts";
-import { GradientBoostedModel } from "../training/models/gradient-boosted-model.ts";
-import { NeuralNetworkModel } from "../training/models/neural-network-model.ts";
 
 /**
  * Prediction engine — loads a production model and generates daily HIGH/LOW predictions.
@@ -117,12 +114,6 @@ export default class PredictionEngine {
     switch (modelType) {
       case "linear-regression":
         return LinearRegressionModel.deserialize(json);
-      case "random-forest":
-        return RandomForestModel.deserialize(json);
-      case "gradient-boosted":
-        return GradientBoostedModel.deserialize(json);
-      case "neural-network":
-        return NeuralNetworkModel.deserialize(json);
       default:
         return null;
     }

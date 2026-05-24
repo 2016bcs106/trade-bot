@@ -1,5 +1,5 @@
 import "../config/env.ts";
-import moment from "moment";
+import { nowFormatted } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import Scheduler, { createDefaultScheduler } from "../scheduler/scheduler.ts";
 import { handleTrain } from "../commands/train.ts";
@@ -27,7 +27,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const now = moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss");
+  const now = nowFormatted();
   logger.info(`[${now}] Command: ${command} ${argv.slice(1).join(" ")}`.trim());
 
   switch (command) {
@@ -75,10 +75,10 @@ function printUsage(): void {
   console.log(`
 ML CLI — Quantitative Research Platform
 
-Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--model=TYPE] [--lookbackDays=N]
+Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--lookbackDays=N]
 
 Commands:
-  train             Train a new model (default: random-forest)
+  train             Train a new linear-regression model
   predict           Generate prediction for today
   evaluate          Evaluate predictions against actuals
   retrain           Force shadow model retraining
@@ -89,7 +89,6 @@ Commands:
 Options:
   --symbol=SYMBOL   Stock symbol (e.g., --symbol=RELIANCE)
   --all             Process all enabled stocks
-  --model=TYPE      Model type: random-forest (default) or linear-regression
   --lookbackDays=N  Training lookback in days (default: 90)
   `);
 }

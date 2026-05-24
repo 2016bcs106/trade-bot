@@ -21,7 +21,7 @@ export interface TrainableModel {
   getHyperparameters(): Record<string, unknown>;
 }
 
-export type ModelType = "linear-regression" | "random-forest" | "gradient-boosted" | "neural-network";
+export type ModelType = "linear-regression";
 
 /**
  * Result of a successful model training.

@@ -5,7 +5,7 @@ import { PendingTrainingEntry } from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
-import { ModelType, TrainingResult } from "../training/models/trainable-model.ts";
+import { TrainingResult } from "../training/models/trainable-model.ts";
 
 /**
  * Long-running listener that watches `pending_trainings/` in Firebase.
@@ -86,7 +86,7 @@ class TrainingListenerScript extends BaseScript {
 
       // Run training
       const result: TrainingResult | null = await this.trainer.train(
-        symbol, pmlId, fromDate, toDate, modelType as ModelType | "auto",
+        symbol, pmlId, fromDate, toDate,
       );
 
       if (!result) {

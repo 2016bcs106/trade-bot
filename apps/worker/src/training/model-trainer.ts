@@ -3,9 +3,6 @@ import { FeatureVector, PreviousDayContext } from "../types/features/feature-vec
 import FeatureEngineer from "../features/feature-engineer.ts";
 import { TrainableModel, TrainingResult, ModelType } from "../training/models/trainable-model.ts";
 import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
-import { RandomForestModel } from "../training/models/random-forest-model.ts";
-import { GradientBoostedModel } from "../training/models/gradient-boosted-model.ts";
-import { NeuralNetworkModel } from "../training/models/neural-network-model.ts";
 import { ModelMetrics } from "../types/models/model-metadata.ts";
 import { HistoricalDataProvider } from "../data/providers/historical-data-provider.ts";
 import createLogger from "../utils/logger.ts";
@@ -57,7 +54,6 @@ export default class ModelTrainer {
     securityId: string,
     fromDate: string,
     toDate: string,
-    modelType: ModelType | "auto" = "linear-regression",
     validationRatio: number = 0.2,
   ): Promise<TrainingResult | null> {
     const startTime = Date.now();
@@ -102,19 +98,11 @@ export default class ModelTrainer {
     const yHigh_train = trainSet.map((s) => s.targetHigh);
     const yLow_train = trainSet.map((s) => s.targetLow);
 
-    // Step 5: Train model(s) — auto mode trains all and picks best
-    if (modelType === "auto") {
-      return this.trainAuto(symbol, samples, trainSet, valSet, X_train, yHigh_train, yLow_train, startTime);
-    }
-
-    const model = this.createModel(modelType);
-    logger.info(`Training ${modelType} model...`);
+    // Step 5: Train model
+    const resolvedType: ModelType = "linear-regression";
+    const model = this.createModel(resolvedType);
+    logger.info(`Training ${resolvedType} model...`);
     model.fit(X_train, yHigh_train, yLow_train);
-
-    // Wait for async training (neural network)
-    if ("waitForTraining" in model) {
-      await (model as any).waitForTraining();
-    }
 
     // Step 6: Evaluate on validation set
     const metrics = this.evaluateModel(model, valSet);
@@ -124,7 +112,7 @@ export default class ModelTrainer {
 
     // Step 7: Build result
     return {
-      modelType,
+      modelType: resolvedType,
       symbol,
       serializedModel: model.serialize(),
       training: {
@@ -140,60 +128,6 @@ export default class ModelTrainer {
     };
   }
 
-  /**
-   * Auto mode: trains all model types and returns the one with lowest MAE.
-   */
-  private async trainAuto(
-    symbol: string,
-    samples: TrainingSample[],
-    trainSet: TrainingSample[],
-    valSet: TrainingSample[],
-    X_train: number[][],
-    yHigh_train: number[],
-    yLow_train: number[],
-    startTime: number,
-  ): Promise<TrainingResult | null> {
-    const modelTypes: ModelType[] = ["linear-regression", "random-forest", "gradient-boosted", "neural-network"];
-    let bestResult: TrainingResult | null = null;
-
-    for (const mt of modelTypes) {
-      logger.info(`[auto] Training ${mt}...`);
-      const model = this.createModel(mt);
-      model.fit(X_train, yHigh_train, yLow_train);
-
-      if ("waitForTraining" in model) {
-        await (model as any).waitForTraining();
-      }
-
-      const metrics = this.evaluateModel(model, valSet);
-      logger.info(`[auto] ${mt}: MAE=${metrics.mae.toFixed(2)}, MAPE=${metrics.mape.toFixed(2)}%, Dir=${metrics.directionalAccuracy.toFixed(1)}%`);
-
-      if (!bestResult || metrics.mae < bestResult.metrics.mae) {
-        const durationMs = Date.now() - startTime;
-        bestResult = {
-          modelType: mt,
-          symbol,
-          serializedModel: model.serialize(),
-          training: {
-            dataStartDate: samples[0].date,
-            dataEndDate: samples[samples.length - 1].date,
-            sampleCount: trainSet.length,
-            featureCount: this.featureEngineer.getFeatureNames().length,
-            features: this.featureEngineer.getFeatureNames(),
-            hyperparameters: model.getHyperparameters(),
-            durationMs,
-          },
-          metrics,
-        };
-      }
-    }
-
-    if (bestResult) {
-      logger.info(`[auto] Winner: ${bestResult.modelType} (MAE: ${bestResult.metrics.mae.toFixed(2)})`);
-    }
-
-    return bestResult;
-  }
 
   /**
    * Build training samples from fetched candles.
@@ -335,17 +269,8 @@ export default class ModelTrainer {
     };
   }
 
-  private createModel(modelType: ModelType): TrainableModel {
-    switch (modelType) {
-      case "linear-regression":
-        return new LinearRegressionModel();
-      case "random-forest":
-        return new RandomForestModel();
-      case "gradient-boosted":
-        return new GradientBoostedModel();
-      case "neural-network":
-        return new NeuralNetworkModel();
-    }
+  private createModel(_modelType: ModelType): TrainableModel {
+    return new LinearRegressionModel();
   }
 
   private computeR2(actuals: number[], predictions: number[]): number {
