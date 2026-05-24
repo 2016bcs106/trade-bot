@@ -1,5 +1,4 @@
 import fetch from "node-fetch";
-import { parseDate } from "../../utils/time.ts";
 import { TokenExchangeResponse } from "../../types/auth/token-exchange-response.ts";
 import { OHLCV } from "../../types/market-data/ohlcv.ts";
 import { LtpResponse } from "../../types/market-data/ltp-response.ts";
@@ -184,9 +183,14 @@ export default class PaytmMoneyClient {
 
   /**
    * Normalizes Paytm timestamp (DD-MM-YYYY HH:mm) → (YYYY-MM-DD HH:mm)
+   * Paytm Money returns timestamps already in IST — parse without offset shift.
    */
   private normalizeTimestamp(raw: string): string {
-    return parseDate(raw, "DD-MM-YYYY HH:mm").format("YYYY-MM-DD HH:mm");
+    // Parse as-is (no timezone shift) since Paytm timestamps are already in IST
+    const parts = raw.split(" ");
+    const [day, month, year] = parts[0].split("-");
+    const time = parts[1] || "00:00";
+    return `${year}-${month}-${day} ${time}`;
   }
 }
 

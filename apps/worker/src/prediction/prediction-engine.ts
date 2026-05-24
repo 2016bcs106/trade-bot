@@ -1,15 +1,12 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { nowFormatted, parseDate } from "../utils/time.ts";
+import { nowFormatted } from "../utils/time.ts";
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { FeatureVector, PreviousDayContext } from "../types/features/feature-vector.ts";
 import { Prediction } from "../types/predictions/prediction.ts";
 import FeatureEngineer from "../features/feature-engineer.ts";
 import { TrainableModel } from "../training/models/trainable-model.ts";
 import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
-import createLogger from "../utils/logger.ts";
-
-const logger = createLogger("prediction-engine");
 
 /**
  * Prediction engine — loads a production model and generates daily HIGH/LOW predictions.
@@ -62,9 +59,7 @@ export default class PredictionEngine {
     const predictedLow = model.predictLow(featureArray);
 
     // Step 4: Build prediction object
-    // Reference price = candle close at 11:00 AM IST (scheduled prediction time)
-    // Market opens at 9:15, so 11:00 = 105 minutes in (candle index ~104 for 1-min candles)
-    const { price: referencePrice, time: referencePriceTime } = this.getReferencePriceAt1100(candles);
+    const { price: referencePrice, time: referencePriceTime } = this.getReferencePrice(candles);
 
     return {
       symbol,
@@ -123,53 +118,21 @@ export default class PredictionEngine {
   }
 
   /**
-   * Get the reference price at 11:00 AM IST (scheduled prediction time).
-   * Parses candle timestamps with moment.js and finds the one at or just before 11:00.
-   *
-   * For MINUTE candles: finds candle at exactly 11:00 or closest before it.
-   * For DAILY candles (all timestamps at 00:00): uses the candle close directly.
+   * Get the reference price at 11:00 AM IST from the candle data.
+   * Finds the candle whose timestamp contains hour 11 and minute 0.
+   * Timestamps are already in IST format (YYYY-MM-DD HH:mm).
    */
-  private getReferencePriceAt1100(candles: OHLCV[]): { price: number | null; time: string | null } {
-    if (candles.length === 0) {
-      logger.warn("getReferencePriceAt1100: no candles provided");
-      return { price: null, time: null };
-    }
+  private getReferencePrice(candles: OHLCV[]): { price: number | null; time: string | null } {
+    if (candles.length === 0) return { price: null, time: null };
 
-    const firstTimestamp = candles[0].timestamp;
-    const lastTimestamp = candles[candles.length - 1].timestamp;
-    logger.info(`getReferencePriceAt1100: ${candles.length} candles, first="${firstTimestamp}", last="${lastTimestamp}"`);
-
-    // Detect if these are daily candles (all at 00:00) — use close of first/only candle
-    const firstMoment = parseDate(firstTimestamp, "YYYY-MM-DD HH:mm");
-    const isDaily = firstMoment.hour() === 0 && firstMoment.minute() === 0 && candles.length <= 5;
-    if (isDaily) {
-      const price = candles[candles.length - 1].close;
-      logger.info(`getReferencePriceAt1100: DAILY candle detected — using close=${price}`);
-      return { price, time: null };
-    }
-
-    // MINUTE candles: find candle at exactly 11:00 or closest before it
-    let bestCandle = candles[0];
     for (const candle of candles) {
-      const m = parseDate(candle.timestamp, "YYYY-MM-DD HH:mm");
-      const hour = m.hour();
-      const minute = m.minute();
-
-      if (hour === 11 && minute === 0) {
-        logger.info(`getReferencePriceAt1100: exact 11:00 candle found — close=${candle.close}`);
+      const time = candle.timestamp.split(" ")[1]; // "HH:mm"
+      if (time === "11:00") {
         return { price: candle.close, time: "11:00" };
       }
-      // Track the latest candle that's still before 11:00
-      if (hour < 11) {
-        bestCandle = candle;
-      }
     }
 
-    // No exact 11:00 — use closest before it
-    const bestTime = parseDate(bestCandle.timestamp, "YYYY-MM-DD HH:mm");
-    const timeStr = bestTime.format("HH:mm");
-    logger.info(`getReferencePriceAt1100: no exact 11:00 — using candle at ${timeStr}, close=${bestCandle.close}`);
-    return { price: bestCandle.close, time: timeStr };
+    return { price: null, time: null };
   }
 
   /**
