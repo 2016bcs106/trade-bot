@@ -316,41 +316,37 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Table-style comparison */}
+                    {/* Table: rows=High/Low/Return, cols=Predicted/Actual/Error */}
                     <div style={{ background: 'var(--pm-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--pm-border)' }}>
-                      {/* Table header */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.02)' }}>
+                      {/* Column headers */}
+                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
                         <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}></span>
-                        <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>HIGH</span>
-                        <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>LOW</span>
+                        <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>Predicted</span>
+                        {hasActual && <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>Actual</span>}
+                        {hasActual && <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>Error</span>}
                       </div>
-                      {/* Predicted row */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.35rem 0.5rem', borderBottom: hasActual ? '1px solid var(--pm-border)' : 'none' }}>
-                        <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>Predicted</span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#22c55e', textAlign: 'center' }}>₹{pred.predictedHigh?.toFixed(2)}</span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#ef4444', textAlign: 'center' }}>₹{pred.predictedLow?.toFixed(2)}</span>
+                      {/* High row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.35rem 0.5rem', borderBottom: '1px solid var(--pm-border)' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#22c55e', fontWeight: '600' }}>High</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.predictedHigh?.toFixed(2)}</span>
+                        {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.actualHigh?.toFixed(2)}</span>}
+                        {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((pred.predictedHigh - pred.actualHigh) / pred.actualHigh) * 100).toFixed(1)}%</span>}
                       </div>
-                      {/* Actual row */}
-                      {hasActual && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.35rem 0.5rem' }}>
-                          <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>Actual</span>
-                          <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#22c55e', textAlign: 'center' }}>₹{pred.actualHigh?.toFixed(2)}</span>
-                          <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#ef4444', textAlign: 'center' }}>₹{pred.actualLow?.toFixed(2)}</span>
-                        </div>
-                      )}
+                      {/* Low row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.35rem 0.5rem', borderBottom: '1px solid var(--pm-border)' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: '600' }}>Low</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.predictedLow?.toFixed(2)}</span>
+                        {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.actualLow?.toFixed(2)}</span>}
+                        {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((pred.predictedLow - pred.actualLow) / pred.actualLow) * 100).toFixed(1)}%</span>}
+                      </div>
+                      {/* Range/Return row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.35rem 0.5rem' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#f59e0b', fontWeight: '600' }}>Range</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{(pred.predictedHigh - pred.predictedLow).toFixed(2)}</span>
+                        {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{(pred.actualHigh - pred.actualLow).toFixed(2)}</span>}
+                        {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs((((pred.predictedHigh - pred.predictedLow) - (pred.actualHigh - pred.actualLow)) / (pred.actualHigh - pred.actualLow)) * 100).toFixed(1)}%</span>}
+                      </div>
                     </div>
-
-                    {/* Error summary below table */}
-                    {hasActual && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', padding: '0 0.25rem' }}>
-                        <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>
-                          High err: {Math.abs(pred.predictedHigh - pred.actualHigh).toFixed(2)} ({Math.abs(((pred.predictedHigh - pred.actualHigh) / pred.actualHigh) * 100).toFixed(1)}%)
-                        </span>
-                        <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>
-                          Low err: {Math.abs(pred.predictedLow - pred.actualLow).toFixed(2)} ({Math.abs(((pred.predictedLow - pred.actualLow) / pred.actualLow) * 100).toFixed(1)}%)
-                        </span>
-                      </div>
-                    )}
                   </div>
                 )
               })}
