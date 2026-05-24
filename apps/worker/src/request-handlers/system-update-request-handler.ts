@@ -168,12 +168,8 @@ export class SystemUpdateRequestHandler implements RequestHandler {
   }
 
   private detectNodeDir(): string {
-    try {
-      const nodePath = execSync("which node", { encoding: "utf-8" }).trim();
-      return dirname(nodePath);
-    } catch {
-      // Fallback to known EC2 path
-      return "/home/ec2-user/.nvm/versions/node/v24.15.0/bin";
-    }
+    // Use the current process's node binary path — guaranteed to work
+    // since this code is already running under node
+    return dirname(process.execPath);
   }
 }
