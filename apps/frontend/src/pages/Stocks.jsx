@@ -277,7 +277,7 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
 export default function Stocks() {
   const [stocks, setStocks] = useState(undefined)
   const [symbolInput, setSymbolInput] = useState('')
-  const [selectedStock, setSelectedStock] = useState(null)
+  const [selectedSymbol, setSelectedSymbol] = useState(null)
 
   useEffect(() => {
     const stocksRef = ref(db, 'stocks')
@@ -293,6 +293,9 @@ export default function Stocks() {
         .sort((a, b) => (b.updatedAt || b.addedAt || 0) - (a.updatedAt || a.addedAt || 0))
     : []
   const existingSymbols = stocks ? Object.keys(stocks) : []
+
+  // Derive selected stock from live state (not a stale snapshot)
+  const selectedStock = selectedSymbol && stocks ? { ...stocks[selectedSymbol], _key: selectedSymbol, symbol: selectedSymbol } : null
 
   const handleAdd = async () => {
     const symbol = symbolInput.trim().toUpperCase()
@@ -323,7 +326,7 @@ export default function Stocks() {
 
   const handleRemove = async (stock) => {
     const key = stock._key || stock.symbol
-    setSelectedStock(null)
+    setSelectedSymbol(null)
     await remove(ref(db, `stocks/${key}`))
   }
 
@@ -354,7 +357,7 @@ export default function Stocks() {
             const ts = stock.updatedAt || stock.addedAt
             const timeStr = ts ? new Date(ts).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : ''
             return (
-              <div key={stock._key} style={styles.row} onClick={() => setSelectedStock(stock)}>
+              <div key={stock._key} style={styles.row} onClick={() => setSelectedSymbol(stock._key)}>
                 <div style={styles.symbolCol}>
                   <span style={styles.symbol}>{stock.symbol}</span>
                   <span style={styles.name}>{stock.name || '—'}</span>
@@ -390,10 +393,10 @@ export default function Stocks() {
       {selectedStock && (
         <StockDetailModal
           stock={selectedStock}
-          onClose={() => setSelectedStock(null)}
+          onClose={() => setSelectedSymbol(null)}
           onToggleEnabled={() => handleToggleEnabled(selectedStock)}
           onToggleAutoOptimize={() => handleToggleAutoOptimize(selectedStock)}
-          onRemove={() => handleRemove(selectedStock)}
+          onRemove={() => { handleRemove(selectedStock); setSelectedSymbol(null); }}
         />
       )}
     </div>
