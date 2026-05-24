@@ -208,8 +208,19 @@ class StockSyncScript extends BaseScript {
 
   /**
    * Queue model training with 5 years of historical data.
+   * Skips if a pending/processing entry already exists for this symbol.
    */
   private async queueTraining(symbol: string): Promise<void> {
+    // Dedup: check existing pending_trainings for this symbol
+    const existing = await this.firebase.getAllPendingTrainings();
+    const alreadyQueued = Object.values(existing).some(
+      (e) => e.symbol === symbol && (e.status === "pending" || e.status === "processing"),
+    );
+    if (alreadyQueued) {
+      this.log.info(`  → Training already queued for ${symbol}, skipping`);
+      return;
+    }
+
     const db = getDatabase();
     const newRef = push(ref(db, "pending_trainings"));
     await set(newRef, {
