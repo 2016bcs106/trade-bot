@@ -120,6 +120,9 @@ class MinuteTickCollector extends BaseScript {
     // 5. Stats timer — every 5 minutes
     setInterval(() => this.logStats(), 300_000);
 
+    // 6. Schedule auto-shutdown at 17:00 IST
+    this.scheduleShutdown();
+
     // Keep alive
     await new Promise(() => {});
   }
@@ -317,6 +320,49 @@ class MinuteTickCollector extends BaseScript {
         // File corrupt or wrong format — start fresh
       }
     }
+  }
+
+  /**
+   * Schedule automatic shutdown at 17:00 IST.
+   * Calculates ms until 17:00 today (or immediately if already past 17:00).
+   */
+  private scheduleShutdown(): void {
+    const ist = now();
+    const shutdownTime = ist.clone().hour(17).minute(0).second(0).millisecond(0);
+
+    let msUntilShutdown = shutdownTime.diff(ist);
+    if (msUntilShutdown <= 0) {
+      // Already past 17:00 — shut down immediately
+      this.log.info("Past 17:00 IST — shutting down immediately");
+      this.gracefulShutdown();
+      return;
+    }
+
+    this.log.info(`Auto-shutdown scheduled in ${Math.round(msUntilShutdown / 60000)} minutes (at 17:00 IST)`);
+    setTimeout(() => {
+      this.gracefulShutdown();
+    }, msUntilShutdown);
+  }
+
+  /**
+   * Gracefully shut down: seal candles, flush, disconnect, exit.
+   */
+  private gracefulShutdown(): void {
+    this.log.info("Graceful shutdown initiated (17:00 IST cutoff)");
+
+    // Seal and flush remaining candles
+    this.sealAndFlushAll();
+
+    // Disconnect WebSocket
+    if (this.streamer) {
+      this.streamer.disconnect();
+    }
+
+    // Clear timers
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+
+    this.log.info("Shutdown complete — exiting");
+    process.exit(0);
   }
 
   private logStats(): void {
