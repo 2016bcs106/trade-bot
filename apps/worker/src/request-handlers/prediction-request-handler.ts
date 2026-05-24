@@ -1,9 +1,16 @@
-import { now, parseDate } from "../utils/time.ts";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { now, parseDate, todayDate } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
+import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
 import { getBusinessDays, evaluateAndSave } from "../utils/market-utils.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "data");
 
 const logger = createLogger("handler:predict");
 
@@ -14,13 +21,17 @@ const logger = createLogger("handler:predict");
  * - symbol: string (stock symbol)
  * - fromDate: string (YYYY-MM-DD)
  * - toDate: string (YYYY-MM-DD)
+ * - dataSource?: "api" | "local" (default: "api")
+ *     - "api": fetch candles from Paytm Money historical API
+ *     - "local": read from data/{SYMBOL}.json (minute-tick-collector output)
  */
 export class PredictionRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
-    const { symbol, fromDate, toDate } = request.payload as {
+    const { symbol, fromDate, toDate, dataSource = "api" } = request.payload as {
       symbol: string;
       fromDate: string;
       toDate: string;
+      dataSource?: "api" | "local";
     };
 
     if (!symbol || !fromDate || !toDate) {
@@ -45,13 +56,15 @@ export class PredictionRequestHandler implements RequestHandler {
     const metadata = modelManager.loadMetadata(symbol, stock.currentProductionVersion);
     const modelType = metadata?.modelType || "linear-regression";
 
-    logger.info(`Predicting ${symbol}: ${fromDate} → ${toDate} (${dates.length} days)`);
+    logger.info(`Predicting ${symbol}: ${fromDate} → ${toDate} (${dates.length} days, source=${dataSource})`);
 
     let processed = 0;
 
     for (const date of dates) {
       try {
-        const candles = await client.fetchOHLCV(pmlId, date, date);
+        const candles = dataSource === "local"
+          ? this.loadLocalCandles(symbol, date)
+          : await client.fetchOHLCV(pmlId, date, date);
 
         if (candles.length < 30) {
           logger.warn(`Skipping ${symbol}@${date}: only ${candles.length} candles (need ≥30)`);
@@ -104,5 +117,31 @@ export class PredictionRequestHandler implements RequestHandler {
     }
 
     logger.info(`✓ Completed ${symbol}: ${fromDate} → ${toDate} (${processed}/${dates.length} dates)`);
+  }
+
+  /**
+   * Load candles from local file written by minute-tick-collector.
+   * File: data/{SYMBOL}.json — JSON array of OHLCV candles for today.
+   * Filters to only return candles matching the requested date.
+   */
+  private loadLocalCandles(symbol: string, date: string): OHLCV[] {
+    const filePath = resolve(DATA_DIR, `${symbol}.json`);
+
+    if (!existsSync(filePath)) {
+      logger.warn(`Local data file not found: ${filePath}`);
+      return [];
+    }
+
+    try {
+      const content = readFileSync(filePath, "utf-8");
+      const candles: OHLCV[] = JSON.parse(content);
+
+      // Filter candles for the requested date
+      return candles.filter((c) => c.timestamp.startsWith(date));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`Failed to read local candles for ${symbol}: ${msg}`);
+      return [];
+    }
   }
 }
