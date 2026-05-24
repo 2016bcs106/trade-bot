@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import moment from "moment";
+import { parseDate } from "../../utils/time.ts";
 import { TokenExchangeResponse } from "../../types/auth/token-exchange-response.ts";
 import { HistoricalDataPoint } from "../../types/market-data/historical-data-point.ts";
 import { LtpResponse } from "../../types/market-data/ltp-response.ts";
@@ -60,6 +60,6 @@ export default class PaytmMoneyClient {
         close: item[4] as number,
         volume: item[5] as number,
       }))
-      .filter(item => moment(item.date.split(" ")[0], "DD-MM-YYYY").format("YYYY-MM-DD") === toDate);
+      .filter(item => parseDate(item.date.split(" ")[0], "DD-MM-YYYY").format("YYYY-MM-DD") === toDate);
   }
 }

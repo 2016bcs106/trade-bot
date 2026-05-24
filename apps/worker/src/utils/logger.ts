@@ -1,8 +1,8 @@
-import moment from "moment";
+import { nowFormatted } from "./time.ts";
 import { Logger } from "../types/logger.ts";
 
 function getTimestampIST(): string {
-  return moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss");
+  return nowFormatted();
 }
 
 function formatMessage(level: string, script: string, message: string, meta?: unknown): string {

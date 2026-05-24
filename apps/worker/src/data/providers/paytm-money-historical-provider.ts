@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import moment from "moment";
+import { todayDate, parseDate } from "../../utils/time.ts";
 import { HistoricalDataProvider } from "./historical-data-provider.ts";
 import { OHLCV, HistoricalDataRequest } from "../../types/market-data/ohlcv.ts";
 import createLogger from "../../utils/logger.ts";
@@ -82,8 +82,8 @@ export default class PaytmMoneyHistoricalProvider implements HistoricalDataProvi
         method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify({
-          fromDate: moment().format("YYYY-MM-DD"),
-          toDate: moment().format("YYYY-MM-DD"),
+          fromDate: todayDate(),
+          toDate: todayDate(),
           interval: "MINUTE",
           pmlId: "2885",
         }),
@@ -112,7 +112,7 @@ export default class PaytmMoneyHistoricalProvider implements HistoricalDataProvi
    * to ISO-like format (YYYY-MM-DD HH:mm).
    */
   private normalizeTimestamp(raw: string): string {
-    const parsed = moment(raw, "DD-MM-YYYY HH:mm");
+    const parsed = parseDate(raw, "DD-MM-YYYY HH:mm");
     return parsed.format("YYYY-MM-DD HH:mm");
   }
 

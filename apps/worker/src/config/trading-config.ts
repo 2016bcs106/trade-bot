@@ -1,4 +1,4 @@
-import moment from "moment";
+import { todayDate, parseDate } from "../utils/time.ts";
 
 const COMMON_DEFAULTS = {
   scripId: "25",
@@ -15,7 +15,7 @@ const TRADE_BOT_DEFAULTS = {
   sidewaysThresholdPercent: 0,
   volatilityWindow: 5,
   maxVolatilityRangePercent: 100,
-  date: moment().utcOffset("+05:30").format("YYYY-MM-DD"),
+  date: todayDate(),
   lookbackDays: 1,
 };
 
@@ -91,7 +91,7 @@ export default class TradingConfig {
     this.maxVolatilityRangePercent = args.maxVolatilityRangePercent != null ? Number(args.maxVolatilityRangePercent) : TRADE_BOT_DEFAULTS.maxVolatilityRangePercent;
     this.dryRun = process.argv.includes("--dryRun");
 
-    const end = moment(date, "YYYY-MM-DD", true);
+    const end = parseDate(date, "YYYY-MM-DD");
 
     const invalidPositiveInt = (v: number) => Number.isNaN(v) || !Number.isInteger(v) || v <= 0;
     const invalidNonNegative = (v: number) => Number.isNaN(v) || v < 0;

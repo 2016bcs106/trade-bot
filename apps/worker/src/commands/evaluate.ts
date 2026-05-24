@@ -1,4 +1,4 @@
-import moment from "moment";
+import { todayDate } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
@@ -25,7 +25,7 @@ export async function handleEvaluate(): Promise<void> {
   const firebase = new FirebaseClient();
   const evaluationEngine = new EvaluationEngine();
   const provider = new PaytmMoneyHistoricalProvider();
-  const today = moment().utcOffset("+05:30").format("YYYY-MM-DD");
+  const today = todayDate();
 
   for (const sym of symbols) {
     const prediction = await firebase.getPrediction(sym, today);

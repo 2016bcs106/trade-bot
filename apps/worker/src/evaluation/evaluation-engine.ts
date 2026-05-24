@@ -1,4 +1,4 @@
-import moment from "moment";
+import { nowFormatted } from "../utils/time.ts";
 import { Prediction } from "../types/predictions/prediction.ts";
 import { EvaluationResult } from "../types/predictions/evaluation-result.ts";
 
@@ -59,7 +59,7 @@ export default class EvaluationEngine {
       mape,
       directionalAccuracy,
       rangeContainment,
-      evaluatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss"),
+      evaluatedAt: nowFormatted(),
     };
   }
 

@@ -1,4 +1,4 @@
-import moment from "moment";
+import { todayDate, parseDate } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
@@ -30,8 +30,8 @@ export async function handlePredict(): Promise<void> {
   const provider = new PaytmMoneyHistoricalProvider();
 
   // Support --date=YYYY-MM-DD for adhoc/backtest predictions
-  const targetDate = config.date || moment().utcOffset("+05:30").format("YYYY-MM-DD");
-  const prevDate = moment(targetDate).subtract(1, "day").format("YYYY-MM-DD");
+  const targetDate = config.date || todayDate();
+  const prevDate = parseDate(targetDate).subtract(1, "day").format("YYYY-MM-DD");
   logger.info(`Prediction date: ${targetDate}`);
 
   for (const sym of symbols) {

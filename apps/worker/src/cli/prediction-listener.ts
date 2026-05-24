@@ -1,4 +1,4 @@
-import moment from "moment";
+import { now, parseDate } from "../utils/time.ts";
 import BaseScript from "./base-script.ts";
 import { PendingPredictionEntry } from "../firebase/client.ts";
 import ModelManager from "../model-management/model-manager.ts";
@@ -109,7 +109,7 @@ class PredictionListenerScript extends BaseScript {
           }
 
           // Fetch previous day candles
-          const prevDate = moment(date).subtract(1, "day").format("YYYY-MM-DD");
+          const prevDate = parseDate(date).subtract(1, "day").format("YYYY-MM-DD");
           const prevCandles = await this.provider.fetchOHLCV({
             symbol, securityId: pmlId, exchange: "NSE",
             fromDate: prevDate, toDate: prevDate, interval: "MINUTE",
@@ -131,10 +131,10 @@ class PredictionListenerScript extends BaseScript {
 
           if (prediction) {
             // If market is closed for this date (past), add actual high/low
-            const now = moment().utcOffset("+05:30");
-            const predDate = moment(date, "YYYY-MM-DD");
+            const current = now();
+            const predDate = parseDate(date, "YYYY-MM-DD");
             const marketCloseTime = predDate.clone().hour(15).minute(30);
-            if (now.isAfter(marketCloseTime)) {
+            if (current.isAfter(marketCloseTime)) {
               const actualHigh = Math.max(...candles.map((c) => c.high));
               const actualLow = Math.min(...candles.map((c) => c.low));
               const actualClose = candles[candles.length - 1].close;
@@ -179,8 +179,8 @@ class PredictionListenerScript extends BaseScript {
    */
   private getBusinessDays(fromDate: string, toDate: string): string[] {
     const dates: string[] = [];
-    const start = moment(fromDate, "YYYY-MM-DD");
-    const end = moment(toDate, "YYYY-MM-DD");
+    const start = parseDate(fromDate, "YYYY-MM-DD");
+    const end = parseDate(toDate, "YYYY-MM-DD");
 
     for (let d = start.clone(); d.isSameOrBefore(end); d.add(1, "day")) {
       const dow = d.day();

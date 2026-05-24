@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import moment from "moment";
+import { nowFormatted } from "../utils/time.ts";
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { FeatureVector, PreviousDayContext } from "../types/features/feature-vector.ts";
 import { Prediction } from "../types/predictions/prediction.ts";
@@ -70,7 +70,7 @@ export default class PredictionEngine {
       predictedLow,
       modelVersion,
       modelType,
-      generatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss"),
+      generatedAt: nowFormatted(),
       confidence: this.computeConfidence(predictedHigh, predictedLow, candles),
       referencePrice,
       referencePriceTime,

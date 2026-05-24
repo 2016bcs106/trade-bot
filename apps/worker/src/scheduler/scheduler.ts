@@ -1,5 +1,5 @@
 import { createTask, ScheduledTask } from "node-cron";
-import moment from "moment";
+import { now, nowFormatted } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 
 const logger = createLogger("scheduler");
@@ -26,8 +26,8 @@ export default class Scheduler {
     this.handlers.set(name, handler);
 
     const task = createTask(cronExpression, async () => {
-      const now = moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss");
-      logger.info(`Job [${name}] triggered at ${now}`);
+      const ts = nowFormatted();
+      logger.info(`Job [${name}] triggered at ${ts}`);
 
       try {
         await handler();
@@ -82,14 +82,14 @@ export default class Scheduler {
    * Check if current time is during market hours (9:15 AM - 3:30 PM IST, Mon-Fri).
    */
   static isMarketHours(): boolean {
-    const now = moment().utcOffset("+05:30");
-    const day = now.day(); // 0=Sun, 6=Sat
+    const current = now();
+    const day = current.day(); // 0=Sun, 6=Sat
 
     // Weekdays only
     if (day === 0 || day === 6) return false;
 
-    const hour = now.hour();
-    const minute = now.minute();
+    const hour = current.hour();
+    const minute = current.minute();
     const timeInMinutes = hour * 60 + minute;
 
     const marketOpen = 9 * 60 + 15;  // 9:15 AM
@@ -103,8 +103,8 @@ export default class Scheduler {
    * Note: Holiday calendar not implemented yet — only checks weekdays.
    */
   static isTradingDay(): boolean {
-    const now = moment().utcOffset("+05:30");
-    const day = now.day();
+    const current = now();
+    const day = current.day();
     return day >= 1 && day <= 5;
   }
 

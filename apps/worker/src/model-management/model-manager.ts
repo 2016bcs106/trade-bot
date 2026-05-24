@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import moment from "moment";
+import { nowFormatted } from "../utils/time.ts";
 import { ModelMetadata } from "../types/models/model-metadata.ts";
 import { TrainingResult } from "../training/models/trainable-model.ts";
 
@@ -46,7 +46,7 @@ export default class ModelManager {
       state: "shadow", // New models start as shadow
       training,
       metrics,
-      createdAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss"),
+      createdAt: nowFormatted(),
       promotedAt: null,
       retiredAt: null,
     };
@@ -244,7 +244,7 @@ export default class ModelManager {
     if (!metadata) return;
 
     metadata.state = state;
-    const now = moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss");
+    const now = nowFormatted();
 
     if (state === "production") {
       metadata.promotedAt = now;

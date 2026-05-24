@@ -39,4 +39,9 @@ export function nowFilenameSafe(): string {
   return now().format("YYYY-MM-DDTHH-mm-ss");
 }
 
-export default { now, nowMs, nowISO, todayDate, nowFormatted, nowFilenameSafe };
+/** Parse a date string into a Moment in IST */
+export function parseDate(date: string, format?: string): Moment {
+  return format ? moment(date, format).utcOffset(IST_OFFSET) : moment(date).utcOffset(IST_OFFSET);
+}
+
+export default { now, nowMs, nowISO, todayDate, nowFormatted, nowFilenameSafe, parseDate };

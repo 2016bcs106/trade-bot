@@ -1,4 +1,4 @@
-import moment from "moment";
+import { now } from "../utils/time.ts";
 import { AuditEvent, AuditEventType } from "../types/audit/audit-event.ts";
 
 /**
@@ -20,14 +20,14 @@ export default class AuditLogger {
     symbol: string | null = null,
     metadata: Record<string, unknown> = {},
   ): AuditEvent {
-    const now = moment().utcOffset("+05:30");
+    const current = now();
 
     return {
-      id: this.generateId(type, now),
+      id: this.generateId(type, current),
       type,
       symbol,
       description,
-      timestamp: now.format("YYYY-MM-DD HH:mm:ss"),
+      timestamp: current.format("YYYY-MM-DD HH:mm:ss"),
       metadata,
     };
   }
@@ -85,7 +85,7 @@ export default class AuditLogger {
   /**
    * Generate a unique event ID: TYPE_YYYYMMDD_HHmmss_random
    */
-  private generateId(type: AuditEventType, timestamp: moment.Moment): string {
+  private generateId(type: AuditEventType, timestamp: { format(f: string): string }): string {
     const dateStr = timestamp.format("YYYYMMDD_HHmmss");
     const random = Math.random().toString(36).substring(2, 8);
     return `${type.replace(".", "_")}_${dateStr}_${random}`;

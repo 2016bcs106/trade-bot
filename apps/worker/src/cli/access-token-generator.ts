@@ -1,5 +1,5 @@
 import "../config/env.ts";
-import moment from "moment";
+import { nowMs, nowFormatted } from "../utils/time.ts";
 import BaseScript from "./base-script.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 
@@ -34,7 +34,7 @@ class AccessTokenGeneratorScript extends BaseScript {
         );
 
         if (result.access_token) {
-          const updatedOn = moment().utcOffset("+05:30").valueOf();
+          const updatedOn = nowMs();
 
           await this.firebase.saveAccessTokens({
             accessToken: result.access_token,
@@ -44,7 +44,7 @@ class AccessTokenGeneratorScript extends BaseScript {
           });
 
           this.tokensExchanged++;
-          this.lastExchangeAt = moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss");
+          this.lastExchangeAt = nowFormatted();
           this.log.info("Access tokens saved to database");
         } else {
           this.log.error("Token exchange failed", result);
