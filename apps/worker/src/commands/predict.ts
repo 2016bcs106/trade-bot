@@ -64,7 +64,12 @@ export async function handlePredict(): Promise<void> {
     const prevDay: PreviousDayContext | null = prevCandles.length > 0
       ? {
           close: prevCandles[prevCandles.length - 1].close,
-          avg45MinVolume: prevCandles.slice(0, 45).reduce((s, c) => s + c.volume, 0),
+          high: Math.max(...prevCandles.map((c) => c.high)),
+          avg45MinVolume: prevCandles.slice(0, 105).reduce((s, c) => s + c.volume, 0),
+          close2: null,
+          high2: null,
+          close3: null,
+          high3: null,
         }
       : null;
 

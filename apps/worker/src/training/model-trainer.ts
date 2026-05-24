@@ -220,14 +220,14 @@ export default class ModelTrainer {
       const candles = byDate.get(date)!;
 
       if (candles.length < 60) {
-        prevDayContext = this.buildPrevDayContext(candles);
+        prevDayContext = this.buildPrevDayContext(candles, prevDayContext);
         continue;
       }
 
       // Compute features from data up to 11:00 AM (first 105 min)
       const features = this.featureEngineer.compute(symbol, date, candles, prevDayContext);
       if (!features) {
-        prevDayContext = this.buildPrevDayContext(candles);
+        prevDayContext = this.buildPrevDayContext(candles, prevDayContext);
         continue;
       }
 
@@ -243,7 +243,7 @@ export default class ModelTrainer {
         date,
       });
 
-      prevDayContext = this.buildPrevDayContext(candles);
+      prevDayContext = this.buildPrevDayContext(candles, prevDayContext);
     }
 
     return samples;
@@ -310,12 +310,21 @@ export default class ModelTrainer {
     };
   }
 
-  private buildPrevDayContext(candles: OHLCV[]): PreviousDayContext | null {
-    if (candles.length === 0) return null;
-    const close = candles[candles.length - 1].close;
+  private buildPrevDayContext(candles: OHLCV[], prevContext: PreviousDayContext | null): PreviousDayContext {
+    const close = candles.length > 0 ? candles[candles.length - 1].close : 0;
+    const high = candles.length > 0 ? Math.max(...candles.map((c) => c.high)) : 0;
     const first105 = candles.slice(0, 105);
     const avg45MinVolume = first105.reduce((s, c) => s + c.volume, 0);
-    return { close, avg45MinVolume };
+    return {
+      close,
+      high,
+      avg45MinVolume,
+      // Shift previous days down: D-1 becomes D-2, D-2 becomes D-3
+      close2: prevContext?.close ?? null,
+      high2: prevContext?.high ?? null,
+      close3: prevContext?.close2 ?? null,
+      high3: prevContext?.high2 ?? null,
+    };
   }
 
   private createModel(modelType: ModelType): TrainableModel {

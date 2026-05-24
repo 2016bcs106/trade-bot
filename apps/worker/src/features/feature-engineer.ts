@@ -79,6 +79,14 @@ export default class FeatureEngineer {
       volumeSpike: this.volumeSpike(volumes),
       volumeTrend: this.linearSlope(volumes),
 
+      // Historical context features (last 3 days high and close)
+      prevClose1: prevDay?.close ?? firstOpen,
+      prevHigh1: prevDay?.high ?? firstOpen,
+      prevClose2: prevDay?.close2 ?? prevDay?.close ?? firstOpen,
+      prevHigh2: prevDay?.high2 ?? prevDay?.high ?? firstOpen,
+      prevClose3: prevDay?.close3 ?? prevDay?.close2 ?? firstOpen,
+      prevHigh3: prevDay?.high3 ?? prevDay?.high2 ?? firstOpen,
+
       // Time features
       weekday: new Date(date).getDay() === 0 ? 6 : new Date(date).getDay() - 1, // 0=Mon, 4=Fri
       month: new Date(date).getMonth() + 1,
@@ -111,6 +119,12 @@ export default class FeatureEngineer {
       features.relativeVolume,
       features.volumeSpike,
       features.volumeTrend,
+      features.prevClose1,
+      features.prevHigh1,
+      features.prevClose2,
+      features.prevHigh2,
+      features.prevClose3,
+      features.prevHigh3,
       features.weekday,
       features.month,
       features.isExpiryDay ? 1 : 0,
@@ -141,6 +155,12 @@ export default class FeatureEngineer {
       "relativeVolume",
       "volumeSpike",
       "volumeTrend",
+      "prevClose1",
+      "prevHigh1",
+      "prevClose2",
+      "prevHigh2",
+      "prevClose3",
+      "prevHigh3",
       "weekday",
       "month",
       "isExpiryDay",

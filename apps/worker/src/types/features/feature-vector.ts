@@ -72,6 +72,26 @@ export interface FeatureVector {
   /** Volume trend: linear regression slope of volume over 45 candles */
   volumeTrend: number;
 
+  // ─── Historical Context Features ───────────────────────────────────
+
+  /** Previous day (D-1) closing price */
+  prevClose1: number;
+
+  /** Previous day (D-1) daily high */
+  prevHigh1: number;
+
+  /** D-2 closing price */
+  prevClose2: number;
+
+  /** D-2 daily high */
+  prevHigh2: number;
+
+  /** D-3 closing price */
+  prevClose3: number;
+
+  /** D-3 daily high */
+  prevHigh3: number;
+
   // ─── Time Features ─────────────────────────────────────────────────
 
   /** Day of week (0=Monday, 4=Friday) */
@@ -93,12 +113,27 @@ export interface FeatureVector {
 }
 
 /**
- * Previous day context needed for computing some features (opening gap).
+ * Previous days context needed for computing features (opening gap, historical levels).
  */
 export interface PreviousDayContext {
   /** Previous day close price */
   close: number;
 
+  /** Previous day high price */
+  high: number;
+
   /** Volume from data up to 11:00 AM (first 105 min) for relative volume comparison */
   avg45MinVolume: number;
+
+  /** D-2 close price (null if unavailable) */
+  close2: number | null;
+
+  /** D-2 high price (null if unavailable) */
+  high2: number | null;
+
+  /** D-3 close price (null if unavailable) */
+  close3: number | null;
+
+  /** D-3 high price (null if unavailable) */
+  high3: number | null;
 }
