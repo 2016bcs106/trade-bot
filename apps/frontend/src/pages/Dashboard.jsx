@@ -198,6 +198,11 @@ export default function Dashboard() {
                       {dirIcon} {direction}
                     </span>
                   )}
+                  {refPrice && (
+                    <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>
+                      @₹{refPrice.toFixed(2)}{row.referencePriceTime ? ` (${row.referencePriceTime})` : ''}
+                    </span>
+                  )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {row.status === 'predicted' ? (
@@ -360,11 +365,16 @@ export default function Dashboard() {
                   <div key={date} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--pm-border)' }}>
                     {/* Header row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: '700', fontSize: '0.8rem', color: 'var(--pm-text)' }}>{date}</span>
                         {direction && (
                           <span style={{ fontSize: '0.6rem', fontWeight: '700', color: dirColor }}>
                             {dirIcon} {direction}
+                          </span>
+                        )}
+                        {refP && (
+                          <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)' }}>
+                            @₹{refP.toFixed(2)}{pred.referencePriceTime ? ` (${pred.referencePriceTime})` : ''}
                           </span>
                         )}
                       </div>

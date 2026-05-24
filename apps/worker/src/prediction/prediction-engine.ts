@@ -64,7 +64,7 @@ export default class PredictionEngine {
     // Step 4: Build prediction object
     // Reference price = candle close at 11:00 AM IST (scheduled prediction time)
     // Market opens at 9:15, so 11:00 = 105 minutes in (candle index ~104 for 1-min candles)
-    const referencePrice = this.getReferencePriceAt1100(candles);
+    const { price: referencePrice, time: referencePriceTime } = this.getReferencePriceAt1100(candles);
 
     return {
       symbol,
@@ -76,6 +76,7 @@ export default class PredictionEngine {
       generatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss"),
       confidence: this.computeConfidence(predictedHigh, predictedLow, candles),
       referencePrice,
+      referencePriceTime,
       actualHigh: null,
       actualLow: null,
       evaluated: false,
@@ -131,25 +132,30 @@ export default class PredictionEngine {
    * This is the candle close at 11:00, which is 105 minutes after market open (9:15).
    * Falls back to the last available candle if 11:00 candle is not available.
    */
-  private getReferencePriceAt1100(candles: OHLCV[]): number | null {
-    if (candles.length === 0) return null;
+  private getReferencePriceAt1100(candles: OHLCV[]): { price: number | null; time: string | null } {
+    if (candles.length === 0) return { price: null, time: null };
 
     // Try to find candle with timestamp matching 11:00
     for (const candle of candles) {
       const ts = candle.timestamp;
-      // Check for HH:mm pattern of 11:00
       if (ts.includes("11:00") || ts.includes("T11:00")) {
-        return candle.close;
+        const time = ts.includes("T") ? ts.slice(11, 16) : ts.slice(-5);
+        return { price: candle.close, time };
       }
     }
 
     // Fallback: use candle at index 104 (105th minute = 11:00 for 1-min candles starting 9:15)
     if (candles.length > 104) {
-      return candles[104].close;
+      const ts = candles[104].timestamp;
+      const time = ts.includes("T") ? ts.slice(11, 16) : (ts.length > 10 ? ts.slice(-5) : "11:00");
+      return { price: candles[104].close, time };
     }
 
     // Final fallback: use the last available candle close
-    return candles[candles.length - 1].close;
+    const lastCandle = candles[candles.length - 1];
+    const ts = lastCandle.timestamp;
+    const time = ts.includes("T") ? ts.slice(11, 16) : (ts.length > 10 ? ts.slice(-5) : null);
+    return { price: lastCandle.close, time };
   }
 
   /**
