@@ -31,11 +31,10 @@ interface CronEntry {
  *
  * 1. Git add + stash (avoid conflicts)
  * 2. Git pull --rebase (get latest code)
- * 3. Check which files changed — determine if backend restart is needed
- * 4. pnpm --filter frontend deploy (if frontend files changed)
- * 5. Remove + reinstall crons (only if backend files changed)
- * 6. Wait until XX:XX:55 to minimize downtime (cron fires at :00)
- * 7. Kill all running trade-bot processes (only if backend files changed)
+ * 3. Deploy frontend (always)
+ * 4. Remove + reinstall crons (always)
+ * 5. Wait until XX:XX:55 to minimize downtime (cron fires at :00)
+ * 6. Kill all running trade-bot processes
  *
  * IMPORTANT: This handler returns normally so the orchestrator can
  * remove the request from the queue before the kill step terminates everything.
@@ -51,42 +50,18 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     this.exec("git add -A", PROJECT_ROOT);
     this.exec("git stash", PROJECT_ROOT);
 
-    // Record the commit before pull so we can diff
-    const beforeHash = this.exec("git rev-parse HEAD", PROJECT_ROOT).trim();
-
     // ─── Step 2: Git pull --rebase ───────────────────────────────────
     logger.info("Step 2: Pulling latest code...");
     this.exec("git pull --rebase origin master", PROJECT_ROOT);
 
-    const afterHash = this.exec("git rev-parse HEAD", PROJECT_ROOT).trim();
-
-    // ─── Step 3: Determine what changed ──────────────────────────────
-    const changedFiles = this.getChangedFiles(beforeHash, afterHash);
-    const hasBackendChanges = changedFiles.some(
-      (f) => f.startsWith("apps/worker/") || f === "pnpm-workspace.yaml" || f === "package.json",
-    );
-    const hasFrontendChanges = changedFiles.some((f) => f.startsWith("apps/frontend/"));
-
-    logger.info(`Step 3: ${changedFiles.length} files changed — backend: ${hasBackendChanges}, frontend: ${hasFrontendChanges}`);
-
-    // ─── Step 4: Deploy frontend (only if frontend files changed) ────
-    if (hasFrontendChanges) {
-      logger.info("Step 4: Deploying frontend...");
-      try {
-        this.exec("pnpm --filter frontend deploy", PROJECT_ROOT);
-        logger.info("  ✓ Frontend deployed");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
-      }
-    } else {
-      logger.info("Step 4: No frontend changes — skipping deploy");
-    }
-
-    // If no backend changes, we're done — no need to restart processes
-    if (!hasBackendChanges) {
-      logger.info("=== SYSTEM UPDATE COMPLETE — no backend changes, skipping restart ===");
-      return;
+    // ─── Step 3: Deploy frontend ─────────────────────────────────────
+    logger.info("Step 3: Deploying frontend...");
+    try {
+      this.exec("pnpm --filter frontend deploy", PROJECT_ROOT);
+      logger.info("  ✓ Frontend deployed");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
     }
 
     // ─── Step 5: Remove all trade-bot crons ──────────────────────────
@@ -125,24 +100,6 @@ export class SystemUpdateRequestHandler implements RequestHandler {
 
     // If somehow we survive, exit
     process.exit(0);
-  }
-
-  /**
-   * Get list of files changed between two git commits.
-   */
-  private getChangedFiles(fromHash: string, toHash: string): string[] {
-    if (fromHash === toHash) return [];
-    try {
-      const output = execSync(`git diff --name-only ${fromHash} ${toHash}`, {
-        cwd: PROJECT_ROOT,
-        encoding: "utf-8",
-        timeout: 10_000,
-      });
-      return output.trim().split("\n").filter(Boolean);
-    } catch {
-      // If diff fails, assume everything changed (safe fallback)
-      return ["apps/worker/unknown"];
-    }
   }
 
   /**
