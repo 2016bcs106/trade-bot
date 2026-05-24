@@ -4,7 +4,7 @@ import FeatureEngineer from "../features/feature-engineer.ts";
 import { TrainableModel, TrainingResult, ModelType } from "../training/models/trainable-model.ts";
 import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
 import { ModelMetrics } from "../types/models/model-metadata.ts";
-import { HistoricalDataProvider } from "../data/providers/historical-data-provider.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import createLogger from "../utils/logger.ts";
 
 const logger = createLogger("model-trainer");
@@ -31,11 +31,11 @@ interface TrainingSample {
  */
 export default class ModelTrainer {
   private featureEngineer: FeatureEngineer;
-  private provider: HistoricalDataProvider;
+  private client: PaytmMoneyClient;
 
-  constructor(provider: HistoricalDataProvider) {
+  constructor(client: PaytmMoneyClient) {
     this.featureEngineer = new FeatureEngineer();
-    this.provider = provider;
+    this.client = client;
   }
 
   /**
@@ -58,16 +58,9 @@ export default class ModelTrainer {
   ): Promise<TrainingResult | null> {
     const startTime = Date.now();
 
-    // Step 1: Fetch historical data from provider
+    // Step 1: Fetch historical data
     logger.info(`Fetching ${symbol} data from ${fromDate} to ${toDate}...`);
-    const allCandles = await this.provider.fetchOHLCV({
-      symbol,
-      securityId,
-      exchange: "NSE",
-      fromDate,
-      toDate,
-      interval: "MINUTE",
-    });
+    const allCandles = await this.client.fetchOHLCV(securityId, fromDate, toDate, "MINUTE");
 
     if (allCandles.length === 0) {
       logger.error(`No data returned for ${symbol}`);

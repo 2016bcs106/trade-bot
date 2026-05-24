@@ -22,26 +22,3 @@ export interface OHLCV {
   volume: number;
 }
 
-/** Time interval for OHLCV data */
-export type OHLCVInterval = "MINUTE" | "DAY";
-
-/** Request parameters for fetching historical data */
-export interface HistoricalDataRequest {
-  /** Stock symbol */
-  symbol: string;
-
-  /** Security ID for the data provider */
-  securityId: string;
-
-  /** Exchange (NSE/BSE) */
-  exchange: string;
-
-  /** Start date (YYYY-MM-DD) */
-  fromDate: string;
-
-  /** End date (YYYY-MM-DD) */
-  toDate: string;
-
-  /** Candle interval */
-  interval: OHLCVInterval;
-}

@@ -3,7 +3,7 @@ import createLogger from "../utils/logger.ts";
 import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import EvaluationEngine from "../evaluation/evaluation-engine.ts";
-import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:evaluate");
@@ -24,7 +24,7 @@ export async function handleEvaluate(): Promise<void> {
 
   const firebase = new FirebaseClient();
   const evaluationEngine = new EvaluationEngine();
-  const provider = new PaytmMoneyHistoricalProvider();
+  const client = new PaytmMoneyClient();
   const today = todayDate();
 
   for (const sym of symbols) {
@@ -52,10 +52,7 @@ export async function handleEvaluate(): Promise<void> {
     }
 
     // Fetch full-day candles from API
-    const candles = await provider.fetchOHLCV({
-      symbol: sym, securityId: pmlId, exchange: "NSE",
-      fromDate: today, toDate: today, interval: "MINUTE",
-    });
+    const candles = await client.fetchOHLCV(pmlId, today, today);
 
     if (candles.length < 100) {
       logger.error(`Insufficient full-day data for ${sym} (${candles.length} candles) — market may not have closed`);

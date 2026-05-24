@@ -68,7 +68,8 @@ class TradeBotScript extends BaseScript {
   }
 
   private async startDryRun(): Promise<void> {
-    const testData = await this.paytm.getHistoricalData(this.config.fromDate!, this.config.toDate!, this.config.pmlId!);
+    const ohlcvData = await this.paytm.fetchOHLCV(this.config.pmlId!, this.config.fromDate!, this.config.toDate!);
+    const testData = ohlcvData.map(c => ({ date: c.timestamp, close: c.close, volume: c.volume }));
     this.analyzer.reset();
 
     const ticks: Array<{ time: string; close: number; fastSma: number | null; slowSma: number | null }> = [];

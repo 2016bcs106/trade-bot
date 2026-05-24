@@ -4,7 +4,7 @@ import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PredictionEngine from "../prediction/prediction-engine.ts";
-import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
@@ -27,7 +27,7 @@ export async function handlePredict(): Promise<void> {
   const firebase = new FirebaseClient();
   const modelManager = new ModelManager();
   const predictionEngine = new PredictionEngine();
-  const provider = new PaytmMoneyHistoricalProvider();
+  const client = new PaytmMoneyClient();
 
   // Support --date=YYYY-MM-DD for adhoc/backtest predictions
   const targetDate = config.date || todayDate();
@@ -48,10 +48,7 @@ export async function handlePredict(): Promise<void> {
     }
 
     // Fetch target date candles from API
-    const candles = await provider.fetchOHLCV({
-      symbol: sym, securityId: pmlId, exchange: "NSE",
-      fromDate: targetDate, toDate: targetDate, interval: "MINUTE",
-    });
+    const candles = await client.fetchOHLCV(pmlId, targetDate, targetDate);
 
     if (candles.length < 30) {
       logger.error(`Insufficient data for ${sym} today (${candles.length} candles, need ≥30)`);
@@ -59,10 +56,7 @@ export async function handlePredict(): Promise<void> {
     }
 
     // Fetch previous day candles for context
-    const prevCandles = await provider.fetchOHLCV({
-      symbol: sym, securityId: pmlId, exchange: "NSE",
-      fromDate: prevDate, toDate: prevDate, interval: "MINUTE",
-    });
+    const prevCandles = await client.fetchOHLCV(pmlId, prevDate, prevDate);
 
     const prevDay: PreviousDayContext | null = prevCandles.length > 0
       ? {

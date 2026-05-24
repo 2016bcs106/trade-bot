@@ -3,7 +3,7 @@ import BaseScript from "./base-script.ts";
 import { PendingPredictionEntry } from "../firebase/client.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PredictionEngine from "../prediction/prediction-engine.ts";
-import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
 
 /**
@@ -18,7 +18,7 @@ class PredictionListenerScript extends BaseScript {
   private currentTask: string | null = null;
   private modelManager!: ModelManager;
   private predictionEngine!: PredictionEngine;
-  private provider!: PaytmMoneyHistoricalProvider;
+  private client!: PaytmMoneyClient;
 
   get scriptName(): string {
     return "prediction-listener";
@@ -34,7 +34,7 @@ class PredictionListenerScript extends BaseScript {
   protected async run(): Promise<void> {
     this.modelManager = new ModelManager();
     this.predictionEngine = new PredictionEngine();
-    this.provider = new PaytmMoneyHistoricalProvider();
+    this.client = new PaytmMoneyClient();
 
     this.log.info("Prediction listener started — watching pending_predictions/");
 
@@ -97,10 +97,7 @@ class PredictionListenerScript extends BaseScript {
       for (const date of dates) {
         try {
           // Fetch candles for the target date
-          const candles = await this.provider.fetchOHLCV({
-            symbol, securityId: pmlId, exchange: "NSE",
-            fromDate: date, toDate: date, interval: "MINUTE",
-          });
+          const candles = await this.client.fetchOHLCV(pmlId, date, date);
 
           if (candles.length < 30) {
             this.log.warn(`Skipping ${symbol}@${date}: only ${candles.length} candles (need ≥30)`);
@@ -110,10 +107,7 @@ class PredictionListenerScript extends BaseScript {
 
           // Fetch previous day candles
           const prevDate = parseDate(date).subtract(1, "day").format("YYYY-MM-DD");
-          const prevCandles = await this.provider.fetchOHLCV({
-            symbol, securityId: pmlId, exchange: "NSE",
-            fromDate: prevDate, toDate: prevDate, interval: "MINUTE",
-          });
+          const prevCandles = await this.client.fetchOHLCV(pmlId, prevDate, prevDate);
 
           const prevDay: PreviousDayContext | null = prevCandles.length > 0
             ? {

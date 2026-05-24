@@ -4,7 +4,7 @@ import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
-import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:train");
@@ -27,8 +27,8 @@ export async function handleTrain(): Promise<void> {
   const lookbackDays = config.lookbackDays || 90;
 
   const firebase = new FirebaseClient();
-  const provider = new PaytmMoneyHistoricalProvider();
-  const trainer = new ModelTrainer(provider);
+  const client = new PaytmMoneyClient();
+  const trainer = new ModelTrainer(client);
   const modelManager = new ModelManager();
 
   const toDate = now().format("YYYY-MM-DD");

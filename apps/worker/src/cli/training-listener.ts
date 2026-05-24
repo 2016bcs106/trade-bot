@@ -4,7 +4,7 @@ import { now, nowISO } from "../utils/time.ts";
 import { PendingTrainingEntry } from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
-import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { TrainingResult } from "../training/models/trainable-model.ts";
 
 /**
@@ -33,8 +33,8 @@ class TrainingListenerScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
-    const provider = new PaytmMoneyHistoricalProvider();
-    this.trainer = new ModelTrainer(provider);
+    const client = new PaytmMoneyClient();
+    this.trainer = new ModelTrainer(client);
     this.modelManager = new ModelManager();
 
     this.log.info("Training listener started — watching pending_trainings/");
