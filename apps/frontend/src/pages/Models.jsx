@@ -170,7 +170,7 @@ export default function Models() {
       const newRef = push(pendingRef)
       await set(newRef, {
         symbol,
-        modelType: 'auto',
+        modelType: 'linear-regression',
         lookbackDays: 1825, // 5 years
         status: 'pending',
         createdAt: new Date().toISOString(),

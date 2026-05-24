@@ -1,5 +1,6 @@
 import "../config/env.ts";
 import moment from "moment";
+import { getDatabase, ref, push, set } from "firebase/database";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient, { PendingTrainingEntry } from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
@@ -164,6 +165,9 @@ async function processEntry(
     });
     await firebase.removePendingTraining(key);
 
+    // ─── Auto-queue predictions for last 30 days ─────────────────────
+    await queuePredictions(symbol);
+
     processedCount++;
     currentTask = null;
     logger.info(`✓ ${symbol}: trained ${version} (${result.modelType}, MAE=${result.metrics.mae.toFixed(2)})`);
@@ -173,6 +177,26 @@ async function processEntry(
     await firebase.updatePendingTraining(key, { status: "failed", error: msg });
     currentTask = null;
   }
+}
+
+/**
+ * Queue predictions for the last 30 days after training completes.
+ */
+async function queuePredictions(symbol: string): Promise<void> {
+  const db = getDatabase();
+  const now = moment().utcOffset("+05:30");
+  const fromDate = now.clone().subtract(30, "days").format("YYYY-MM-DD");
+  const toDate = now.format("YYYY-MM-DD");
+
+  const newRef = push(ref(db, "pending_predictions"));
+  await set(newRef, {
+    symbol,
+    fromDate,
+    toDate,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  });
+  logger.info(`  → Queued predictions for ${symbol} (${fromDate} → ${toDate})`);
 }
 
 main().catch((e) => {
