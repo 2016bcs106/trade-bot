@@ -73,8 +73,8 @@ export default class FeatureEngineer {
 
       // Volume features
       cumulativeVolume: volumes.reduce((sum, v) => sum + v, 0),
-      relativeVolume: prevDay && prevDay.avg45MinVolume > 0
-        ? volumes.reduce((sum, v) => sum + v, 0) / prevDay.avg45MinVolume
+      relativeVolume: prevDay && prevDay.averageMinVolume > 0
+        ? volumes.reduce((sum, v) => sum + v, 0) / prevDay.averageMinVolume
         : 1,
       volumeSpike: this.volumeSpike(volumes),
       volumeTrend: this.linearSlope(volumes),

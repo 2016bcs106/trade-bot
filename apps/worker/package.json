@@ -15,9 +15,8 @@
     "optimize": "tsx src/cli/ml-cli.ts optimize",
     "scheduler": "tsx src/cli/ml-cli.ts scheduler:start",
     "scheduler:list": "tsx src/cli/ml-cli.ts scheduler:list",
-    "prediction-listener": "tsx src/cli/prediction-listener.ts",
     "training-listener": "tsx src/cli/training-listener.ts",
-    "request-handler": "tsx src/cli/request-handler.ts",
+    "request-handler": "tsx src/cli/request-orchestration-script.ts",
     "cleanup": "tsx src/cli/cleanup.ts",
     "typecheck": "tsc --noEmit"
   },

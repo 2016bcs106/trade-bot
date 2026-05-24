@@ -62,7 +62,7 @@ export async function handlePredict(): Promise<void> {
       ? {
           close: prevCandles[prevCandles.length - 1].close,
           high: Math.max(...prevCandles.map((c) => c.high)),
-          avg45MinVolume: prevCandles.slice(0, 105).reduce((s, c) => s + c.volume, 0),
+          averageMinVolume: prevCandles.slice(0, 105).reduce((s, c) => s + c.volume, 0),
           close2: null,
           high2: null,
           close3: null,

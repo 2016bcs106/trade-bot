@@ -122,8 +122,8 @@ export interface PreviousDayContext {
   /** Previous day high price */
   high: number;
 
-  /** Volume from data up to 11:00 AM (first 105 min) for relative volume comparison */
-  avg45MinVolume: number;
+  /** Average minute volume from previous day (for relative volume comparison) */
+  averageMinVolume: number;
 
   /** D-2 close price (null if unavailable) */
   close2: number | null;

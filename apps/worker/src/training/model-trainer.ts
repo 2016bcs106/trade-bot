@@ -249,11 +249,11 @@ export default class ModelTrainer {
     const close = candles.length > 0 ? candles[candles.length - 1].close : 0;
     const high = candles.length > 0 ? Math.max(...candles.map((c) => c.high)) : 0;
     const first105 = candles.slice(0, 105);
-    const avg45MinVolume = first105.reduce((s, c) => s + c.volume, 0);
+    const averageMinVolume = first105.reduce((s, c) => s + c.volume, 0);
     return {
       close,
       high,
-      avg45MinVolume,
+      averageMinVolume,
       // Shift previous days down: D-1 becomes D-2, D-2 becomes D-3
       close2: prevContext?.close ?? null,
       high2: prevContext?.high ?? null,

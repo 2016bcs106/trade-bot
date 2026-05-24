@@ -1,9 +1,21 @@
 import BaseScript from "./base-script.ts";
 import { QueuedRequest } from "../firebase/client.ts";
+import { RequestHandler } from "../request-handlers/request-handler.ts";
+import { PredictionRequestHandler } from "../request-handlers/prediction-request-handler.ts";
+
+/**
+ * Registry: maps request type → handler instance.
+ */
+const handlerRegistry: Record<string, RequestHandler> = {
+  predict: new PredictionRequestHandler(),
+  // TODO: Register additional handlers here
+  // train: new TrainingRequestHandler(),
+  // evaluate: new EvaluationRequestHandler(),
+};
 
 /**
  * Long-running script that listens to `request_queue/` in Firebase
- * and processes requests sequentially.
+ * and processes requests sequentially using registered handlers.
  *
  * Behavior:
  * - Listens via onValue (fires on any change to the collection)
@@ -14,7 +26,7 @@ import { QueuedRequest } from "../firebase/client.ts";
  *
  * Usage: pnpm request-handler
  */
-class RequestHandlerScript extends BaseScript {
+class RequestOrchestrationScript extends BaseScript {
   private processedCount = 0;
   private failedCount = 0;
   private currentRequest: string | null = null;
@@ -36,28 +48,21 @@ class RequestHandlerScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
-    this.log.info("Request handler started — watching request_queue/");
+    this.log.info("Request orchestration started — watching request_queue/");
 
     this.firebase.onRequestQueueChanged((data) => {
       if (!data) {
-        // Collection empty or deleted — reset known keys
         this.knownKeys.clear();
         return;
       }
 
-      // Find new keys that we haven't processed/seen yet
       const currentKeys = Object.keys(data);
       const newKeys = currentKeys.filter((k) => !this.knownKeys.has(k));
 
-      // Update known keys to current snapshot
       this.knownKeys = new Set(currentKeys);
 
-      if (newKeys.length === 0) {
-        // This was a delete or status update — ignore
-        return;
-      }
+      if (newKeys.length === 0) return;
 
-      // Queue new requests for sequential processing
       for (const key of newKeys) {
         this.log.info(`Queued: ${key} (type: ${data[key].type})`);
         this.pendingKeys.push(key);
@@ -66,7 +71,6 @@ class RequestHandlerScript extends BaseScript {
       this.processNext();
     });
 
-    // Keep process alive
     await new Promise(() => {});
   }
 
@@ -87,7 +91,6 @@ class RequestHandlerScript extends BaseScript {
     try {
       const request = await this.firebase.getRequest(key);
       if (!request) {
-        // Entry was already deleted (race condition) — skip
         this.knownKeys.delete(key);
         return;
       }
@@ -95,13 +98,10 @@ class RequestHandlerScript extends BaseScript {
       this.currentRequest = `${request.type} (${key})`;
       this.log.info(`Processing: ${request.type} [${key}]`);
 
-      // Mark as processing
       await this.firebase.updateRequestStatus(key, "processing");
 
-      // Dispatch to handler
       await this.dispatch(request);
 
-      // Success — remove from queue
       await this.firebase.removeRequest(key);
       this.knownKeys.delete(key);
       this.processedCount++;
@@ -110,7 +110,6 @@ class RequestHandlerScript extends BaseScript {
       const errorMessage = err instanceof Error ? err.message : String(err);
       this.log.error(`✗ Failed: ${key} — ${errorMessage}`);
 
-      // Move to failed_requests/
       try {
         await this.firebase.moveRequestToFailed(key, errorMessage);
         this.knownKeys.delete(key);
@@ -124,25 +123,13 @@ class RequestHandlerScript extends BaseScript {
     }
   }
 
-  /**
-   * Dispatch a request to the appropriate handler based on type.
-   *
-   * TODO: Implement handlers for each request type:
-   * - "train" → trigger model training
-   * - "predict" → generate predictions
-   * - "evaluate" → run evaluation
-   * - "add_stock" → add a stock to tracking
-   * - "remove_stock" → remove a stock
-   * - "promote_model" → promote a model version
-   * - "rollback_model" → rollback to previous version
-   */
   private async dispatch(request: QueuedRequest): Promise<void> {
-    switch (request.type) {
-      // TODO: Implement request handlers
-      default:
-        throw new Error(`Unknown request type: "${request.type}"`);
+    const handler = handlerRegistry[request.type];
+    if (!handler) {
+      throw new Error(`Unknown request type: "${request.type}" — no handler registered`);
     }
+    await handler.handle(request);
   }
 }
 
-new RequestHandlerScript().start();
+new RequestOrchestrationScript().start();
