@@ -3,6 +3,7 @@ import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
+import { getBusinessDays, evaluateAndSave } from "../utils/market-utils.ts";
 
 const logger = createLogger("handler:predict");
 
@@ -76,22 +77,21 @@ export class PredictionRequestHandler implements RequestHandler {
         );
 
         if (prediction) {
-          // If market is closed for this date (past), fill actuals
+          // If market is closed for this date (past), evaluate inline
           const current = now();
           const predDate = parseDate(date, "YYYY-MM-DD");
           const marketCloseTime = predDate.clone().hour(15).minute(30);
-          if (current.isAfter(marketCloseTime)) {
-            prediction.actualHigh = Math.max(...candles.map((c) => c.high));
-            prediction.actualLow = Math.min(...candles.map((c) => c.low));
-            prediction.actualClose = candles[candles.length - 1].close;
-            prediction.evaluated = true;
-          }
 
-          await firebase.setPrediction(symbol, date, prediction);
-          const actualStr = prediction.evaluated
-            ? ` | Actual H=${prediction.actualHigh?.toFixed(2)} L=${prediction.actualLow?.toFixed(2)}`
-            : "";
-          logger.info(`✓ ${symbol}@${date}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}${actualStr}`);
+          if (current.isAfter(marketCloseTime)) {
+            const result = await evaluateAndSave(prediction, candles, firebase, symbol, date);
+            const actualStr = result
+              ? ` | Actual H=${prediction.actualHigh?.toFixed(2)} L=${prediction.actualLow?.toFixed(2)}`
+              : "";
+            logger.info(`✓ ${symbol}@${date}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}${actualStr}`);
+          } else {
+            await firebase.setPrediction(symbol, date, prediction);
+            logger.info(`✓ ${symbol}@${date}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}`);
+          }
         } else {
           logger.warn(`Prediction returned null for ${symbol}@${date}`);
         }
@@ -105,21 +105,4 @@ export class PredictionRequestHandler implements RequestHandler {
 
     logger.info(`✓ Completed ${symbol}: ${fromDate} → ${toDate} (${processed}/${dates.length} dates)`);
   }
-}
-
-/**
- * Expand a date range into business days (Mon-Fri).
- */
-function getBusinessDays(fromDate: string, toDate: string): string[] {
-  const dates: string[] = [];
-  const start = parseDate(fromDate, "YYYY-MM-DD");
-  const end = parseDate(toDate, "YYYY-MM-DD");
-
-  for (let d = start.clone(); d.isSameOrBefore(end); d.add(1, "day")) {
-    const dow = d.day();
-    if (dow !== 0 && dow !== 6) {
-      dates.push(d.format("YYYY-MM-DD"));
-    }
-  }
-  return dates;
 }

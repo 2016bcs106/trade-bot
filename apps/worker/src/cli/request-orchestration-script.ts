@@ -7,6 +7,7 @@ import { PredictionRequestHandler } from "../request-handlers/prediction-request
 import { StockSyncRequestHandler } from "../request-handlers/stock-sync-request-handler.ts";
 import { SystemUpdateRequestHandler } from "../request-handlers/system-update-request-handler.ts";
 import { TrainingRequestHandler } from "../request-handlers/training-request-handler.ts";
+import { EvaluationRequestHandler } from "../request-handlers/evaluation-request-handler.ts";
 
 /**
  * Registry: maps request type → handler instance.
@@ -14,6 +15,7 @@ import { TrainingRequestHandler } from "../request-handlers/training-request-han
 const handlerRegistry: Record<string, RequestHandler> = {
   access_token: new AccessTokenRequestHandler(),
   cleanup: new CleanupRequestHandler(),
+  evaluate: new EvaluationRequestHandler(),
   predict: new PredictionRequestHandler(),
   stock_sync: new StockSyncRequestHandler(),
   system_update: new SystemUpdateRequestHandler(),
