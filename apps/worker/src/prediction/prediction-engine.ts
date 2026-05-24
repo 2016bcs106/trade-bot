@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { nowFormatted } from "../utils/time.ts";
+import { nowFormatted, parseDate } from "../utils/time.ts";
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { FeatureVector, PreviousDayContext } from "../types/features/feature-vector.ts";
 import { Prediction } from "../types/predictions/prediction.ts";
@@ -121,33 +121,29 @@ export default class PredictionEngine {
 
   /**
    * Get the reference price at 11:00 AM IST (scheduled prediction time).
-   * This is the candle close at 11:00, which is 105 minutes after market open (9:15).
-   * Falls back to the last available candle if 11:00 candle is not available.
+   * Parses candle timestamps with moment.js and finds the one at or just before 11:00.
    */
   private getReferencePriceAt1100(candles: OHLCV[]): { price: number | null; time: string | null } {
     if (candles.length === 0) return { price: null, time: null };
 
-    // Try to find candle with timestamp matching 11:00
+    // Find candle at exactly 11:00 or the last one before 11:00
+    let bestCandle = candles[0];
     for (const candle of candles) {
-      const ts = candle.timestamp;
-      if (ts.includes("11:00") || ts.includes("T11:00")) {
-        const time = ts.includes("T") ? ts.slice(11, 16) : ts.slice(-5);
-        return { price: candle.close, time };
+      const m = parseDate(candle.timestamp, "YYYY-MM-DD HH:mm");
+      const hour = m.hour();
+      const minute = m.minute();
+
+      if (hour === 11 && minute === 0) {
+        return { price: candle.close, time: "11:00" };
+      }
+      if (hour < 11 || (hour === 10 && minute <= 59)) {
+        bestCandle = candle;
       }
     }
 
-    // Fallback: use candle at index 104 (105th minute = 11:00 for 1-min candles starting 9:15)
-    if (candles.length > 104) {
-      const ts = candles[104].timestamp;
-      const time = ts.includes("T") ? ts.slice(11, 16) : (ts.length > 10 ? ts.slice(-5) : "11:00");
-      return { price: candles[104].close, time };
-    }
-
-    // Final fallback: use the last available candle close
-    const lastCandle = candles[candles.length - 1];
-    const ts = lastCandle.timestamp;
-    const time = ts.includes("T") ? ts.slice(11, 16) : (ts.length > 10 ? ts.slice(-5) : null);
-    return { price: lastCandle.close, time };
+    // No exact 11:00 — use closest before it
+    const bestTime = parseDate(bestCandle.timestamp, "YYYY-MM-DD HH:mm");
+    return { price: bestCandle.close, time: bestTime.format("HH:mm") };
   }
 
   /**
