@@ -44,8 +44,8 @@ const styles = {
   },
   modal: {
     background: 'var(--pm-card-bg)', borderRadius: '16px 16px 0 0',
-    width: '100%', maxWidth: '480px', maxHeight: '80vh',
-    overflow: 'auto', padding: '1.25rem',
+    width: '100%', maxWidth: '480px', maxHeight: '70vh',
+    overflow: 'auto', padding: '1.25rem', paddingBottom: '5rem',
   },
   modalHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
