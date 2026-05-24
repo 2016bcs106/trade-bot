@@ -10,6 +10,7 @@
     "predict": "tsx src/cli/ml-cli.ts predict",
     "evaluate": "tsx src/cli/ml-cli.ts evaluate",
     "request-handler": "tsx src/cli/request-orchestration-script.ts",
+    "minute-tick-collector": "tsx src/cli/minute-tick-collector.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
