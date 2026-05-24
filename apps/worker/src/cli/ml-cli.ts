@@ -94,7 +94,10 @@ Options:
   `);
 }
 
-main().catch((e) => {
+main().then(() => {
+  // Firebase keeps the connection open — force exit for one-shot commands
+  process.exit(0);
+}).catch((e) => {
   logger.error(`Fatal: ${e instanceof Error ? e.message : String(e)}`);
   process.exit(1);
 });
