@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import moment from 'moment'
-import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database'
+import { ref, onValue, remove, query, orderByChild, limitToLast } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircle, faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons'
+import { faCircle, faChevronDown, faChevronRight, faTrash } from '@fortawesome/free-solid-svg-icons'
 
 const statusColors = {
   running: '#22c55e',
@@ -148,9 +148,63 @@ function ScriptStatusSection({ scripts }) {
   })
 }
 
+const requestStatusColors = {
+  pending: { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b' },
+  processing: { bg: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6' },
+  completed: { bg: 'rgba(34, 197, 94, 0.12)', color: '#22c55e' },
+  failed: { bg: 'rgba(239, 68, 68, 0.12)', color: '#ef4444' },
+}
+
+function RequestsSection({ requests, failed, onDeleteFailed }) {
+  const allRequests = [
+    ...requests.map(r => ({ ...r, _source: 'queue' })),
+    ...failed.map(r => ({ ...r, _source: 'failed' })),
+  ].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+
+  if (allRequests.length === 0) {
+    return <div style={styles.empty}>No requests in queue</div>
+  }
+
+  return allRequests.map((req) => {
+    const statusStyle = requestStatusColors[req.status] || requestStatusColors.pending
+    return (
+      <div key={req._key} style={styles.card}>
+        <div style={styles.scriptRow}>
+          <span style={styles.scriptName}>{req.type}</span>
+          <span style={{ ...styles.statusBadge, background: statusStyle.bg, color: statusStyle.color }}>
+            <FontAwesomeIcon icon={faCircle} style={styles.statusDot} />
+            {req.status}
+          </span>
+        </div>
+        <div style={styles.scriptMeta}>
+          {getRelativeTime(req.createdAt)}
+          {req.payload && Object.keys(req.payload).length > 0 && (
+            <span> · {Object.entries(req.payload).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
+          )}
+        </div>
+        {req.error && (
+          <div style={{ fontSize: '0.65rem', color: '#ef4444', marginTop: '0.25rem' }}>
+            ⚠ {req.error}
+          </div>
+        )}
+        {req._source === 'failed' && (
+          <button
+            onClick={() => onDeleteFailed(req._key)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.65rem', color: '#ef4444', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+          >
+            <FontAwesomeIcon icon={faTrash} /> Delete
+          </button>
+        )}
+      </div>
+    )
+  })
+}
+
 export default function Audit() {
   const [scripts, setScripts] = useState(null)
   const [events, setEvents] = useState([])
+  const [requests, setRequests] = useState([])
+  const [failedRequests, setFailedRequests] = useState([])
 
   useEffect(() => {
     const scriptsRef = ref(db, 'scripts')
@@ -167,14 +221,40 @@ export default function Audit() {
       setEvents(list)
     })
 
-    return () => { unsubScripts(); unsubAudit() }
+    const queueRef = ref(db, 'request_queue')
+    const unsubQueue = onValue(queueRef, (snap) => {
+      const data = snap.val()
+      if (!data) { setRequests([]); return }
+      setRequests(Object.entries(data).map(([key, val]) => ({ ...val, _key: key })))
+    })
+
+    const failedRef = ref(db, 'failed_requests')
+    const unsubFailed = onValue(failedRef, (snap) => {
+      const data = snap.val()
+      if (!data) { setFailedRequests([]); return }
+      setFailedRequests(Object.entries(data).map(([key, val]) => ({ ...val, _key: key })))
+    })
+
+    return () => { unsubScripts(); unsubAudit(); unsubQueue(); unsubFailed() }
   }, [])
+
+  const handleDeleteFailed = async (key) => {
+    await remove(ref(db, `failed_requests/${key}`))
+  }
 
   return (
     <div style={styles.container}>
       {/* Script Status Section */}
       <div style={styles.sectionTitle}>Script Status</div>
       <ScriptStatusSection scripts={scripts} />
+
+      {/* Requests Section */}
+      <div style={{ ...styles.sectionTitle, marginTop: '1.25rem' }}>Requests</div>
+      <RequestsSection
+        requests={requests}
+        failed={failedRequests}
+        onDeleteFailed={handleDeleteFailed}
+      />
 
       {/* Audit Section */}
       <div style={{ ...styles.sectionTitle, marginTop: '1.25rem' }}>Audit Log</div>
