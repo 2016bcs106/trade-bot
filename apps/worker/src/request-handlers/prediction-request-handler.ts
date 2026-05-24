@@ -1,11 +1,8 @@
 import { now, parseDate } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
-import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
-import ModelManager from "../model-management/model-manager.ts";
-import PredictionEngine from "../prediction/prediction-engine.ts";
-import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
+import { QueuedRequest } from "../firebase/client.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
-import { RequestHandler } from "./request-handler.ts";
+import { RequestHandler, ServiceContext } from "./request-handler.ts";
 
 const logger = createLogger("handler:predict");
 
@@ -18,7 +15,7 @@ const logger = createLogger("handler:predict");
  * - toDate: string (YYYY-MM-DD)
  */
 export class PredictionRequestHandler implements RequestHandler {
-  async handle(request: QueuedRequest): Promise<void> {
+  async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
     const { symbol, fromDate, toDate } = request.payload as {
       symbol: string;
       fromDate: string;
@@ -29,10 +26,7 @@ export class PredictionRequestHandler implements RequestHandler {
       throw new Error("predict requires payload: { symbol, fromDate, toDate }");
     }
 
-    const firebase = new FirebaseClient();
-    const modelManager = new ModelManager();
-    const predictionEngine = new PredictionEngine();
-    const client = new PaytmMoneyClient();
+    const { firebase, paytm: client, modelManager, predictionEngine } = ctx;
 
     const dates = getBusinessDays(fromDate, toDate);
     if (dates.length === 0) {

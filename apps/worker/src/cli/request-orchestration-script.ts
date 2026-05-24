@@ -1,6 +1,6 @@
 import BaseScript from "./base-script.ts";
 import { QueuedRequest } from "../firebase/client.ts";
-import { RequestHandler } from "../request-handlers/request-handler.ts";
+import { RequestHandler, ServiceContext, createServiceContext } from "../request-handlers/request-handler.ts";
 import { PredictionRequestHandler } from "../request-handlers/prediction-request-handler.ts";
 import { StockSyncRequestHandler } from "../request-handlers/stock-sync-request-handler.ts";
 import { TrainingRequestHandler } from "../request-handlers/training-request-handler.ts";
@@ -34,6 +34,7 @@ class RequestOrchestrationScript extends BaseScript {
   private processing = false;
   private pendingKeys: string[] = [];
   private knownKeys = new Set<string>();
+  private ctx!: ServiceContext;
 
   get scriptName(): string {
     return "request-handler";
@@ -49,6 +50,7 @@ class RequestOrchestrationScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
+    this.ctx = createServiceContext();
     this.log.info("Request orchestration started — watching request_queue/");
 
     this.firebase.onRequestQueueChanged((data) => {
@@ -129,7 +131,7 @@ class RequestOrchestrationScript extends BaseScript {
     if (!handler) {
       throw new Error(`Unknown request type: "${request.type}" — no handler registered`);
     }
-    await handler.handle(request);
+    await handler.handle(request, this.ctx);
   }
 }
 

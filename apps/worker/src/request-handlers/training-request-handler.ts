@@ -1,10 +1,7 @@
 import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
-import ModelTrainer from "../training/model-trainer.ts";
-import ModelManager from "../model-management/model-manager.ts";
-import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
-import { RequestHandler } from "./request-handler.ts";
+import { RequestHandler, ServiceContext } from "./request-handler.ts";
 
 const logger = createLogger("handler:train");
 
@@ -24,7 +21,7 @@ const logger = createLogger("handler:train");
  * - lookbackDays: number (default 1825 = 5 years)
  */
 export class TrainingRequestHandler implements RequestHandler {
-  async handle(request: QueuedRequest): Promise<void> {
+  async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
     const { symbol, lookbackDays = 1825 } = request.payload as {
       symbol: string;
       lookbackDays?: number;
@@ -34,10 +31,7 @@ export class TrainingRequestHandler implements RequestHandler {
       throw new Error("train requires payload: { symbol }");
     }
 
-    const firebase = new FirebaseClient();
-    const client = new PaytmMoneyClient();
-    const trainer = new ModelTrainer(client);
-    const modelManager = new ModelManager();
+    const { firebase, trainer, modelManager } = ctx;
 
     const stock = await firebase.getStock(symbol);
     if (!stock) {

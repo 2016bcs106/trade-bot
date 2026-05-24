@@ -1,9 +1,8 @@
 import { now, nowISO } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
-import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
-import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
+import { QueuedRequest } from "../firebase/client.ts";
 import { StockConfig } from "../types/stocks/index.ts";
-import { RequestHandler } from "./request-handler.ts";
+import { RequestHandler, ServiceContext } from "./request-handler.ts";
 import { TrainingRequestHandler } from "./training-request-handler.ts";
 import { PredictionRequestHandler } from "./prediction-request-handler.ts";
 
@@ -22,7 +21,7 @@ const logger = createLogger("handler:stock-sync");
  * If any step fails, the entire request fails (moved to failed_requests).
  */
 export class StockSyncRequestHandler implements RequestHandler {
-  async handle(request: QueuedRequest): Promise<void> {
+  async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
     const {
       symbol,
       shouldSkipTraining = false,
@@ -37,8 +36,7 @@ export class StockSyncRequestHandler implements RequestHandler {
       throw new Error("stock_sync requires payload: { symbol }");
     }
 
-    const firebase = new FirebaseClient();
-    const client = new PaytmMoneyClient();
+    const { firebase, paytm: client } = ctx;
 
     // ─── Step 1: Sync stock metadata ──────────────────────────────────
 
@@ -96,7 +94,7 @@ export class StockSyncRequestHandler implements RequestHandler {
         payload: { symbol, lookbackDays: 1825 },
         status: "processing",
         createdAt: request.createdAt,
-      });
+      }, ctx);
     }
 
     // ─── Step 3: Generate predictions (last 30 days) ─────────────────
@@ -111,7 +109,7 @@ export class StockSyncRequestHandler implements RequestHandler {
         payload: { symbol, fromDate, toDate },
         status: "processing",
         createdAt: request.createdAt,
-      });
+      }, ctx);
     }
   }
 }
