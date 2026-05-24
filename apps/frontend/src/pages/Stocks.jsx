@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { db, ref, set, remove, onValue } from '../utils/firebase'
+import moment from 'moment'
+import { db, ref, set, remove, onValue, push } from '../utils/firebase'
 import { layout, text, colors } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
@@ -305,7 +306,12 @@ export default function Stocks() {
   const handleAdd = async () => {
     const symbol = symbolInput.trim().toUpperCase()
     if (!symbol || existingSymbols.includes(symbol)) { setSymbolInput(''); return }
-    await set(ref(db, `stocks/${symbol}`), { symbol, status: 'pending_sync', addedAt: Date.now() })
+    await push(ref(db, 'request_queue'), {
+      type: 'stock_sync',
+      payload: { symbol },
+      status: 'pending',
+      createdAt: moment().utcOffset('+05:30').toISOString(),
+    })
     setSymbolInput('')
   }
 

@@ -1,6 +1,9 @@
+import { useState } from 'react'
+import moment from 'moment'
+import { db, ref, push } from '../utils/firebase'
 import { layout, colors } from '../utils/styles'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faRotate, faRocket, faServer, faCog } from '@fortawesome/free-solid-svg-icons'
+import { faRotate, faRocket, faServer, faCog, faCheck } from '@fortawesome/free-solid-svg-icons'
 
 const styles = {
   container: { padding: '1.5rem 1rem', paddingBottom: '6rem' },
@@ -48,9 +51,9 @@ const styles = {
   },
 }
 
-function SettingItem({ icon, iconBg, title, desc, badge, isLast }) {
+function SettingItem({ icon, iconBg, title, desc, badge, isLast, onClick }) {
   return (
-    <div style={{ ...styles.item, ...(isLast ? styles.itemLast : {}) }}>
+    <div style={{ ...styles.item, ...(isLast ? styles.itemLast : {}) }} onClick={onClick}>
       <div style={{ ...styles.iconCircle, background: iconBg }}>
         <FontAwesomeIcon icon={icon} style={{ color: '#fff' }} />
       </div>
@@ -64,6 +67,23 @@ function SettingItem({ icon, iconBg, title, desc, badge, isLast }) {
 }
 
 export default function Settings() {
+  const [updateQueued, setUpdateQueued] = useState(false)
+
+  const handleForceReload = () => {
+    window.location.reload(true)
+  }
+
+  const handleSystemUpdate = async () => {
+    await push(ref(db, 'request_queue'), {
+      type: 'system_update',
+      payload: {},
+      status: 'pending',
+      createdAt: moment().utcOffset('+05:30').toISOString(),
+    })
+    setUpdateQueued(true)
+    setTimeout(() => setUpdateQueued(false), 3000)
+  }
+
   return (
     <div style={layout.page}>
       <div style={styles.container}>
@@ -80,7 +100,7 @@ export default function Settings() {
               iconBg="#3b82f6"
               title="Force Reload"
               desc="Clear cache and reload the page"
-              badge="TODO"
+              onClick={handleForceReload}
               isLast
             />
           </div>
@@ -91,18 +111,12 @@ export default function Settings() {
           <div style={styles.sectionTitle}>Deploy</div>
           <div style={styles.card}>
             <SettingItem
-              icon={faRocket}
-              iconBg="#22c55e"
-              title="Deploy Frontend"
-              desc="Build and deploy latest commit to Firebase Hosting"
-              badge="TODO"
-            />
-            <SettingItem
-              icon={faServer}
-              iconBg="#8b5cf6"
-              title="Deploy Backend"
-              desc="Deploy latest commit to backend worker"
-              badge="TODO"
+              icon={updateQueued ? faCheck : faServer}
+              iconBg={updateQueued ? '#22c55e' : '#8b5cf6'}
+              title="System Update"
+              desc={updateQueued ? 'Update queued! Worker will pull, deploy & restart.' : 'Pull latest code, deploy frontend, restart backend'}
+              badge={updateQueued ? 'QUEUED' : undefined}
+              onClick={!updateQueued ? handleSystemUpdate : undefined}
               isLast
             />
           </div>

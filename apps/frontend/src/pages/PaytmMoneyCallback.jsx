@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import moment from 'moment'
-import { db, ref, set, onValue } from '../utils/firebase'
+import { db, ref, set, onValue, push } from '../utils/firebase'
 import { layout, text, card, merge } from '../utils/styles'
 
 const TIMEOUT_MS = 30000 // 30 second timeout
@@ -26,10 +26,12 @@ export default function PaytmMoneyCallback() {
       try {
         const requestTime = moment().utcOffset('+05:30').valueOf()
 
-        await set(ref(db, 'auth/requestToken'), {
-          token: requestToken,
-          date: moment().utcOffset('+05:30').format('YYYY-MM-DD'),
-          timestamp: requestTime,
+        // Push access_token request to request_queue
+        await push(ref(db, 'request_queue'), {
+          type: 'access_token',
+          payload: { requestToken },
+          status: 'pending',
+          createdAt: moment().utcOffset('+05:30').toISOString(),
         })
 
         setStatus('Waiting for access token...')
