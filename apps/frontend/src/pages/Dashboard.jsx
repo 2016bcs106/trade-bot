@@ -207,43 +207,41 @@ export default function Dashboard() {
                     type="date"
                     value={genFrom}
                     max={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setGenFrom(e.target.value)}
+                    onChange={(e) => {
+                      setGenFrom(e.target.value)
+                      // Auto-cap toDate to fromDate + 30 days
+                      if (genTo && e.target.value) {
+                        const maxTo = new Date(e.target.value)
+                        maxTo.setDate(maxTo.getDate() + 30)
+                        const toD = new Date(genTo)
+                        if (toD > maxTo) setGenTo(maxTo.toISOString().split('T')[0])
+                      }
+                    }}
                     style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
                   />
                   <span style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted)' }}>→</span>
                   <input
                     type="date"
                     value={genTo}
-                    max={new Date().toISOString().split('T')[0]}
+                    min={genFrom || undefined}
+                    max={(() => {
+                      const today = new Date().toISOString().split('T')[0]
+                      if (!genFrom) return today
+                      const maxDate = new Date(genFrom)
+                      maxDate.setDate(maxDate.getDate() + 30)
+                      const maxStr = maxDate.toISOString().split('T')[0]
+                      return maxStr < today ? maxStr : today
+                    })()}
                     onChange={(e) => setGenTo(e.target.value)}
                     style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
                   />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <button
                     disabled={!genFrom || !genTo || generating}
                     onClick={async () => {
-                      // Validation
-                      const start = new Date(genFrom)
-                      const end = new Date(genTo)
-                      const today = new Date()
-                      today.setHours(23, 59, 59, 999)
-
-                      if (end > today || start > today) {
-                        alert('Dates must be today or in the past')
-                        return
-                      }
-                      if (start > end) {
-                        alert('From date must be before To date')
-                        return
-                      }
-                      const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
-                      if (diffDays > 30) {
-                        alert('Maximum date range is 30 days')
-                        return
-                      }
-
                       setGenerating(true)
                       try {
-                        // Push single entry with date range
                         const pendingRef = ref(db, 'pending_predictions')
                         const newRef = push(pendingRef)
                         await set(newRef, {
@@ -254,6 +252,8 @@ export default function Dashboard() {
                           createdAt: new Date().toISOString(),
                         })
                         alert(`Queued predictions for ${selectedSymbol}: ${genFrom} → ${genTo}`)
+                        setGenFrom('')
+                        setGenTo('')
                       } catch (e) {
                         console.error(e)
                         alert('Failed to queue predictions')
@@ -261,13 +261,23 @@ export default function Dashboard() {
                       setGenerating(false)
                     }}
                     style={{
-                      padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none',
+                      flex: 1, padding: '0.45rem', borderRadius: '6px', border: 'none',
                       background: (!genFrom || !genTo || generating) ? '#555' : '#22c55e',
                       color: '#fff', fontSize: '0.7rem', fontWeight: '600', cursor: 'pointer',
                       opacity: (!genFrom || !genTo || generating) ? 0.5 : 1,
                     }}
                   >
-                    {generating ? '...' : 'Queue'}
+                    {generating ? 'Submitting...' : 'Add to Queue'}
+                  </button>
+                  <button
+                    onClick={() => { setGenFrom(''); setGenTo('') }}
+                    style={{
+                      padding: '0.45rem 0.75rem', borderRadius: '6px',
+                      border: '1px solid var(--pm-border)', background: 'transparent',
+                      color: 'var(--pm-text-muted)', fontSize: '0.7rem', cursor: 'pointer',
+                    }}
+                  >
+                    Reset
                   </button>
                 </div>
               </div>
@@ -277,20 +287,31 @@ export default function Dashboard() {
               ) : history && history.length === 0 ? (
                 <div style={styles.loadingText}>No historical predictions</div>
               ) : history && history.map(([date, pred]) => (
-                <div key={date} style={styles.histRow}>
-                  <div>
-                    <div style={styles.histDate}>{date}</div>
-                    <div style={styles.subtext}>{pred.modelVersion} • {pred.modelType}</div>
+                <div key={date} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--pm-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={styles.histDate}>{date}</div>
+                      <div style={styles.subtext}>{pred.modelVersion} • {pred.modelType}</div>
+                    </div>
+                    <div style={styles.predValues}>
+                      <div style={styles.predHigh}>H: ₹{pred.predictedHigh?.toFixed(2)}</div>
+                      <div style={styles.predLow}>L: ₹{pred.predictedLow?.toFixed(2)}</div>
+                    </div>
                   </div>
-                  <div style={styles.predValues}>
-                    <div style={styles.predHigh}>H: ₹{pred.predictedHigh?.toFixed(2)}</div>
-                    <div style={styles.predLow}>L: ₹{pred.predictedLow?.toFixed(2)}</div>
-                    {pred.evaluated && pred.actualHigh != null && (
-                      <div style={styles.histActual}>
-                        Actual: {pred.actualHigh?.toFixed(0)}–{pred.actualLow?.toFixed(0)}
+                  {pred.evaluated && pred.actualHigh != null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', padding: '0.3rem 0.5rem', background: 'rgba(99,102,241,0.08)', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>Actual</span>
+                      <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.65rem' }}>
+                        <span style={{ color: '#22c55e' }}>H: ₹{pred.actualHigh?.toFixed(2)}</span>
+                        <span style={{ color: '#ef4444' }}>L: ₹{pred.actualLow?.toFixed(2)}</span>
+                        {pred.predictedHigh && pred.actualHigh && (
+                          <span style={{ color: 'var(--pm-text-muted)' }}>
+                            Err: {Math.abs(((pred.predictedHigh - pred.actualHigh) / pred.actualHigh) * 100).toFixed(1)}%
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

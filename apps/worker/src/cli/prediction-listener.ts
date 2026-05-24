@@ -141,8 +141,24 @@ async function processEntry(
         );
 
         if (prediction) {
+          // If market is closed for this date (date is in the past), add actual high/low
+          const now = moment().utcOffset("+05:30");
+          const predDate = moment(date, "YYYY-MM-DD");
+          const marketCloseTime = predDate.clone().hour(15).minute(30);
+          if (now.isAfter(marketCloseTime)) {
+            // Use full day candles to compute actual high/low
+            const actualHigh = Math.max(...candles.map((c) => c.high));
+            const actualLow = Math.min(...candles.map((c) => c.low));
+            prediction.actualHigh = actualHigh;
+            prediction.actualLow = actualLow;
+            prediction.evaluated = true;
+          }
+
           await firebase.setPrediction(symbol, date, prediction);
-          logger.info(`✓ ${symbol}@${date}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}`);
+          const actualStr = prediction.evaluated
+            ? ` | Actual H=${prediction.actualHigh?.toFixed(2)} L=${prediction.actualLow?.toFixed(2)}`
+            : "";
+          logger.info(`✓ ${symbol}@${date}: HIGH=${prediction.predictedHigh.toFixed(2)}, LOW=${prediction.predictedLow.toFixed(2)}${actualStr}`);
         } else {
           logger.warn(`Prediction returned null for ${symbol}@${date}`);
         }
