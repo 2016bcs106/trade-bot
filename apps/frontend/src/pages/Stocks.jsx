@@ -327,16 +327,33 @@ export default function Stocks() {
 
   const handleRemove = async (stock) => {
     setDetailSymbol(null)
-    await Promise.all([
-      remove(ref(db, `stocks/${stock._key}`)),
-      remove(ref(db, `models/${stock._key}`)),
-      remove(ref(db, `predictions/${stock._key}`)),
-    ])
+    // Route through request queue so worker also cleans local model files
+    await push(ref(db, 'request_queue'), {
+      type: 'stock_sync',
+      payload: { symbol: stock._key, action: 'remove' },
+      status: 'pending',
+      createdAt: moment().utcOffset('+05:30').toISOString(),
+    })
   }
 
   const handlePromoteModel = async (symbol, version) => {
+    const prevProdVersion = stocks[symbol]?.currentProductionVersion
+
+    // Update stock's production version pointer
     await set(ref(db, `stocks/${symbol}/currentProductionVersion`), version)
     await set(ref(db, `stocks/${symbol}/updatedAt`), Date.now())
+
+    // Update model metadata state: new version → production
+    if (models[symbol]?.[version]) {
+      await set(ref(db, `models/${symbol}/${version}/state`), 'production')
+      await set(ref(db, `models/${symbol}/${version}/promotedAt`), moment().utcOffset('+05:30').format('YYYY-MM-DD HH:mm:ss'))
+    }
+
+    // Retire previous production model
+    if (prevProdVersion && prevProdVersion !== version && models[symbol]?.[prevProdVersion]) {
+      await set(ref(db, `models/${symbol}/${prevProdVersion}/state`), 'retired')
+      await set(ref(db, `models/${symbol}/${prevProdVersion}/retiredAt`), moment().utcOffset('+05:30').format('YYYY-MM-DD HH:mm:ss'))
+    }
   }
 
   const handleDeleteModel = async (symbol, version) => {

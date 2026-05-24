@@ -126,6 +126,14 @@ export default class FirebaseClient {
     await this._remove(`stocks/${symbol}`);
   }
 
+  async removeModels(symbol: string): Promise<void> {
+    await this._remove(`models/${symbol}`);
+  }
+
+  async removePredictions(symbol: string): Promise<void> {
+    await this._remove(`predictions/${symbol}`);
+  }
+
   onStocksChange(callback: (stocks: Record<string, StockConfig> | null) => void): Unsubscribe {
     return this._onChange("stocks", (value) => {
       callback(value as Record<string, StockConfig> | null);

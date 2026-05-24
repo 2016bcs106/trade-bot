@@ -45,7 +45,8 @@ export async function handleOptimize(): Promise<void> {
       continue;
     }
 
-    const prodVersion = modelManager.getProductionVersion(sym);
+    // Use Firebase as single source of truth for production version
+    const prodVersion = stock.currentProductionVersion;
     const shadowVersion = modelManager.getShadowVersion(sym);
 
     if (!prodVersion || !shadowVersion) {
@@ -63,6 +64,9 @@ export async function handleOptimize(): Promise<void> {
     if (improvement >= 5) {
       modelManager.promote(sym, shadowVersion);
       await firebase.updateStock(sym, { currentProductionVersion: shadowVersion });
+      // Sync metadata to Firebase so all flows see consistent state
+      await firebase.setModelMetadata(sym, shadowVersion, modelManager.loadMetadata(sym, shadowVersion)!);
+      await firebase.setModelMetadata(sym, prodVersion, modelManager.loadMetadata(sym, prodVersion)!);
       logger.info(`✓ Promoted ${sym}: ${shadowVersion} (${improvement.toFixed(1)}% better MAE)`);
     } else {
       logger.info(`${sym}: shadow not significantly better (${improvement.toFixed(1)}%, need ≥5%)`);

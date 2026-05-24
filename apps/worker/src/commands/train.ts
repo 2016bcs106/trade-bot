@@ -74,8 +74,8 @@ export async function handleTrain(): Promise<void> {
       logger.info(`Pruned ${pruned.length} old version(s): ${pruned.join(", ")}`);
     }
 
-    // Auto-promotion logic
-    const currentProd = modelManager.getProductionVersion(sym);
+    // Auto-promotion logic — use Firebase as single source of truth
+    const currentProd = stock.currentProductionVersion;
     if (!currentProd) {
       // First model → always promote to production
       modelManager.promote(sym, version);

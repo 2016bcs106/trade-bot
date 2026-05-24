@@ -12,22 +12,27 @@ const logger = createLogger("handler:stock-sync");
  * Handles "stock_sync" requests — resolves a stock symbol via Paytm Money API,
  * saves the full StockConfig to Firebase, then chains training and prediction.
  *
+ * Also handles stock removal when action: "remove" is specified.
+ *
  * Expected payload:
  * - symbol: string (stock symbol, e.g. "ADANIENT")
+ * - action: "sync" | "remove" (default "sync")
  * - shouldSkipTraining: boolean (default false)
  * - shouldSkipPredicting: boolean (default false)
  *
- * Chain: stock_sync → train (5yr) → predict (last 30 days)
+ * Chain (sync): stock_sync → train (5yr) → predict (last 30 days)
  * If any step fails, the entire request fails (moved to failed_requests).
  */
 export class StockSyncRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
     const {
       symbol,
+      action = "sync",
       shouldSkipTraining = false,
       shouldSkipPredicting = false,
     } = request.payload as {
       symbol: string;
+      action?: "sync" | "remove";
       shouldSkipTraining?: boolean;
       shouldSkipPredicting?: boolean;
     };
@@ -37,6 +42,12 @@ export class StockSyncRequestHandler implements RequestHandler {
     }
 
     const { firebase, paytm: client } = ctx;
+
+    // ─── Handle stock removal ──────────────────────────────────────────
+    if (action === "remove") {
+      await this.handleRemove(symbol, ctx);
+      return;
+    }
 
     // ─── Step 1: Sync stock metadata ──────────────────────────────────
 
@@ -111,5 +122,30 @@ export class StockSyncRequestHandler implements RequestHandler {
         createdAt: request.createdAt,
       }, ctx);
     }
+  }
+
+  /**
+   * Remove a stock completely — cleans Firebase AND local model files.
+   */
+  private async handleRemove(symbol: string, ctx: ServiceContext): Promise<void> {
+    const { firebase, modelManager } = ctx;
+
+    logger.info(`Removing stock: ${symbol}`);
+
+    // Remove from Firebase (stock config, models metadata, predictions)
+    await firebase.removeStock(symbol);
+    logger.info(`  🗑️  Removed stocks/${symbol}`);
+
+    await firebase.removeModels(symbol);
+    logger.info(`  🗑️  Removed models/${symbol}`);
+
+    await firebase.removePredictions(symbol);
+    logger.info(`  🗑️  Removed predictions/${symbol}`);
+
+    // Remove local model files from disk
+    modelManager.deleteSymbolLocal(symbol);
+    logger.info(`  🗑️  Removed local model files for ${symbol}`);
+
+    logger.info(`✓ Stock ${symbol} fully removed`);
   }
 }
