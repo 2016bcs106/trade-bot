@@ -13,5 +13,10 @@
     "name": "trade-bot",
     "schedule": "* * * * *",
     "command": "src/cli/trade-bot.ts"
+  },
+  {
+    "name": "minute-tick-collector",
+    "schedule": "45 3 * * 1-5",
+    "command": "src/cli/minute-tick-collector.ts"
   }
 ]
