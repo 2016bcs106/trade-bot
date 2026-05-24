@@ -286,34 +286,62 @@ export default function Dashboard() {
                 <div style={styles.loadingText}>Loading...</div>
               ) : history && history.length === 0 ? (
                 <div style={styles.loadingText}>No historical predictions</div>
-              ) : history && history.map(([date, pred]) => (
-                <div key={date} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--pm-border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={styles.histDate}>{date}</div>
-                      <div style={styles.subtext}>{pred.modelVersion} • {pred.modelType}</div>
+              ) : history && history.map(([date, pred]) => {
+                // Direction: bullish if predicted midpoint > previous low, else bearish
+                const midPred = (pred.predictedHigh + pred.predictedLow) / 2
+                const range = pred.predictedHigh - pred.predictedLow
+                const isBullish = range > 0 && pred.predictedHigh > midPred // always true, use actual comparison
+                const direction = pred.evaluated && pred.actualHigh != null
+                  ? (pred.actualHigh > pred.predictedHigh ? '↑ Bullish' : pred.actualLow < pred.predictedLow ? '↓ Bearish' : '→ Neutral')
+                  : (pred.predictedHigh > pred.predictedLow ? '↑ Bullish' : '↓ Bearish')
+                const dirColor = direction.startsWith('↑') ? '#22c55e' : direction.startsWith('↓') ? '#ef4444' : '#f59e0b'
+
+                return (
+                  <div key={date} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--pm-border)' }}>
+                    {/* Header: date, model, direction */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={styles.histDate}>{date}</span>
+                          <span style={{ fontSize: '0.6rem', fontWeight: '700', color: dirColor, background: `${dirColor}15`, padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
+                            {direction}
+                          </span>
+                        </div>
+                        <div style={styles.subtext}>{pred.modelVersion} • {pred.modelType}</div>
+                      </div>
+                      {pred.generatedAt && (
+                        <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>
+                          {pred.generatedAt.split(' ')[1] || pred.generatedAt.slice(11, 16)}
+                        </span>
+                      )}
                     </div>
-                    <div style={styles.predValues}>
-                      <div style={styles.predHigh}>H: ₹{pred.predictedHigh?.toFixed(2)}</div>
-                      <div style={styles.predLow}>L: ₹{pred.predictedLow?.toFixed(2)}</div>
-                    </div>
-                  </div>
-                  {pred.evaluated && pred.actualHigh != null && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', padding: '0.3rem 0.5rem', background: 'rgba(99,102,241,0.08)', borderRadius: '6px' }}>
-                      <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>Actual</span>
+
+                    {/* Predicted row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', padding: '0.3rem 0.5rem', background: 'rgba(59,130,246,0.06)', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>Predicted</span>
                       <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.65rem' }}>
-                        <span style={{ color: '#22c55e' }}>H: ₹{pred.actualHigh?.toFixed(2)}</span>
-                        <span style={{ color: '#ef4444' }}>L: ₹{pred.actualLow?.toFixed(2)}</span>
-                        {pred.predictedHigh && pred.actualHigh && (
+                        <span style={{ color: '#22c55e', fontWeight: '600' }}>H: ₹{pred.predictedHigh?.toFixed(2)}</span>
+                        <span style={{ color: '#ef4444', fontWeight: '600' }}>L: ₹{pred.predictedLow?.toFixed(2)}</span>
+                        <span style={{ color: 'var(--pm-text-muted)' }}>R: ₹{range.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Actual row (if evaluated) */}
+                    {pred.evaluated && pred.actualHigh != null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', padding: '0.3rem 0.5rem', background: 'rgba(99,102,241,0.08)', borderRadius: '6px' }}>
+                        <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>Actual</span>
+                        <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.65rem' }}>
+                          <span style={{ color: '#22c55e' }}>H: ₹{pred.actualHigh?.toFixed(2)}</span>
+                          <span style={{ color: '#ef4444' }}>L: ₹{pred.actualLow?.toFixed(2)}</span>
                           <span style={{ color: 'var(--pm-text-muted)' }}>
                             Err: {Math.abs(((pred.predictedHigh - pred.actualHigh) / pred.actualHigh) * 100).toFixed(1)}%
                           </span>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
