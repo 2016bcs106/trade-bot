@@ -315,12 +315,15 @@ export default function Dashboard() {
                     onClick={async () => {
                       setGenerating(true)
                       try {
-                        const pendingRef = ref(db, 'pending_predictions')
-                        const newRef = push(pendingRef)
+                        const queueRef = ref(db, 'request_queue')
+                        const newRef = push(queueRef)
                         await set(newRef, {
-                          symbol: selectedSymbol,
-                          fromDate: genFrom,
-                          toDate: genTo,
+                          type: 'predict',
+                          payload: {
+                            symbol: selectedSymbol,
+                            fromDate: genFrom,
+                            toDate: genTo,
+                          },
                           status: 'pending',
                           createdAt: new Date().toISOString(),
                         })
