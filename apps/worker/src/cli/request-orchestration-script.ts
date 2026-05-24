@@ -1,6 +1,8 @@
 import BaseScript from "./base-script.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext, createServiceContext } from "../request-handlers/request-handler.ts";
+import { AccessTokenRequestHandler } from "../request-handlers/access-token-request-handler.ts";
+import { CleanupRequestHandler } from "../request-handlers/cleanup-request-handler.ts";
 import { PredictionRequestHandler } from "../request-handlers/prediction-request-handler.ts";
 import { StockSyncRequestHandler } from "../request-handlers/stock-sync-request-handler.ts";
 import { TrainingRequestHandler } from "../request-handlers/training-request-handler.ts";
@@ -9,6 +11,8 @@ import { TrainingRequestHandler } from "../request-handlers/training-request-han
  * Registry: maps request type → handler instance.
  */
 const handlerRegistry: Record<string, RequestHandler> = {
+  access_token: new AccessTokenRequestHandler(),
+  cleanup: new CleanupRequestHandler(),
   predict: new PredictionRequestHandler(),
   stock_sync: new StockSyncRequestHandler(),
   train: new TrainingRequestHandler(),
