@@ -152,6 +152,10 @@ export default class FirebaseClient {
     await this._setValue(`models/${symbol}/${version}`, metadata);
   }
 
+  async removeModelMetadata(symbol: string, version: string): Promise<void> {
+    await this._setValue(`models/${symbol}/${version}`, null);
+  }
+
   async getModelMetadata(symbol: string, version: string): Promise<ModelMetadata | null> {
     const data = await this._getValue(`models/${symbol}/${version}`);
     return data as ModelMetadata | null;

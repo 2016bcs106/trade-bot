@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import moment from "moment";
 import { ModelMetadata } from "../types/models/model-metadata.ts";
@@ -158,6 +158,37 @@ export default class ModelManager {
         const numB = parseInt(b.substring(1));
         return numA - numB;
       });
+  }
+
+  /**
+   * Maximum number of versions to keep per symbol.
+   * Older retired versions are deleted when this limit is exceeded.
+   */
+  private readonly MAX_VERSIONS = 14;
+
+  /**
+   * Prune old versions if total exceeds MAX_VERSIONS.
+   * Only deletes retired versions (never production or shadow).
+   * Deletes from oldest first.
+   */
+  pruneOldVersions(symbol: string): string[] {
+    const versions = this.listVersions(symbol);
+    if (versions.length <= this.MAX_VERSIONS) return [];
+
+    const deleted: string[] = [];
+    // Sort oldest first, check if retired, delete until under limit
+    for (const v of versions) {
+      if (versions.length - deleted.length <= this.MAX_VERSIONS) break;
+
+      const metadata = this.loadMetadata(symbol, v);
+      if (metadata && metadata.state === "retired") {
+        const versionDir = join(this.modelsDir, symbol, v);
+        rmSync(versionDir, { recursive: true, force: true });
+        deleted.push(v);
+      }
+    }
+
+    return deleted;
   }
 
   /**

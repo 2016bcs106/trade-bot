@@ -67,6 +67,15 @@ export async function handleTrain(): Promise<void> {
       await firebase.setModelMetadata(sym, version, metadata);
     }
 
+    // Prune old versions (keep max 14)
+    const pruned = modelManager.pruneOldVersions(sym);
+    for (const pv of pruned) {
+      await firebase.removeModelMetadata(sym, pv);
+    }
+    if (pruned.length > 0) {
+      logger.info(`Pruned ${pruned.length} old version(s): ${pruned.join(", ")}`);
+    }
+
     // Auto-promotion logic
     const currentProd = modelManager.getProductionVersion(sym);
     if (!currentProd) {

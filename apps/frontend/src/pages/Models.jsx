@@ -57,17 +57,26 @@ export default function Models() {
     return () => unsub()
   }, [])
 
-  // Get only the latest version per symbol
+  // Get the production model per symbol (fallback to latest if no production)
   const latestModels = Object.entries(models).map(([symbol, versions]) => {
-    const sorted = Object.entries(versions || {})
-      .sort(([a], [b]) => {
-        const numA = parseInt(a.replace('v', ''))
-        const numB = parseInt(b.replace('v', ''))
-        return numB - numA
-      })
-    if (sorted.length === 0) return null
+    const entries = Object.entries(versions || {})
+    if (entries.length === 0) return null
+
+    // Find the production model
+    const production = entries.find(([, meta]) => meta.state === 'production')
+    if (production) {
+      const [version, meta] = production
+      return { symbol, version, meta, totalVersions: entries.length }
+    }
+
+    // Fallback: latest version
+    const sorted = entries.sort(([a], [b]) => {
+      const numA = parseInt(a.replace('v', ''))
+      const numB = parseInt(b.replace('v', ''))
+      return numB - numA
+    })
     const [version, meta] = sorted[0]
-    return { symbol, version, meta, totalVersions: sorted.length }
+    return { symbol, version, meta, totalVersions: entries.length }
   }).filter(Boolean)
 
   return (
