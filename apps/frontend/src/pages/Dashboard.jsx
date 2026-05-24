@@ -155,40 +155,77 @@ export default function Dashboard() {
   return (
     <div style={styles.container}>
       <div style={styles.sectionTitle}>Predictions — {businessDay}</div>
-      <div style={styles.card}>
-        {rows.length === 0 ? (
-          <div style={styles.empty}>No enabled stocks</div>
-        ) : (
-          rows.map((row, i) => (
-            <div
-              key={row.symbol}
-              style={i === rows.length - 1 ? styles.predRowLast : styles.predRow}
-              onClick={() => openHistory(row.symbol)}
-            >
-              <div>
-                <div style={styles.symbol}>{row.symbol}</div>
-                <div style={styles.subtext}>
-                  {row.status === 'predicted'
-                    ? `${row.modelVersion} • ${row.modelType}`
-                    : 'Prediction pending'}
+      {rows.length === 0 ? (
+        <div style={styles.card}><div style={styles.empty}>No enabled stocks</div></div>
+      ) : (
+        rows.map((row) => {
+          const hasActual = row.status === 'predicted' && row.evaluated && row.actualHigh != null
+          const direction = hasActual
+            ? (row.actualHigh > row.predictedHigh ? 'Bullish' : row.actualLow < row.predictedLow ? 'Bearish' : 'In Range')
+            : null
+          const dirIcon = direction === 'Bullish' ? '▲' : direction === 'Bearish' ? '▼' : '●'
+          const dirColor = direction === 'Bullish' ? '#22c55e' : direction === 'Bearish' ? '#ef4444' : '#f59e0b'
+
+          return (
+            <div key={row.symbol} style={{ ...styles.card, cursor: 'pointer' }} onClick={() => openHistory(row.symbol)}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: row.status === 'predicted' ? '0.5rem' : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={styles.symbol}>{row.symbol}</span>
+                  {direction && (
+                    <span style={{ fontSize: '0.6rem', fontWeight: '700', color: dirColor }}>
+                      {dirIcon} {direction}
+                    </span>
+                  )}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {row.status === 'predicted' ? (
+                    <div style={styles.subtext}>{row.modelVersion} • {row.modelType}</div>
+                  ) : (
+                    <span style={{ fontSize: '0.65rem', fontWeight: '600', color: '#f59e0b', background: 'rgba(245,158,11,0.12)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                      Scheduled
+                    </span>
+                  )}
                 </div>
               </div>
-              <div style={styles.predValues}>
-                {row.status === 'predicted' ? (
-                  <>
-                    <div style={styles.predHigh}>H: ₹{row.predictedHigh?.toFixed(2)}</div>
-                    <div style={styles.predLow}>L: ₹{row.predictedLow?.toFixed(2)}</div>
-                  </>
-                ) : (
-                  <span style={{ fontSize: '0.65rem', fontWeight: '600', color: '#f59e0b', background: 'rgba(245,158,11,0.12)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
-                    Scheduled
-                  </span>
-                )}
-              </div>
+
+              {/* Table for predicted stocks */}
+              {row.status === 'predicted' && (
+                <div style={{ background: 'var(--pm-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--pm-border)' }}>
+                  {/* Column headers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.25rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
+                    <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}></span>
+                    <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>Predicted</span>
+                    {hasActual && <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>Actual</span>}
+                    {hasActual && <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)', fontWeight: '600', textAlign: 'center' }}>Error</span>}
+                  </div>
+                  {/* High row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#22c55e', fontWeight: '600' }}>High</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.predictedHigh?.toFixed(2)}</span>
+                    {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.actualHigh?.toFixed(2)}</span>}
+                    {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((row.predictedHigh - row.actualHigh) / row.actualHigh) * 100).toFixed(1)}%</span>}
+                  </div>
+                  {/* Low row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: '600' }}>Low</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.predictedLow?.toFixed(2)}</span>
+                    {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.actualLow?.toFixed(2)}</span>}
+                    {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((row.predictedLow - row.actualLow) / row.actualLow) * 100).toFixed(1)}%</span>}
+                  </div>
+                  {/* Range row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#f59e0b', fontWeight: '600' }}>Range</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{(row.predictedHigh - row.predictedLow).toFixed(2)}</span>
+                    {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{(row.actualHigh - row.actualLow).toFixed(2)}</span>}
+                    {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs((((row.predictedHigh - row.predictedLow) - (row.actualHigh - row.actualLow)) / (row.actualHigh - row.actualLow)) * 100).toFixed(1)}%</span>}
+                  </div>
+                </div>
+              )}
             </div>
-          ))
-        )}
-      </div>
+          )
+        })
+      )}
 
       {/* Historical modal */}
       {selectedSymbol && (
