@@ -168,8 +168,6 @@ export class SystemUpdateRequestHandler implements RequestHandler {
   }
 
   private detectNodeDir(): string {
-    // Use the current process's node binary path — guaranteed to work
-    // since this code is already running under node
-    return dirname(process.execPath);
+    return "/home/ec2-user/.nvm/versions/node/v24.15.0/bin";
   }
 }
