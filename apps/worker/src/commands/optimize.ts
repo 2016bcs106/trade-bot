@@ -1,4 +1,5 @@
 import createLogger from "../utils/logger.ts";
+import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import { StockConfig } from "../types/stocks/index.ts";
@@ -9,12 +10,15 @@ const logger = createLogger("cmd:optimize");
 /**
  * Run optimization review — compare shadow vs production, promote if 5%+ better.
  * Only promotes when autoOptimize is enabled for the stock.
+ *
+ * Usage: pnpm optimize --symbol=ADANIENT or pnpm optimize --all
  */
-export async function handleOptimize(symbol: string | null, all: boolean): Promise<void> {
+export async function handleOptimize(): Promise<void> {
+  const config = new TradingConfig("ml");
   const firebase = new FirebaseClient();
   const modelManager = new ModelManager();
 
-  let symbols = await getEnabledSymbols(symbol, all);
+  let symbols = await getEnabledSymbols(config.symbol || null, config.all || false);
 
   // Default: all stocks with autoOptimize enabled
   if (symbols.length === 0) {

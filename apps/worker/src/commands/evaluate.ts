@@ -1,5 +1,6 @@
 import moment from "moment";
 import createLogger from "../utils/logger.ts";
+import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import EvaluationEngine from "../evaluation/evaluation-engine.ts";
 import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
@@ -9,9 +10,13 @@ const logger = createLogger("cmd:evaluate");
 
 /**
  * Evaluate today's predictions against actual high/low fetched from API.
+ *
+ * Usage: pnpm evaluate --symbol=ADANIENT or pnpm evaluate --all
  */
-export async function handleEvaluate(symbol: string | null, all: boolean): Promise<void> {
-  const symbols = await getEnabledSymbols(symbol, all);
+export async function handleEvaluate(): Promise<void> {
+  const config = new TradingConfig("ml");
+
+  const symbols = await getEnabledSymbols(config.symbol || null, config.all || false);
   if (symbols.length === 0) {
     logger.error("Please specify --symbol=SYMBOL or --all");
     process.exit(1);

@@ -1,7 +1,6 @@
 import "../config/env.ts";
 import moment from "moment";
 import createLogger from "../utils/logger.ts";
-import TradingConfig from "../config/trading-config.ts";
 import Scheduler, { createDefaultScheduler } from "../scheduler/scheduler.ts";
 import { handleTrain } from "../commands/train.ts";
 import { handlePredict } from "../commands/predict.ts";
@@ -14,9 +13,10 @@ const COMMANDS = ["train", "predict", "evaluate", "retrain", "optimize", "schedu
 type Command = typeof COMMANDS[number];
 
 /**
- * ML CLI — uses TradingConfig.parseArgs() for consistent --key=value arg parsing.
+ * ML CLI — thin dispatcher that delegates to command handlers.
+ * All --key=value args are parsed by TradingConfig("ml") inside each handler.
  *
- * Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all]
+ * Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--model=random-forest] [--lookbackDays=90]
  */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -27,25 +27,20 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Parse --key=value args using TradingConfig's parser
-  const args = TradingConfig.parseArgs(argv.slice(1));
-  const symbol = (args.symbol || args.s || "").toUpperCase() || null;
-  const all = argv.includes("--all");
-
   const now = moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss");
-  logger.info(`[${now}] Command: ${command}${symbol ? ` --symbol=${symbol}` : ""}${all ? " --all" : ""}`);
+  logger.info(`[${now}] Command: ${command} ${argv.slice(1).join(" ")}`.trim());
 
   switch (command) {
     case "train":
-      return handleTrain(symbol, all);
+      return handleTrain();
     case "predict":
-      return handlePredict(symbol, all);
+      return handlePredict();
     case "evaluate":
-      return handleEvaluate(symbol, all);
+      return handleEvaluate();
     case "retrain":
-      return handleTrain(symbol, all);
+      return handleTrain();
     case "optimize":
-      return handleOptimize(symbol, all);
+      return handleOptimize();
     case "scheduler:start":
       return startScheduler();
     case "scheduler:list":
@@ -55,10 +50,10 @@ async function main(): Promise<void> {
 
 function startScheduler(): Promise<void> {
   const scheduler = createDefaultScheduler({
-    predict: () => handlePredict(null, true),
-    evaluate: () => handleEvaluate(null, true),
-    retrain: () => handleTrain(null, true),
-    optimize: () => handleOptimize(null, true),
+    predict: () => handlePredict(),
+    evaluate: () => handleEvaluate(),
+    retrain: () => handleTrain(),
+    optimize: () => handleOptimize(),
   });
 
   scheduler.start();
@@ -80,10 +75,10 @@ function printUsage(): void {
   console.log(`
 ML CLI — Quantitative Research Platform
 
-Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all]
+Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--model=TYPE] [--lookbackDays=N]
 
 Commands:
-  train             Train a new model
+  train             Train a new model (default: random-forest)
   predict           Generate prediction for today
   evaluate          Evaluate predictions against actuals
   retrain           Force shadow model retraining
@@ -94,6 +89,8 @@ Commands:
 Options:
   --symbol=SYMBOL   Stock symbol (e.g., --symbol=RELIANCE)
   --all             Process all enabled stocks
+  --model=TYPE      Model type: random-forest (default) or linear-regression
+  --lookbackDays=N  Training lookback in days (default: 90)
   `);
 }
 

@@ -26,7 +26,7 @@ const LIVE_STREAM_DEFAULTS = {
   statsInterval: 300,
 };
 
-export type ScriptName = "trade-bot" | "live-stream";
+export type ScriptName = "trade-bot" | "live-stream" | "ml";
 
 export default class TradingConfig {
   // Common
@@ -54,6 +54,12 @@ export default class TradingConfig {
   bufferSize?: number;
   statsInterval?: number;
 
+  // ML commands
+  symbol?: string;
+  all?: boolean;
+  model?: string;
+  lookbackDays?: number;
+
   constructor(script: ScriptName = "trade-bot", argv: string[] = process.argv.slice(2)) {
     const args = TradingConfig.parseArgs(argv);
 
@@ -65,6 +71,8 @@ export default class TradingConfig {
       this._initTradeBot(args);
     } else if (script === "live-stream") {
       this._initLiveStream(args);
+    } else if (script === "ml") {
+      this._initMl(args);
     }
   }
 
@@ -111,6 +119,14 @@ export default class TradingConfig {
     this.bufferSize = args.bufferSize != null ? Number(args.bufferSize) : LIVE_STREAM_DEFAULTS.bufferSize;
     this.statsInterval = args.statsInterval != null ? Number(args.statsInterval) : LIVE_STREAM_DEFAULTS.statsInterval;
     this.isValid = true;
+  }
+
+  private _initMl(args: Record<string, string>): void {
+    this.symbol = args.symbol || undefined;
+    this.all = args.all === "true" || process.argv.includes("--all");
+    this.model = args.model || "random-forest";
+    this.lookbackDays = args.lookbackDays != null ? Number(args.lookbackDays) : 90;
+    this.isValid = !!(this.symbol || this.all);
   }
 
   static parseArgs(argv: string[]): Record<string, string> {

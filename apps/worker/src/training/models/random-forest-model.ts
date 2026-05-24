@@ -29,13 +29,12 @@ export class RandomForestModel implements TrainableModel {
   fit(X: number[][], yHigh: number[], yLow: number[]): void {
     const options = {
       nEstimators: this.nEstimators,
-      maxSamples: 1.0,
-      maxFeatures: this.maxFeatures,
+      seed: 42,
+      useSampleBagging: true,
       treeOptions: {
         maxDepth: this.maxDepth,
         minNumSamples: this.minSamplesLeaf,
       },
-      seed: 42,
     };
 
     this.forestHigh = new RandomForestRegression(options);

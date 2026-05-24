@@ -1,5 +1,6 @@
 import moment from "moment";
 import createLogger from "../utils/logger.ts";
+import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PredictionEngine from "../prediction/prediction-engine.ts";
@@ -11,9 +12,13 @@ const logger = createLogger("cmd:predict");
 
 /**
  * Generate predictions for one or all enabled stocks using today's live data.
+ *
+ * Usage: pnpm predict --symbol=ADANIENT or pnpm predict --all
  */
-export async function handlePredict(symbol: string | null, all: boolean): Promise<void> {
-  const symbols = await getEnabledSymbols(symbol, all);
+export async function handlePredict(): Promise<void> {
+  const config = new TradingConfig("ml");
+
+  const symbols = await getEnabledSymbols(config.symbol || null, config.all || false);
   if (symbols.length === 0) {
     logger.error("Please specify --symbol=SYMBOL or --all");
     process.exit(1);
