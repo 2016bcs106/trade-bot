@@ -6,7 +6,6 @@ import Home from './pages/Home'
 import ScriptStatus from './pages/ScriptStatus'
 import Stocks from './pages/Stocks'
 import Dashboard from './pages/Dashboard'
-import Models from './pages/Models'
 import Audit from './pages/Audit'
 import PaytmMoneyCallback from './pages/PaytmMoneyCallback'
 
@@ -26,7 +25,6 @@ function App() {
         <Route path="/scripts" element={<AuthGuard><ScriptStatus /></AuthGuard>} />
         <Route path="/stocks" element={<AuthGuard><Stocks /></AuthGuard>} />
         <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
-        <Route path="/models" element={<AuthGuard><Models /></AuthGuard>} />
         <Route path="/audit" element={<AuthGuard><Audit /></AuthGuard>} />
       </Routes>
       <BottomNav />
