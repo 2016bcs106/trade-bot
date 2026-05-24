@@ -3,7 +3,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import BaseScript from "./base-script.ts";
-import { nowMs, todayDate } from "../utils/time.ts";
+import { now, nowMs, todayDate } from "../utils/time.ts";
 import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.ts";
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { StockConfig } from "../types/stocks/stock-config.ts";
@@ -130,9 +130,9 @@ class MinuteTickCollector extends BaseScript {
    * After firing, re-schedules for the next minute's :59.
    */
   private scheduleNextFlush(): void {
-    const now = new Date();
-    const secondsUntil59 = (59 - now.getSeconds() + 60) % 60;
-    const msUntil59 = secondsUntil59 * 1000 - now.getMilliseconds();
+    const currentTime = new Date();
+    const secondsUntil59 = (59 - currentTime.getSeconds() + 60) % 60;
+    const msUntil59 = secondsUntil59 * 1000 - currentTime.getMilliseconds();
     const delay = msUntil59 <= 0 ? 60_000 + msUntil59 : msUntil59;
 
     this.flushTimer = setTimeout(() => {
@@ -208,8 +208,8 @@ class MinuteTickCollector extends BaseScript {
       this.dailyReset(today);
     }
 
-    const now = new Date();
-    const minuteBucket = `${today} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const ist = now();
+    const minuteBucket = `${today} ${ist.format("HH:mm")}`;
 
     const active = this.activeCandles.get(symbol);
 
