@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { db, ref, onValue, onChildAdded, off } from '../utils/firebase'
+import moment from 'moment'
+import { db, ref, onValue, onChildAdded, off, get } from '../utils/firebase'
 import { layout } from '../utils/styles'
 import PortfolioChart from '../components/PortfolioChart'
 import TradeList from '../components/TradeList'
@@ -41,8 +42,10 @@ export default function Home() {
   const [selectedSymbol, setSelectedSymbol] = useState('')
   const [ticks, setTicks] = useState([])
   const [signals, setSignals] = useState([])
+  const [prediction, setPrediction] = useState(null)
 
   const isDryRun = new URLSearchParams(window.location.search).has('dryRun')
+  const today = moment().utcOffset('+05:30').format('YYYY-MM-DD')
 
   // Load enabled stocks from Firebase
   useEffect(() => {
@@ -100,7 +103,22 @@ export default function Home() {
     }
   }, [isDryRun, selectedSymbol])
 
+  // Load today's prediction for the selected stock
+  useEffect(() => {
+    if (isDryRun || !selectedSymbol) { setPrediction(null); return }
+    const predRef = ref(db, `predictions/${selectedSymbol}/${today}`)
+    const unsub = onValue(predRef, (snap) => {
+      setPrediction(snap.val() || null)
+    })
+    return () => unsub()
+  }, [isDryRun, selectedSymbol, today])
+
   const enabledSymbols = Object.keys(stocks).sort()
+
+  // Compute direction from prediction
+  const direction = prediction?.predictedHigh && prediction?.predictedLow && prediction?.referencePrice
+    ? ((prediction.predictedHigh + prediction.predictedLow) / 2 >= prediction.referencePrice ? 'Bullish' : 'Bearish')
+    : null
 
   return (
     <div style={{ ...layout.page, paddingBottom: '4rem' }}>
@@ -122,11 +140,27 @@ export default function Home() {
         </div>
       )}
 
+      {/* Direction badge */}
+      {direction && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.25rem 0' }}>
+          <span style={{
+            fontSize: '0.7rem', fontWeight: '700',
+            color: direction === 'Bullish' ? '#22c55e' : '#ef4444',
+            background: direction === 'Bullish' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+            padding: '0.25rem 0.75rem', borderRadius: '12px',
+          }}>
+            {direction === 'Bullish' ? '▲' : '▼'} {direction} • H: ₹{prediction.predictedHigh.toFixed(1)} • L: ₹{prediction.predictedLow.toFixed(1)}
+          </span>
+        </div>
+      )}
+
       <PortfolioChart
         name={stocks[selectedSymbol]?.name || selectedSymbol || 'Select Stock'}
         ticker={selectedSymbol || '?'}
         ticks={ticks}
         signals={signals}
+        predictedHigh={prediction?.predictedHigh || null}
+        predictedLow={prediction?.predictedLow || null}
       />
 
       <TradeList signals={signals} />

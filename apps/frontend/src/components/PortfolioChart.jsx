@@ -107,7 +107,7 @@ const styles = {
   },
 }
 
-export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'AE', ticks = [], signals = [] }) {
+export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ticks = [], signals = [], predictedHigh = null, predictedLow = null }) {
   const [visible, setVisible] = useState({ close: true, fastSma: false, slowSma: false })
   const chartRef = useRef(null)
 
@@ -177,9 +177,40 @@ export default function PortfolioChart({ name = 'Adani Enterprises', ticker = 'A
     }
   }
 
+  // Build prediction line datasets (horizontal dotted lines)
+  const predictionDatasets = []
+  if (predictedHigh !== null && timeLabels.length > 0) {
+    predictionDatasets.push({
+      label: 'Pred High',
+      data: timeLabels.map(() => predictedHigh),
+      borderColor: 'rgba(34, 197, 94, 0.6)',
+      borderWidth: 1.5,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+      spanGaps: true,
+      hidden: false,
+    })
+  }
+  if (predictedLow !== null && timeLabels.length > 0) {
+    predictionDatasets.push({
+      label: 'Pred Low',
+      data: timeLabels.map(() => predictedLow),
+      borderColor: 'rgba(239, 68, 68, 0.6)',
+      borderWidth: 1.5,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+      spanGaps: true,
+      hidden: false,
+    })
+  }
+
   const chartData = {
     labels: timeLabels,
-    datasets: Object.keys(SERIES).map(makeDataset),
+    datasets: [...Object.keys(SERIES).map(makeDataset), ...predictionDatasets],
   }
 
   return (
