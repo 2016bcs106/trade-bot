@@ -224,7 +224,7 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
 }
 
 // ─── Models Modal ──────────────────────────────────────────────────────
-function ModelsModal({ symbol, models, productionVersion, onClose, onPromote, onDelete }) {
+function ModelsModal({ symbol, models, productionVersion, onClose, onPromote, onDelete, onRetrain }) {
   const versions = models
     ? Object.entries(models)
         .map(([v, meta]) => ({ version: v, ...meta }))
@@ -236,7 +236,16 @@ function ModelsModal({ symbol, models, productionVersion, onClose, onPromote, on
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{symbol} — Models</span>
-          <button style={styles.modalClose} onClick={onClose}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              style={{ ...styles.actionBtn, color: '#3b82f6', fontSize: '0.75rem', margin: 0 }}
+              onClick={onRetrain}
+              title="Retrain model"
+            >
+              <FontAwesomeIcon icon={faSync} /> Retrain
+            </button>
+            <button style={styles.modalClose} onClick={onClose}>×</button>
+          </div>
         </div>
         <div style={styles.modalBody}>
           {versions.length === 0 ? (
@@ -496,6 +505,7 @@ export default function Stocks() {
           onClose={() => setModelsSymbol(null)}
           onPromote={(version) => handlePromoteModel(modelsSymbol, version)}
           onDelete={(version) => handleDeleteModel(modelsSymbol, version)}
+          onRetrain={() => handleRetrain(modelsSymbol)}
         />
       )}
     </div>
