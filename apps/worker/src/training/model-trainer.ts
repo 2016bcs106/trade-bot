@@ -1,165 +1,216 @@
-import { FeatureVector } from "../types/features/feature-vector.ts";
-import { ModelMetrics, TrainingInfo } from "../types/models/model-metadata.ts";
+import { readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { OHLCV } from "../types/market-data/ohlcv.ts";
+import { FeatureVector, PreviousDayContext } from "../types/features/feature-vector.ts";
 import FeatureEngineer from "../features/feature-engineer.ts";
-import { LinearRegressionModel } from "./models/linear-regression-model.ts";
-import { RandomForestModel } from "./models/random-forest-model.ts";
-import { TrainableModel, TrainingResult } from "./models/trainable-model.ts";
+import { TrainableModel, TrainingResult } from "../training/models/trainable-model.ts";
+import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
+import { RandomForestModel } from "../training/models/random-forest-model.ts";
+import { ModelMetrics } from "../types/models/model-metadata.ts";
+import NdjsonStorage from "../data/storage/ndjson-storage.ts";
+import createLogger from "../utils/logger.ts";
+
+const logger = createLogger("model-trainer");
 
 /**
- * Model training pipeline with walk-forward validation.
+ * Training sample: feature vector + target labels (actual daily high/low).
+ */
+interface TrainingSample {
+  features: FeatureVector;
+  featureArray: number[];
+  targetHigh: number;
+  targetLow: number;
+  date: string;
+}
+
+/**
+ * Model trainer orchestrator — loads data, computes features, trains model,
+ * evaluates on validation set using walk-forward expanding window.
  *
- * Key principles:
- * - NEVER uses random train/test split (chronological only)
- * - Expanding window: train on all data up to point T, validate on T+1...T+N
- * - Trains separate models for HIGH and LOW prediction
+ * Walk-forward validation:
+ * - Data sorted chronologically
+ * - Train on first N days, validate on next M days
+ * - NO random splits (prevents future data leakage)
  */
 export default class ModelTrainer {
   private featureEngineer: FeatureEngineer;
+  private storage: NdjsonStorage;
 
-  constructor() {
+  constructor(dataDir?: string) {
     this.featureEngineer = new FeatureEngineer();
+    this.storage = new NdjsonStorage(dataDir);
   }
 
   /**
-   * Train a model using walk-forward validation.
+   * Train a model for a given symbol using available historical 1-min data.
    *
    * @param symbol Stock symbol
-   * @param features Chronologically ordered feature vectors (with actualHigh/Low filled)
-   * @param modelType Which model algorithm to use
-   * @param validationRatio Fraction of data to use for validation (from the end)
-   * @returns Training result with model metadata and serialized weights
+   * @param modelType Algorithm to use
+   * @param validationRatio Fraction of data for validation (default 0.2 = last 20%)
+   * @returns TrainingResult or null if insufficient data
    */
   train(
     symbol: string,
-    features: FeatureVector[],
-    modelType: "linear-regression" | "random-forest",
+    modelType: "linear-regression" | "random-forest" = "linear-regression",
     validationRatio: number = 0.2,
   ): TrainingResult | null {
-    // Filter to only samples with targets
-    const validSamples = features.filter((f) => f.actualHigh !== undefined && f.actualLow !== undefined);
+    const startTime = Date.now();
 
-    if (validSamples.length < 30) {
-      return null; // Insufficient data
-    }
+    // Step 1: Load and prepare training samples
+    logger.info(`Loading data for ${symbol}...`);
+    const samples = this.buildSamples(symbol);
 
-    // Chronological split (NO random shuffle)
-    const splitIndex = Math.floor(validSamples.length * (1 - validationRatio));
-    const trainSet = validSamples.slice(0, splitIndex);
-    const valSet = validSamples.slice(splitIndex);
-
-    if (trainSet.length < 20 || valSet.length < 5) {
+    if (samples.length < 30) {
+      logger.error(`Insufficient data for ${symbol}: ${samples.length} samples (need ≥30)`);
       return null;
     }
 
-    // Convert to numeric arrays
-    const trainX = trainSet.map((f) => this.featureEngineer.toNumericArray(f));
-    const trainYHigh = trainSet.map((f) => f.actualHigh!);
-    const trainYLow = trainSet.map((f) => f.actualLow!);
+    logger.info(`Built ${samples.length} training samples for ${symbol}`);
 
-    const valX = valSet.map((f) => this.featureEngineer.toNumericArray(f));
-    const valYHigh = valSet.map((f) => f.actualHigh!);
-    const valYLow = valSet.map((f) => f.actualLow!);
+    // Step 2: Walk-forward split (chronological)
+    const splitIdx = Math.floor(samples.length * (1 - validationRatio));
+    const trainSet = samples.slice(0, splitIdx);
+    const valSet = samples.slice(splitIdx);
 
-    // Create model
-    const startTime = Date.now();
+    logger.info(`Split: ${trainSet.length} train / ${valSet.length} validation`);
+
+    // Step 3: Prepare feature matrices
+    const X_train = trainSet.map((s) => s.featureArray);
+    const yHigh_train = trainSet.map((s) => s.targetHigh);
+    const yLow_train = trainSet.map((s) => s.targetLow);
+
+    // Step 4: Create and fit model
     const model = this.createModel(modelType);
+    logger.info(`Training ${modelType} model...`);
+    model.fit(X_train, yHigh_train, yLow_train);
 
-    // Train on combined high/low targets
-    model.fit(trainX, trainYHigh, trainYLow);
-
+    // Step 5: Evaluate on validation set
+    const metrics = this.evaluateModel(model, valSet);
     const durationMs = Date.now() - startTime;
 
-    // Validate
-    const predictionsHigh = valX.map((x) => model.predictHigh(x));
-    const predictionsLow = valX.map((x) => model.predictLow(x));
+    logger.info(`Training complete in ${durationMs}ms — MAE: ${metrics.mae.toFixed(2)}, MAPE: ${metrics.mape.toFixed(2)}%`);
 
-    // Compute metrics
-    const metrics = this.computeMetrics(
-      predictionsHigh,
-      predictionsLow,
-      valYHigh,
-      valYLow,
-      valSet,
-    );
-
-    // Build training info
-    const trainingInfo: TrainingInfo = {
-      dataStartDate: validSamples[0].date,
-      dataEndDate: validSamples[validSamples.length - 1].date,
-      sampleCount: trainSet.length,
-      featureCount: this.featureEngineer.getFeatureNames().length,
-      features: this.featureEngineer.getFeatureNames(),
-      hyperparameters: model.getHyperparameters(),
-      durationMs,
-    };
-
+    // Step 6: Build result
     return {
       modelType,
       symbol,
       serializedModel: model.serialize(),
-      training: trainingInfo,
+      training: {
+        dataStartDate: samples[0].date,
+        dataEndDate: samples[samples.length - 1].date,
+        sampleCount: trainSet.length,
+        featureCount: this.featureEngineer.getFeatureNames().length,
+        features: this.featureEngineer.getFeatureNames(),
+        hyperparameters: model.getHyperparameters(),
+        durationMs,
+      },
       metrics,
     };
   }
 
   /**
-   * Compute validation metrics from predictions vs actuals.
+   * Build training samples from local ndjson data.
+   * Each sample = features from first 45 min + targets from full day.
    */
-  private computeMetrics(
-    predHigh: number[],
-    predLow: number[],
-    actualHigh: number[],
-    actualLow: number[],
-    valSet: FeatureVector[],
-  ): ModelMetrics {
-    const n = predHigh.length;
+  private buildSamples(symbol: string): TrainingSample[] {
+    const samples: TrainingSample[] = [];
 
-    // MAE
-    let sumAbsErrorHigh = 0;
-    let sumAbsErrorLow = 0;
-    let sumSqErrorHigh = 0;
-    let sumSqErrorLow = 0;
-    let sumPctErrorHigh = 0;
-    let sumPctErrorLow = 0;
+    // Get available dates by reading the data directory
+    const dates = this.getAvailableDates(symbol, "1min");
+
+    if (dates.length < 2) return samples;
+
+    let prevDayContext: PreviousDayContext | null = null;
+
+    for (let i = 0; i < dates.length; i++) {
+      const date = dates[i];
+      const candles = this.storage.read(symbol, "1min", date);
+
+      if (candles.length < 30) {
+        // Update prevDay for next iteration regardless
+        prevDayContext = this.buildPrevDayContext(candles);
+        continue;
+      }
+
+      // Compute features from first 45 min
+      const features = this.featureEngineer.compute(symbol, date, candles, prevDayContext);
+      if (!features) {
+        prevDayContext = this.buildPrevDayContext(candles);
+        continue;
+      }
+
+      // Target: actual daily high and low from ALL candles
+      const dailyHigh = Math.max(...candles.map((c) => c.high));
+      const dailyLow = Math.min(...candles.map((c) => c.low));
+
+      samples.push({
+        features,
+        featureArray: this.featureEngineer.toNumericArray(features),
+        targetHigh: dailyHigh,
+        targetLow: dailyLow,
+        date,
+      });
+
+      // Update previous day context for next day
+      prevDayContext = this.buildPrevDayContext(candles);
+    }
+
+    return samples;
+  }
+
+  /**
+   * Evaluate model on validation samples, computing standard metrics.
+   */
+  private evaluateModel(model: TrainableModel, valSet: TrainingSample[]): ModelMetrics {
+    let totalHighErr = 0;
+    let totalLowErr = 0;
+    let totalHighSqErr = 0;
+    let totalLowSqErr = 0;
+    let totalHighPctErr = 0;
+    let totalLowPctErr = 0;
     let directionalCorrect = 0;
     let rangeContained = 0;
 
-    for (let i = 0; i < n; i++) {
-      const errH = Math.abs(predHigh[i] - actualHigh[i]);
-      const errL = Math.abs(predLow[i] - actualLow[i]);
+    for (const sample of valSet) {
+      const predHigh = model.predictHigh(sample.featureArray);
+      const predLow = model.predictLow(sample.featureArray);
 
-      sumAbsErrorHigh += errH;
-      sumAbsErrorLow += errL;
-      sumSqErrorHigh += errH * errH;
-      sumSqErrorLow += errL * errL;
+      const highErr = Math.abs(predHigh - sample.targetHigh);
+      const lowErr = Math.abs(predLow - sample.targetLow);
 
-      if (actualHigh[i] > 0) sumPctErrorHigh += errH / actualHigh[i];
-      if (actualLow[i] > 0) sumPctErrorLow += errL / actualLow[i];
+      totalHighErr += highErr;
+      totalLowErr += lowErr;
+      totalHighSqErr += highErr ** 2;
+      totalLowSqErr += lowErr ** 2;
+      totalHighPctErr += sample.targetHigh > 0 ? (highErr / sample.targetHigh) * 100 : 0;
+      totalLowPctErr += sample.targetLow > 0 ? (lowErr / sample.targetLow) * 100 : 0;
 
-      // Directional accuracy: predicted range vs actual range direction
-      const predMid = (predHigh[i] + predLow[i]) / 2;
-      const actualMid = (actualHigh[i] + actualLow[i]) / 2;
-      const cumReturn = valSet[i].cumulativeReturn;
-      // If cumReturn is positive and predicted mid > actual low, or negative and below high
-      if ((cumReturn >= 0 && predMid >= actualMid * 0.99) || (cumReturn < 0 && predMid <= actualMid * 1.01)) {
+      // Directional: predicted midpoint direction
+      const predMid = (predHigh + predLow) / 2;
+      const actualMid = (sample.targetHigh + sample.targetLow) / 2;
+      const firstOpen = sample.features.cumulativeReturn; // relative to open
+      if ((predMid > actualMid) === (firstOpen > 0)) {
         directionalCorrect++;
       }
 
-      // Range containment: actual high <= predicted high AND actual low >= predicted low
-      if (actualHigh[i] <= predHigh[i] && actualLow[i] >= predLow[i]) {
+      // Range containment
+      if (sample.targetHigh <= predHigh && sample.targetLow >= predLow) {
         rangeContained++;
       }
     }
 
-    const mae = (sumAbsErrorHigh + sumAbsErrorLow) / (2 * n);
-    const rmse = Math.sqrt((sumSqErrorHigh + sumSqErrorLow) / (2 * n));
-    const mape = ((sumPctErrorHigh + sumPctErrorLow) / (2 * n)) * 100;
+    const n = valSet.length;
+    const mae = (totalHighErr + totalLowErr) / (2 * n);
+    const rmse = Math.sqrt((totalHighSqErr + totalLowSqErr) / (2 * n));
+    const mape = (totalHighPctErr + totalLowPctErr) / (2 * n);
 
-    // R-squared (for high prediction)
-    const meanHigh = actualHigh.reduce((s, v) => s + v, 0) / n;
-    const ssRes = actualHigh.reduce((s, v, i) => s + (v - predHigh[i]) ** 2, 0);
-    const ssTot = actualHigh.reduce((s, v) => s + (v - meanHigh) ** 2, 0);
-    const r2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+    // R² computation (using combined high+low)
+    const allActuals = [...valSet.map((s) => s.targetHigh), ...valSet.map((s) => s.targetLow)];
+    const allPreds = [
+      ...valSet.map((s) => model.predictHigh(s.featureArray)),
+      ...valSet.map((s) => model.predictLow(s.featureArray)),
+    ];
+    const r2 = this.computeR2(allActuals, allPreds);
 
     return {
       mae,
@@ -172,6 +223,37 @@ export default class ModelTrainer {
     };
   }
 
+  /**
+   * Build previous day context for feature engineering.
+   */
+  private buildPrevDayContext(candles: OHLCV[]): PreviousDayContext | null {
+    if (candles.length === 0) return null;
+
+    const close = candles[candles.length - 1].close;
+    const first45 = candles.slice(0, 45);
+    const avg45MinVolume = first45.length > 0
+      ? first45.reduce((s, c) => s + c.volume, 0)
+      : 0;
+
+    return { close, avg45MinVolume };
+  }
+
+  /**
+   * Get available dates with data for a symbol+interval, sorted chronologically.
+   */
+  private getAvailableDates(symbol: string, interval: string): string[] {
+    const dir = join((this.storage as any).baseDir, symbol, interval);
+    if (!existsSync(dir)) return [];
+
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".ndjson"))
+      .map((f) => f.replace(".ndjson", ""))
+      .sort();
+  }
+
+  /**
+   * Create a model instance by type.
+   */
   private createModel(modelType: "linear-regression" | "random-forest"): TrainableModel {
     switch (modelType) {
       case "linear-regression":
@@ -179,5 +261,20 @@ export default class ModelTrainer {
       case "random-forest":
         return new RandomForestModel();
     }
+  }
+
+  /**
+   * Compute R² (coefficient of determination).
+   */
+  private computeR2(actuals: number[], predictions: number[]): number {
+    const n = actuals.length;
+    if (n === 0) return 0;
+
+    const meanActual = actuals.reduce((s, v) => s + v, 0) / n;
+    const ssRes = actuals.reduce((s, v, i) => s + (v - predictions[i]) ** 2, 0);
+    const ssTot = actuals.reduce((s, v) => s + (v - meanActual) ** 2, 0);
+
+    if (ssTot === 0) return 0;
+    return 1 - ssRes / ssTot;
   }
 }

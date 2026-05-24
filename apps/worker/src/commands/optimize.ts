@@ -1,0 +1,67 @@
+import createLogger from "../utils/logger.ts";
+import FirebaseClient from "../firebase/client.ts";
+import ModelManager from "../model-management/model-manager.ts";
+import { StockConfig } from "../types/stocks/index.ts";
+import { getEnabledSymbols } from "./utils.ts";
+
+const logger = createLogger("cmd:optimize");
+
+/**
+ * Run optimization review — compare shadow vs production, promote if 5%+ better.
+ * Only promotes when autoOptimize is enabled for the stock.
+ */
+export async function handleOptimize(symbol: string | null, all: boolean): Promise<void> {
+  const firebase = new FirebaseClient();
+  const modelManager = new ModelManager();
+
+  let symbols = await getEnabledSymbols(symbol, all);
+
+  // Default: all stocks with autoOptimize enabled
+  if (symbols.length === 0) {
+    const stocks = await firebase.getAllStocks();
+    symbols = Object.values(stocks)
+      .filter((s: StockConfig) => s.enabled && s.autoOptimize)
+      .map((s: StockConfig) => s.symbol);
+
+    if (symbols.length === 0) {
+      logger.info("No stocks with autoOptimize enabled");
+      return;
+    }
+  }
+
+  for (const sym of symbols) {
+    const stock = await firebase.getStock(sym);
+    if (!stock) {
+      logger.error(`Stock ${sym} not found`);
+      continue;
+    }
+
+    if (!stock.autoOptimize) {
+      logger.info(`${sym}: autoOptimize disabled — skipping`);
+      continue;
+    }
+
+    const prodVersion = modelManager.getProductionVersion(sym);
+    const shadowVersion = modelManager.getShadowVersion(sym);
+
+    if (!prodVersion || !shadowVersion) {
+      logger.info(`${sym}: no production/shadow pair — skipping`);
+      continue;
+    }
+
+    const prodMeta = modelManager.loadMetadata(sym, prodVersion);
+    const shadowMeta = modelManager.loadMetadata(sym, shadowVersion);
+    if (!prodMeta || !shadowMeta) continue;
+
+    // Compare MAE (lower is better)
+    const improvement = ((prodMeta.metrics.mae - shadowMeta.metrics.mae) / prodMeta.metrics.mae) * 100;
+
+    if (improvement >= 5) {
+      modelManager.promote(sym, shadowVersion);
+      await firebase.updateStock(sym, { currentProductionVersion: shadowVersion });
+      logger.info(`✓ Promoted ${sym}: ${shadowVersion} (${improvement.toFixed(1)}% better MAE)`);
+    } else {
+      logger.info(`${sym}: shadow not significantly better (${improvement.toFixed(1)}%, need ≥5%)`);
+    }
+  }
+}
