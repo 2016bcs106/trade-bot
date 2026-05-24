@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { ref, onValue, set, remove, push } from 'firebase/database'
 import { db } from '../utils/firebase'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faRotate, faPlus, faSpinner, faTrash, faArrowUp, faXmark } from '@fortawesome/free-solid-svg-icons'
 
 const styles = {
   container: { padding: '1rem', paddingBottom: '5rem' },
@@ -233,7 +235,8 @@ export default function Models() {
                 )}
                 {row.trainingStatus ? (
                   <span style={{ ...styles.badge, ...styles.badgeProcessing }}>
-                    {row.trainingStatus === 'processing' ? '⏳ Training...' : '⏳ Queued'}
+                    <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '0.2rem' }} />
+                    {row.trainingStatus === 'processing' ? 'Training' : 'Queued'}
                   </span>
                 ) : (
                   <button
@@ -241,7 +244,8 @@ export default function Models() {
                     onClick={(e) => queueTraining(row.symbol, e)}
                     disabled={training}
                   >
-                    {row.trained ? '↻ Retrain' : '+ Train'}
+                    <FontAwesomeIcon icon={row.trained ? faRotate : faPlus} style={{ marginRight: '0.2rem' }} />
+                    {row.trained ? 'Retrain' : 'Train'}
                   </button>
                 )}
               </div>
@@ -292,7 +296,8 @@ export default function Models() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 {getTrainingStatus(selectedSymbol) ? (
                   <span style={{ ...styles.badge, ...styles.badgeProcessing }}>
-                    {getTrainingStatus(selectedSymbol) === 'processing' ? '⏳ Training...' : '⏳ Queued'}
+                    <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '0.2rem' }} />
+                    {getTrainingStatus(selectedSymbol) === 'processing' ? 'Training' : 'Queued'}
                   </span>
                 ) : (
                   <button
@@ -300,10 +305,13 @@ export default function Models() {
                     disabled={training}
                     onClick={(e) => queueTraining(selectedSymbol, e)}
                   >
-                    + Train
+                    <FontAwesomeIcon icon={faPlus} style={{ marginRight: '0.2rem' }} />
+                    Train
                   </button>
                 )}
-                <button style={styles.closeBtn} onClick={() => setSelectedSymbol(null)}>×</button>
+                <button style={styles.closeBtn} onClick={() => setSelectedSymbol(null)}>
+                  <FontAwesomeIcon icon={faXmark} />
+                </button>
               </div>
             </div>
 
@@ -331,6 +339,7 @@ export default function Models() {
                         style={styles.promoteBtn}
                         onClick={() => handlePromote(selectedSymbol, version)}
                       >
+                        <FontAwesomeIcon icon={faArrowUp} style={{ marginRight: '0.2rem' }} />
                         Promote
                       </button>
                     )}
@@ -339,7 +348,7 @@ export default function Models() {
                         style={styles.deleteBtn}
                         onClick={() => handleDelete(selectedSymbol, version)}
                       >
-                        Delete
+                        <FontAwesomeIcon icon={faTrash} />
                       </button>
                     )}
                   </div>
