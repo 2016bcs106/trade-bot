@@ -7,7 +7,7 @@ import { now, nowMs, nowFormatted } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
-import { LtpResponse } from "../types/market-data/ltp-response.ts";
+import { LiveMarketDataResponse } from "../types/market-data/live-market-data.ts";
 import { AnalysisResult } from "../types/analysis/analysis-result.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -117,8 +117,8 @@ class TradeBotScript extends BaseScript {
 
         if (time >= "09:15" && time <= "15:30") {
           const lastTradedPrice = await this.withTimeout(
-            this.paytm.fetchLTP(this.config.exchangeType, this.config.scripId, this.config.scripType, accessToken),
-            "fetchLTP",
+            this.paytm.fetchLiveData(this.config.exchangeType, this.config.scripId, this.config.scripType, accessToken),
+            "fetchLiveData",
           );
           const price = this.extractLtp(lastTradedPrice);
           const analysis: AnalysisResult = this.analyzer.next({ date: `${date} ${time}`, close: price });
@@ -178,10 +178,10 @@ class TradeBotScript extends BaseScript {
     ]);
   }
 
-  private extractLtp(lastTradedPrice: LtpResponse): number {
-    const price = lastTradedPrice?.data?.[0]?.last_price;
+  private extractLtp(response: LiveMarketDataResponse): number {
+    const price = response?.data?.[0]?.last_price;
     if (typeof price !== "number" || Number.isNaN(price)) {
-      throw new Error(`Invalid LTP response: ${JSON.stringify(lastTradedPrice)}`);
+      throw new Error(`Invalid live data response: ${JSON.stringify(response)}`);
     }
     return price;
   }

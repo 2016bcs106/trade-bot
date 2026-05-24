@@ -1,7 +1,7 @@
 import fetch from "node-fetch";
 import { TokenExchangeResponse } from "../../types/auth/token-exchange-response.ts";
 import { OHLCV } from "../../types/market-data/ohlcv.ts";
-import { LtpResponse } from "../../types/market-data/ltp-response.ts";
+import { LiveMarketDataResponse } from "../../types/market-data/live-market-data.ts";
 import createLogger from "../../utils/logger.ts";
 
 const logger = createLogger("paytm-client");
@@ -11,7 +11,7 @@ const logger = createLogger("paytm-client");
  *
  * Capabilities:
  * - Token exchange (OAuth request_token → access_token)
- * - Live LTP (Last Traded Price) fetching
+ * - Live market data (FULL mode — price, OHLCV, volume, OI, circuits)
  * - Historical OHLCV candle data (1-min or daily)
  */
 export default class PaytmMoneyClient {
@@ -34,14 +34,14 @@ export default class PaytmMoneyClient {
 
   // ─── Live Data ───────────────────────────────────────────────────────
 
-  async fetchLTP(exchange: string, scripId: string, scripType: string, accessToken: string): Promise<LtpResponse> {
+  async fetchLiveData(exchange: string, scripId: string, scripType: string, accessToken: string): Promise<LiveMarketDataResponse> {
     const pref = `${exchange}:${scripId}:${scripType}`;
-    const url = `https://developer.paytmmoney.com/data/v1/price/live?mode=LTP&pref=${pref}`;
+    const url = `https://developer.paytmmoney.com/data/v1/price/live?mode=FULL&pref=${pref}`;
     const response = await fetch(url, {
       method: "GET",
       headers: { "x-jwt-token": accessToken },
     });
-    return response.json() as Promise<LtpResponse>;
+    return response.json() as Promise<LiveMarketDataResponse>;
   }
 
   // ─── Historical OHLCV Data ───────────────────────────────────────────
