@@ -94,10 +94,12 @@ export class SystemUpdateRequestHandler implements RequestHandler {
 
   private exec(command: string, cwd: string): string {
     logger.info(`  $ ${command}`);
+    const nodeDir = this.detectNodeDir();
     const output = execSync(command, {
       cwd,
       encoding: "utf-8",
       timeout: 120_000, // 2 minute timeout
+      env: { ...process.env, PATH: `${nodeDir}:${process.env.PATH}` },
     });
     if (output.trim()) {
       logger.info(`  → ${output.trim().split("\n").slice(0, 5).join("\n    ")}`);
