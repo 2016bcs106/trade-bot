@@ -45,11 +45,15 @@ const styles = {
   modal: {
     background: 'var(--pm-card-bg)', borderRadius: '16px 16px 0 0',
     width: '100%', maxWidth: '480px', maxHeight: '70vh',
-    overflow: 'auto', padding: '1.25rem', paddingBottom: '5rem',
+    display: 'flex', flexDirection: 'column',
   },
   modalHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: '1rem',
+    padding: '1.25rem 1.25rem 0.75rem', borderBottom: '1px solid var(--pm-border)',
+    flexShrink: 0,
+  },
+  modalBody: {
+    overflow: 'auto', padding: '0 1.25rem', paddingBottom: '5rem', flex: 1,
   },
   modalTitle: { fontSize: '1.1rem', fontWeight: '700', color: 'var(--pm-text)' },
   closeBtn: {
@@ -203,6 +207,7 @@ export default function Models() {
               <button style={styles.closeBtn} onClick={() => setSelectedSymbol(null)}>×</button>
             </div>
 
+            <div style={styles.modalBody}>
             {selectedVersions.map(([version, meta]) => (
               <div key={version} style={styles.versionItem}>
                 <div style={styles.versionInfo}>
@@ -239,6 +244,7 @@ export default function Models() {
                 </div>
               </div>
             ))}
+            </div>
           </div>
         </div>
       )}
