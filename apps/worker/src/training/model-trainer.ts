@@ -219,12 +219,12 @@ export default class ModelTrainer {
     for (const date of dates) {
       const candles = byDate.get(date)!;
 
-      if (candles.length < 30) {
+      if (candles.length < 60) {
         prevDayContext = this.buildPrevDayContext(candles);
         continue;
       }
 
-      // Compute features from first 45 min
+      // Compute features from data up to 11:00 AM (first 105 min)
       const features = this.featureEngineer.compute(symbol, date, candles, prevDayContext);
       if (!features) {
         prevDayContext = this.buildPrevDayContext(candles);
@@ -313,8 +313,8 @@ export default class ModelTrainer {
   private buildPrevDayContext(candles: OHLCV[]): PreviousDayContext | null {
     if (candles.length === 0) return null;
     const close = candles[candles.length - 1].close;
-    const first45 = candles.slice(0, 45);
-    const avg45MinVolume = first45.reduce((s, c) => s + c.volume, 0);
+    const first105 = candles.slice(0, 105);
+    const avg45MinVolume = first105.reduce((s, c) => s + c.volume, 0);
     return { close, avg45MinVolume };
   }
 

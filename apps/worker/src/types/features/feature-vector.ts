@@ -1,5 +1,5 @@
 /**
- * Complete feature vector generated from first 45 minutes of intraday data.
+ * Complete feature vector generated from data up to 11:00 AM (first 105 minutes).
  * Used as input to ML models for predicting daily high/low.
  */
 export interface FeatureVector {
@@ -11,7 +11,7 @@ export interface FeatureVector {
 
   // ─── Price Features ────────────────────────────────────────────────
 
-  /** Cumulative return from open to 45-min close: (close_45 - open) / open */
+  /** Cumulative return from open to 11:00 AM close: (close_105 - open) / open */
   cumulativeReturn: number;
 
   /** Opening gap: (today_open - prev_close) / prev_close */
@@ -99,6 +99,6 @@ export interface PreviousDayContext {
   /** Previous day close price */
   close: number;
 
-  /** Average 45-min volume from historical data (for relative volume) */
+  /** Volume from data up to 11:00 AM (first 105 min) for relative volume comparison */
   avg45MinVolume: number;
 }
