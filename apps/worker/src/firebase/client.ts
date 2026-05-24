@@ -261,6 +261,56 @@ export default class FirebaseClient {
   async getAllPendingTrainings(): Promise<Record<string, PendingTrainingEntry>> {
     return (await this._getValue("pending_trainings") as Record<string, PendingTrainingEntry>) || {};
   }
+
+  // ─── Request Queue ─────────────────────────────────────────────────
+
+  /**
+   * Listen to the entire request_queue/ collection.
+   * Fires callback with the full snapshot on every change (add/update/delete).
+   * Returns unsubscribe function.
+   */
+  onRequestQueueChanged(callback: (data: Record<string, QueuedRequest> | null) => void): Unsubscribe {
+    return onValue(ref(this.db, "request_queue"), (snapshot) => {
+      callback(snapshot.val() as Record<string, QueuedRequest> | null);
+    });
+  }
+
+  /** Read a single request entry */
+  async getRequest(key: string): Promise<QueuedRequest | null> {
+    return (await this._getValue(`request_queue/${key}`)) as QueuedRequest | null;
+  }
+
+  /** Update the status field of a request */
+  async updateRequestStatus(key: string, status: QueuedRequest["status"]): Promise<void> {
+    const current = await this.getRequest(key);
+    if (current) {
+      await this._setValue(`request_queue/${key}`, { ...current, status });
+    }
+  }
+
+  /** Remove a request from the queue (after success) */
+  async removeRequest(key: string): Promise<void> {
+    await this._remove(`request_queue/${key}`);
+  }
+
+  /** Move a failed request to failed_requests/ with error info */
+  async moveRequestToFailed(key: string, error: string): Promise<void> {
+    const original = await this.getRequest(key);
+    await this._setValue(`failed_requests/${key}`, {
+      ...original,
+      status: "failed",
+      error,
+      failedAt: nowISO(),
+    });
+    await this._remove(`request_queue/${key}`);
+  }
+}
+
+export interface QueuedRequest {
+  type: string;
+  payload: Record<string, unknown>;
+  status: "pending" | "processing" | "completed" | "failed";
+  createdAt: string;
 }
 
 export interface PendingPredictionEntry {
