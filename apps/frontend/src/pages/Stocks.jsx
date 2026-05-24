@@ -333,7 +333,7 @@ export default function Stocks() {
       symbol,
       name: symbol,
       status: 'pending_sync',
-      enabled: false,
+      enabled: true,
       autoOptimize: true,
       currentProductionVersion: null,
       addedAt: moment().utcOffset('+05:30').toISOString(),

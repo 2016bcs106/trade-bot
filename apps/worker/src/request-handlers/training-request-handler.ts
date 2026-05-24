@@ -2,6 +2,7 @@ import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
+import { PredictionRequestHandler } from "./prediction-request-handler.ts";
 
 const logger = createLogger("handler:train");
 
