@@ -210,7 +210,7 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
 }
 
 // ─── Models Modal ──────────────────────────────────────────────────────
-function ModelsModal({ symbol, models, productionVersion, onClose }) {
+function ModelsModal({ symbol, models, productionVersion, onClose, onPromote, onDelete }) {
   const versions = models
     ? Object.entries(models)
         .map(([v, meta]) => ({ version: v, ...meta }))
@@ -250,6 +250,23 @@ function ModelsModal({ symbol, models, productionVersion, onClose }) {
                   {m.trainedAt && <span style={styles.metric}><FontAwesomeIcon icon={faClock} /> {new Date(m.trainedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</span>}
                   {m.trainingDays && <span style={styles.metric}>{m.trainingDays}d data</span>}
                   {m.featureCount && <span style={styles.metric}>{m.featureCount} features</span>}
+                </div>
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem' }}>
+                  {m.version !== productionVersion && (
+                    <button
+                      style={{ ...styles.actionBtn, color: '#22c55e', fontSize: '0.65rem' }}
+                      onClick={() => onPromote(m.version)}
+                    >
+                      <FontAwesomeIcon icon={faTrophy} /> Promote
+                    </button>
+                  )}
+                  <button
+                    style={{ ...styles.actionBtn, color: '#ef4444', fontSize: '0.65rem' }}
+                    onClick={() => onDelete(m.version)}
+                  >
+                    <FontAwesomeIcon icon={faTrash} /> Delete
+                  </button>
                 </div>
               </div>
             ))
@@ -309,6 +326,19 @@ export default function Stocks() {
       remove(ref(db, `models/${stock._key}`)),
       remove(ref(db, `predictions/${stock._key}`)),
     ])
+  }
+
+  const handlePromoteModel = async (symbol, version) => {
+    await set(ref(db, `stocks/${symbol}/currentProductionVersion`), version)
+    await set(ref(db, `stocks/${symbol}/updatedAt`), Date.now())
+  }
+
+  const handleDeleteModel = async (symbol, version) => {
+    // If deleting the production version, clear it
+    if (stocks[symbol]?.currentProductionVersion === version) {
+      await set(ref(db, `stocks/${symbol}/currentProductionVersion`), null)
+    }
+    await remove(ref(db, `models/${symbol}/${version}`))
   }
 
   // Get production model metadata for a stock
@@ -413,6 +443,8 @@ export default function Stocks() {
           models={models[modelsSymbol] || {}}
           productionVersion={stocks[modelsSymbol]?.currentProductionVersion}
           onClose={() => setModelsSymbol(null)}
+          onPromote={(version) => handlePromoteModel(modelsSymbol, version)}
+          onDelete={(version) => handleDeleteModel(modelsSymbol, version)}
         />
       )}
     </div>
