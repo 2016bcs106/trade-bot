@@ -1,81 +1,38 @@
-import { todayDate } from "../utils/time.ts";
+import "../config/env.ts";
+import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
-import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
-import EvaluationEngine from "../evaluation/evaluation-engine.ts";
-import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
-import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:evaluate");
 
 /**
- * Evaluate today's predictions against actual high/low fetched from API.
+ * Queue evaluation requests for ALL enabled stocks (today's date).
+ * The actual evaluation is handled by the request-handler via request_queue.
  *
- * Usage: pnpm evaluate --symbol=ADANIENT or pnpm evaluate --all
+ * Usage: pnpm evaluate
  */
 export async function handleEvaluate(): Promise<void> {
-  const config = new TradingConfig("ml");
-
-  const symbols = await getEnabledSymbols(config.symbol || null, config.all || false);
-  if (symbols.length === 0) {
-    logger.error("Please specify --symbol=SYMBOL or --all");
-    process.exit(1);
-  }
-
   const firebase = new FirebaseClient();
-  const evaluationEngine = new EvaluationEngine();
-  const client = new PaytmMoneyClient();
-  const today = todayDate();
 
-  for (const sym of symbols) {
-    const prediction = await firebase.getPrediction(sym, today);
-    if (!prediction) {
-      logger.error(`No prediction found for ${sym} on ${today}`);
-      continue;
-    }
+  const stocks = await firebase.getAllStocks();
+  const enabledSymbols = Object.values(stocks)
+    .filter((s) => s.enabled)
+    .map((s) => s.symbol);
 
-    if (prediction.evaluated) {
-      logger.info(`${sym} already evaluated for ${today}, skipping`);
-      continue;
-    }
-
-    const stock = await firebase.getStock(sym);
-    if (!stock) {
-      logger.error(`Stock ${sym} not found`);
-      continue;
-    }
-
-    const pmlId = stock.pmlId;
-    if (!pmlId) {
-      logger.error(`Stock ${sym} has no pmlId — re-run stock-sync`);
-      continue;
-    }
-
-    // Fetch full-day candles from API
-    const candles = await client.fetchOHLCV(pmlId, today, today);
-
-    if (candles.length < 100) {
-      logger.error(`Insufficient full-day data for ${sym} (${candles.length} candles) — market may not have closed`);
-      continue;
-    }
-
-    const actualHigh = Math.max(...candles.map((c) => c.high));
-    const actualLow = Math.min(...candles.map((c) => c.low));
-    const actualClose = candles[candles.length - 1].close;
-
-    prediction.actualHigh = actualHigh;
-    prediction.actualLow = actualLow;
-    prediction.actualClose = actualClose;
-    prediction.evaluated = true;
-
-    const result = evaluationEngine.evaluate(prediction);
-    if (!result) {
-      logger.error(`Evaluation failed for ${sym}`);
-      continue;
-    }
-
-    await firebase.setPrediction(sym, today, prediction);
-    await firebase.setEvaluation(sym, today, result);
-    logger.info(`✓ ${sym}: MAE=${result.mae.toFixed(2)}, MAPE=${result.mape.toFixed(2)}%, range=${result.rangeContainment ? "✓" : "✗"}`);
+  if (enabledSymbols.length === 0) {
+    logger.info("No enabled stocks to evaluate");
+    return;
   }
+
+  const today = now().format("YYYY-MM-DD");
+
+  for (const sym of enabledSymbols) {
+    await firebase.pushRequest({
+      type: "evaluate",
+      payload: { symbol: sym, date: today },
+    });
+    logger.info(`✓ Queued evaluation for ${sym} (${today})`);
+  }
+
+  logger.info(`Queued ${enabledSymbols.length} evaluation request(s)`);
 }

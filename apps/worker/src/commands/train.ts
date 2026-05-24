@@ -1,101 +1,35 @@
-import { now } from "../utils/time.ts";
+import "../config/env.ts";
 import createLogger from "../utils/logger.ts";
-import TradingConfig from "../config/trading-config.ts";
 import FirebaseClient from "../firebase/client.ts";
-import ModelTrainer from "../training/model-trainer.ts";
-import ModelManager from "../model-management/model-manager.ts";
-import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
-import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:train");
 
 /**
- * Train a new model for one or all enabled stocks.
- * Fetches data live from Paytm Money API, trains, saves to disk + Firebase.
+ * Queue training requests for ALL enabled stocks.
+ * The actual training is handled by the request-handler via request_queue.
  *
- * Usage: pnpm train --symbol=ADANIENT [--lookbackDays=90]
+ * Usage: pnpm train
  */
 export async function handleTrain(): Promise<void> {
-  const config = new TradingConfig("ml");
-
-  const symbols = await getEnabledSymbols(config.symbol || null, config.all || false);
-  if (symbols.length === 0) {
-    logger.error("Please specify --symbol=SYMBOL or --all");
-    process.exit(1);
-  }
-
-  const lookbackDays = config.lookbackDays || 90;
-
   const firebase = new FirebaseClient();
-  const client = new PaytmMoneyClient();
-  const trainer = new ModelTrainer(client);
-  const modelManager = new ModelManager();
 
-  const toDate = now().format("YYYY-MM-DD");
-  const fromDate = now().subtract(lookbackDays, "days").format("YYYY-MM-DD");
+  const stocks = await firebase.getAllStocks();
+  const enabledSymbols = Object.values(stocks)
+    .filter((s) => s.enabled)
+    .map((s) => s.symbol);
 
-  for (const sym of symbols) {
-    const stock = await firebase.getStock(sym);
-    if (!stock) {
-      logger.error(`Stock ${sym} not found in Firebase`);
-      continue;
-    }
-
-    const pmlId = stock.pmlId;
-    if (!pmlId) {
-      logger.error(`Stock ${sym} has no pmlId — re-run stock-sync`);
-      continue;
-    }
-
-    logger.info(`Training ${sym} (pmlId: ${pmlId}, model: linear-regression, lookback: ${lookbackDays}d)...`);
-    const result = await trainer.train(sym, pmlId, fromDate, toDate);
-
-    if (!result) {
-      logger.error(`Training failed for ${sym}`);
-      continue;
-    }
-
-    // Save model to disk and get version
-    const version = modelManager.saveModel(result);
-    logger.info(`Model saved: ${sym} ${version} (MAE: ${result.metrics.mae.toFixed(2)})`);
-
-    // Save metadata to Firebase
-    const metadata = modelManager.loadMetadata(sym, version);
-    if (metadata) {
-      await firebase.setModelMetadata(sym, version, metadata);
-    }
-
-    // Prune old versions (keep max 14)
-    const pruned = modelManager.pruneOldVersions(sym);
-    for (const pv of pruned) {
-      await firebase.removeModelMetadata(sym, pv);
-    }
-    if (pruned.length > 0) {
-      logger.info(`Pruned ${pruned.length} old version(s): ${pruned.join(", ")}`);
-    }
-
-    // Auto-promotion logic — use Firebase as single source of truth
-    const currentProd = stock.currentProductionVersion;
-    if (!currentProd) {
-      // First model → always promote to production
-      modelManager.promote(sym, version);
-      await firebase.updateStock(sym, { currentProductionVersion: version });
-      // Update Firebase metadata to reflect production state
-      const updatedMeta = modelManager.loadMetadata(sym, version);
-      if (updatedMeta) await firebase.setModelMetadata(sym, version, updatedMeta);
-      logger.info(`Promoted ${sym} ${version} to production (first model)`);
-    } else if (stock.autoOptimize) {
-      // Auto-optimize enabled → promote if new model is better (lower MAE)
-      const prodMetadata = modelManager.loadMetadata(sym, currentProd);
-      if (prodMetadata && result.metrics.mae < prodMetadata.metrics.mae) {
-        modelManager.promote(sym, version);
-        await firebase.updateStock(sym, { currentProductionVersion: version });
-        await firebase.setModelMetadata(sym, version, modelManager.loadMetadata(sym, version)!);
-        await firebase.setModelMetadata(sym, currentProd, modelManager.loadMetadata(sym, currentProd)!);
-        logger.info(`Auto-promoted ${sym} ${version} → production (MAE: ${result.metrics.mae.toFixed(2)} < ${prodMetadata.metrics.mae.toFixed(2)})`);
-      } else {
-        logger.info(`Shadow ${sym} ${version} not promoted (MAE not better than production ${currentProd})`);
-      }
-    }
+  if (enabledSymbols.length === 0) {
+    logger.info("No enabled stocks to train");
+    return;
   }
+
+  for (const sym of enabledSymbols) {
+    await firebase.pushRequest({
+      type: "train",
+      payload: { symbol: sym, lookbackDays: 1825 },
+    });
+    logger.info(`✓ Queued training for ${sym}`);
+  }
+
+  logger.info(`Queued ${enabledSymbols.length} training request(s)`);
 }

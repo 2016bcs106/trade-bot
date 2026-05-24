@@ -301,6 +301,18 @@ export default class FirebaseClient {
     await this._remove(`request_queue/${key}`);
   }
 
+  /**
+   * Push a new request to the request_queue.
+   */
+  async pushRequest(request: { type: string; payload: Record<string, unknown> }): Promise<void> {
+    const queueRef = ref(this.db, "request_queue");
+    await push(queueRef, {
+      ...request,
+      status: "pending",
+      createdAt: nowISO(),
+    });
+  }
+
   /** Move a failed request to failed_requests/ with error info */
   async moveRequestToFailed(key: string, error: string): Promise<void> {
     const original = await this.getRequest(key);

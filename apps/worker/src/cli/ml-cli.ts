@@ -11,10 +11,10 @@ const COMMANDS = ["train", "predict", "evaluate"] as const;
 type Command = typeof COMMANDS[number];
 
 /**
- * ML CLI — thin dispatcher that delegates to command handlers.
- * All --key=value args are parsed by TradingConfig("ml") inside each handler.
+ * ML CLI — thin dispatcher that queues requests for all enabled stocks.
+ * Each command pushes entries to request_queue, handled by request-orchestration-script.
  *
- * Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--lookbackDays=90]
+ * Usage: tsx src/cli/ml-cli.ts <command>
  */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -40,19 +40,14 @@ async function main(): Promise<void> {
 
 function printUsage(): void {
   console.log(`
-ML CLI — Quantitative Research Platform
+ML CLI — Queue requests for all enabled stocks
 
-Usage: tsx src/cli/ml-cli.ts <command> [--symbol=SYMBOL] [--all] [--lookbackDays=N]
+Usage: tsx src/cli/ml-cli.ts <command>
 
 Commands:
-  train             Train a new linear-regression model
-  predict           Generate prediction for today
-  evaluate          Evaluate predictions against actuals
-
-Options:
-  --symbol=SYMBOL   Stock symbol (e.g., --symbol=RELIANCE)
-  --all             Process all enabled stocks
-  --lookbackDays=N  Training lookback in days (default: 90)
+  train       Queue training for all enabled stocks
+  predict     Queue predictions for today (all enabled stocks with models)
+  evaluate    Queue evaluation for today (all enabled stocks)
   `);
 }
 
