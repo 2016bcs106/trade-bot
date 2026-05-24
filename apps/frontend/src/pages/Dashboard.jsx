@@ -206,6 +206,7 @@ export default function Dashboard() {
                   <input
                     type="date"
                     value={genFrom}
+                    max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setGenFrom(e.target.value)}
                     style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
                   />
@@ -213,6 +214,7 @@ export default function Dashboard() {
                   <input
                     type="date"
                     value={genTo}
+                    max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setGenTo(e.target.value)}
                     style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
                   />
