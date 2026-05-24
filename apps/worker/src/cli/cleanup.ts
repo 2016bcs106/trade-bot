@@ -4,9 +4,11 @@ import { getDatabase, ref, remove, get, set } from "firebase/database";
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import ModelManager from "../model-management/model-manager.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BACKUP_DIR = resolve(__dirname, "..", "..", "..", "..", "data", "backups");
+const modelManager = new ModelManager();
 
 /**
  * Firebase cleanup utility with snapshot backup/restore.
@@ -108,6 +110,12 @@ async function main() {
   if (args.includes("--all")) {
     console.log("🗑️  Wiping ALL Firebase data...");
     await clearPaths(ALL_PATHS);
+    // Also delete local model files (backups are NOT touched)
+    const localSymbols = modelManager.listSymbols();
+    if (localSymbols.length > 0) {
+      modelManager.deleteAllLocal();
+      console.log(`  🗑️  Deleted local models for ${localSymbols.length} symbols`);
+    }
     console.log("✓ All data cleared.");
     process.exit(0);
   }
@@ -120,7 +128,13 @@ async function main() {
 
   if (args.includes("--models")) {
     await clearPaths(["models"]);
-    console.log("✓ Cleared models.");
+    // Also delete local model files
+    const localSymbols = modelManager.listSymbols();
+    if (localSymbols.length > 0) {
+      modelManager.deleteAllLocal();
+      console.log(`  🗑️  Deleted local models for ${localSymbols.length} symbols`);
+    }
+    console.log("✓ Cleared models (Firebase + local).");
     process.exit(0);
   }
 
@@ -132,7 +146,13 @@ async function main() {
 
   if (args.includes("--stocks")) {
     await clearPaths(["stocks", "models", "predictions", "pending_trainings", "pending_predictions"]);
-    console.log("✓ Cleared stocks + related data.");
+    // Also delete local model files
+    const localSymbols = modelManager.listSymbols();
+    if (localSymbols.length > 0) {
+      modelManager.deleteAllLocal();
+      console.log(`  🗑️  Deleted local models for ${localSymbols.length} symbols`);
+    }
+    console.log("✓ Cleared stocks + related data (Firebase + local).");
     process.exit(0);
   }
 
@@ -145,6 +165,29 @@ async function main() {
   if (args.includes("--audit")) {
     await clearPaths(["audit"]);
     console.log("✓ Cleared audit events.");
+    process.exit(0);
+  }
+
+  // Per-symbol cleanup: --symbol SYMBOL (deletes local models + Firebase model/prediction data for that symbol)
+  if (args.includes("--symbol")) {
+    const idx = args.indexOf("--symbol");
+    const symbol = args[idx + 1]?.toUpperCase();
+    if (!symbol) {
+      console.error("Usage: pnpm cleanup --symbol RELIANCE");
+      process.exit(1);
+    }
+    const db = getDatabase();
+    // Snapshot before deletion
+    await snapshot([`models/${symbol}`, `predictions/${symbol}`, `stocks/${symbol}`]);
+    // Firebase cleanup
+    await remove(ref(db, `models/${symbol}`));
+    await remove(ref(db, `predictions/${symbol}`));
+    await remove(ref(db, `stocks/${symbol}`));
+    console.log(`  🗑️  Cleared Firebase: stocks/${symbol}, models/${symbol}, predictions/${symbol}`);
+    // Local cleanup
+    modelManager.deleteSymbolLocal(symbol);
+    console.log(`  🗑️  Deleted local models for ${symbol}`);
+    console.log(`✓ Cleaned up ${symbol} (Firebase + local).`);
     process.exit(0);
   }
 

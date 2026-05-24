@@ -161,6 +161,39 @@ export default class ModelManager {
   }
 
   /**
+   * Delete all local model files for a given symbol.
+   */
+  deleteSymbolLocal(symbol: string): void {
+    const symbolDir = join(this.modelsDir, symbol);
+    if (existsSync(symbolDir)) {
+      rmSync(symbolDir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Delete all local model files for ALL symbols.
+   */
+  deleteAllLocal(): void {
+    if (!existsSync(this.modelsDir)) return;
+    const entries = readdirSync(this.modelsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        rmSync(join(this.modelsDir, entry.name), { recursive: true, force: true });
+      }
+    }
+  }
+
+  /**
+   * List all symbols that have local models.
+   */
+  listSymbols(): string[] {
+    if (!existsSync(this.modelsDir)) return [];
+    return readdirSync(this.modelsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  }
+
+  /**
    * Maximum number of versions to keep per symbol.
    * Older retired versions are deleted when this limit is exceeded.
    */
