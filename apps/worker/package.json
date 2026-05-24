@@ -16,6 +16,7 @@
     "scheduler": "tsx src/cli/ml-cli.ts scheduler:start",
     "scheduler:list": "tsx src/cli/ml-cli.ts scheduler:list",
     "prediction-listener": "tsx src/cli/prediction-listener.ts",
+    "training-listener": "tsx src/cli/training-listener.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

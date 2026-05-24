@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ref, onValue, set, remove } from 'firebase/database'
+import { ref, onValue, set, remove, push } from 'firebase/database'
 import { db } from '../utils/firebase'
 
 const styles = {
@@ -25,6 +25,8 @@ const styles = {
   badgeProduction: { background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' },
   badgeShadow: { background: 'rgba(234, 179, 8, 0.15)', color: '#eab308' },
   badgeRetired: { background: 'rgba(107, 114, 128, 0.15)', color: '#6b7280' },
+  badgeUntrained: { background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' },
+  badgeProcessing: { background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' },
   metricsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(4, 1fr)',
@@ -34,7 +36,6 @@ const styles = {
   metric: { textAlign: 'center' },
   metricValue: { fontSize: '0.8rem', fontWeight: '700', color: 'var(--pm-text)' },
   metricLabel: { fontSize: '0.55rem', color: 'var(--pm-text-muted)' },
-  trainInfo: { fontSize: '0.65rem', color: 'var(--pm-text-muted)', marginTop: '0.5rem' },
   empty: { textAlign: 'center', padding: '2rem', color: 'var(--pm-text-muted)', fontSize: '0.85rem' },
   // Modal styles
   overlay: {
@@ -44,7 +45,7 @@ const styles = {
   },
   modal: {
     background: 'var(--pm-card-bg)', borderRadius: '16px 16px 0 0',
-    width: '100%', maxWidth: '480px', maxHeight: '70vh',
+    width: '100%', maxWidth: '480px', maxHeight: '75vh',
     display: 'flex', flexDirection: 'column',
   },
   modalHeader: {
@@ -78,50 +79,110 @@ const styles = {
     background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444',
     fontSize: '0.6rem', fontWeight: '600', cursor: 'pointer',
   },
+  trainBtn: {
+    padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none',
+    background: '#3b82f6', color: '#fff',
+    fontSize: '0.65rem', fontWeight: '600', cursor: 'pointer',
+  },
+  trainBtnDisabled: {
+    padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none',
+    background: '#555', color: '#aaa',
+    fontSize: '0.65rem', fontWeight: '600', cursor: 'not-allowed',
+    opacity: 0.6,
+  },
 }
 
 function getBadgeStyle(state) {
   switch (state) {
     case 'production': return styles.badgeProduction
     case 'shadow': return styles.badgeShadow
+    case 'untrained': return styles.badgeUntrained
+    case 'processing': return styles.badgeProcessing
     default: return styles.badgeRetired
   }
 }
 
 export default function Models() {
   const [models, setModels] = useState({})
+  const [stocks, setStocks] = useState({})
+  const [pendingTrainings, setPendingTrainings] = useState({})
   const [selectedSymbol, setSelectedSymbol] = useState(null)
+  const [training, setTraining] = useState(false) // track submission state
 
   useEffect(() => {
     const modelsRef = ref(db, 'models')
-    const unsub = onValue(modelsRef, (snap) => {
-      setModels(snap.val() || {})
-    })
-    return () => unsub()
+    const stocksRef = ref(db, 'stocks')
+    const pendingRef = ref(db, 'pending_trainings')
+    const unsub1 = onValue(modelsRef, (snap) => setModels(snap.val() || {}))
+    const unsub2 = onValue(stocksRef, (snap) => setStocks(snap.val() || {}))
+    const unsub3 = onValue(pendingRef, (snap) => setPendingTrainings(snap.val() || {}))
+    return () => { unsub1(); unsub2(); unsub3() }
   }, [])
 
-  // Get the production model per symbol (fallback to latest)
-  const latestModels = Object.entries(models).map(([symbol, versions]) => {
-    const entries = Object.entries(versions || {})
-    if (entries.length === 0) return null
+  // Build unified stock list: trained + untrained
+  const enabledSymbols = Object.entries(stocks)
+    .filter(([, s]) => s.enabled)
+    .map(([symbol]) => symbol)
+    .sort()
 
-    const production = entries.find(([, meta]) => meta.state === 'production')
-    if (production) {
-      const [version, meta] = production
-      return { symbol, version, meta, totalVersions: entries.length }
+  // Check if a symbol has a pending/processing training
+  const getTrainingStatus = (symbol) => {
+    for (const [, entry] of Object.entries(pendingTrainings)) {
+      if (entry.symbol === symbol && (entry.status === 'pending' || entry.status === 'processing')) {
+        return entry.status
+      }
+    }
+    return null
+  }
+
+  // Build rows combining trained and untrained
+  const rows = enabledSymbols.map((symbol) => {
+    const versions = models[symbol] ? Object.entries(models[symbol]) : []
+    const trainingStatus = getTrainingStatus(symbol)
+
+    if (versions.length === 0) {
+      return { symbol, trained: false, trainingStatus }
     }
 
-    const sorted = entries.sort(([a], [b]) =>
+    // Find production version
+    const production = versions.find(([, meta]) => meta.state === 'production')
+    if (production) {
+      const [version, meta] = production
+      return { symbol, trained: true, version, meta, totalVersions: versions.length, trainingStatus }
+    }
+
+    // Fallback to latest
+    const sorted = versions.sort(([a], [b]) =>
       parseInt(b.replace('v', '')) - parseInt(a.replace('v', ''))
     )
     const [version, meta] = sorted[0]
-    return { symbol, version, meta, totalVersions: entries.length }
-  }).filter(Boolean)
+    return { symbol, trained: true, version, meta, totalVersions: versions.length, trainingStatus }
+  })
+
+  // Queue training for a stock
+  const queueTraining = async (symbol, e) => {
+    e.stopPropagation()
+    setTraining(true)
+    try {
+      const pendingRef = ref(db, 'pending_trainings')
+      const newRef = push(pendingRef)
+      await set(newRef, {
+        symbol,
+        modelType: 'auto',
+        lookbackDays: 90,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      })
+    } catch (err) {
+      console.error(err)
+      alert('Failed to queue training')
+    }
+    setTraining(false)
+  }
 
   // Promote a version to production
   const handlePromote = async (symbol, version) => {
     const versions = models[symbol] || {}
-    // Retire all other versions, set this one to production
     for (const [v, meta] of Object.entries(versions)) {
       if (v === version) {
         await set(ref(db, `models/${symbol}/${v}/state`), 'production')
@@ -131,7 +192,6 @@ export default function Models() {
         await set(ref(db, `models/${symbol}/${v}/retiredAt`), new Date().toISOString())
       }
     }
-    // Update stock's currentProductionVersion
     await set(ref(db, `stocks/${symbol}/currentProductionVersion`), version)
   }
 
@@ -155,43 +215,91 @@ export default function Models() {
 
   return (
     <div style={styles.container}>
-      {latestModels.length === 0 ? (
-        <div style={styles.empty}>No models trained yet. Use the CLI to train models.</div>
+      {rows.length === 0 ? (
+        <div style={styles.empty}>No enabled stocks. Add stocks first.</div>
       ) : (
-        latestModels.map(({ symbol, version, meta, totalVersions }) => (
-          <div key={symbol} style={styles.card} onClick={() => setSelectedSymbol(symbol)}>
+        rows.map((row) => (
+          <div key={row.symbol} style={styles.card} onClick={() => row.trained && setSelectedSymbol(row.symbol)}>
             <div style={styles.symbolHeader}>
-              <span style={styles.symbolName}>{symbol}</span>
+              <span style={styles.symbolName}>{row.symbol}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={styles.versionBadge}>{version}</span>
-                <span style={{ ...styles.badge, ...getBadgeStyle(meta.state) }}>
-                  {meta.state}
-                </span>
+                {row.trained ? (
+                  <>
+                    <span style={styles.versionBadge}>{row.version}</span>
+                    <span style={{ ...styles.badge, ...getBadgeStyle(row.meta.state) }}>
+                      {row.meta.state}
+                    </span>
+                  </>
+                ) : row.trainingStatus ? (
+                  <span style={{ ...styles.badge, ...styles.badgeProcessing }}>
+                    {row.trainingStatus === 'processing' ? '⏳ Training...' : '⏳ Queued'}
+                  </span>
+                ) : (
+                  <span style={{ ...styles.badge, ...styles.badgeUntrained }}>
+                    No model
+                  </span>
+                )}
               </div>
             </div>
 
-            <div style={styles.modelType}>
-              {meta.modelType} • {meta.createdAt || 'unknown'} • {totalVersions} version{totalVersions !== 1 ? 's' : ''}
-            </div>
+            {row.trained ? (
+              <>
+                <div style={styles.modelType}>
+                  {row.meta.modelType} • {row.meta.createdAt || 'unknown'} • {row.totalVersions} version{row.totalVersions !== 1 ? 's' : ''}
+                </div>
 
-            {meta.metrics && (
-              <div style={styles.metricsGrid}>
-                <div style={styles.metric}>
-                  <div style={styles.metricValue}>₹{meta.metrics.mae?.toFixed(1)}</div>
-                  <div style={styles.metricLabel}>MAE</div>
+                {row.meta.metrics && (
+                  <div style={styles.metricsGrid}>
+                    <div style={styles.metric}>
+                      <div style={styles.metricValue}>₹{row.meta.metrics.mae?.toFixed(1)}</div>
+                      <div style={styles.metricLabel}>MAE</div>
+                    </div>
+                    <div style={styles.metric}>
+                      <div style={styles.metricValue}>{row.meta.metrics.mape?.toFixed(2)}%</div>
+                      <div style={styles.metricLabel}>MAPE</div>
+                    </div>
+                    <div style={styles.metric}>
+                      <div style={styles.metricValue}>{row.meta.metrics.directionalAccuracy?.toFixed(0)}%</div>
+                      <div style={styles.metricLabel}>Direction</div>
+                    </div>
+                    <div style={styles.metric}>
+                      <div style={styles.metricValue}>{row.meta.metrics.r2?.toFixed(3)}</div>
+                      <div style={styles.metricLabel}>R²</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Retrain button */}
+                <div style={{ marginTop: '0.6rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  {row.trainingStatus ? (
+                    <span style={{ fontSize: '0.6rem', color: '#3b82f6' }}>
+                      ⏳ {row.trainingStatus === 'processing' ? 'Training...' : 'Queued'}
+                    </span>
+                  ) : (
+                    <button
+                      style={training ? styles.trainBtnDisabled : styles.trainBtn}
+                      disabled={training}
+                      onClick={(e) => queueTraining(row.symbol, e)}
+                    >
+                      Retrain
+                    </button>
+                  )}
                 </div>
-                <div style={styles.metric}>
-                  <div style={styles.metricValue}>{meta.metrics.mape?.toFixed(2)}%</div>
-                  <div style={styles.metricLabel}>MAPE</div>
-                </div>
-                <div style={styles.metric}>
-                  <div style={styles.metricValue}>{meta.metrics.directionalAccuracy?.toFixed(0)}%</div>
-                  <div style={styles.metricLabel}>Direction</div>
-                </div>
-                <div style={styles.metric}>
-                  <div style={styles.metricValue}>{meta.metrics.r2?.toFixed(3)}</div>
-                  <div style={styles.metricLabel}>R²</div>
-                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted)' }}>
+                  No model trained yet
+                </span>
+                {!row.trainingStatus && (
+                  <button
+                    style={training ? styles.trainBtnDisabled : styles.trainBtn}
+                    disabled={training}
+                    onClick={(e) => queueTraining(row.symbol, e)}
+                  >
+                    Train Model
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -208,42 +316,59 @@ export default function Models() {
             </div>
 
             <div style={styles.modalBody}>
-            {selectedVersions.map(([version, meta]) => (
-              <div key={version} style={styles.versionItem}>
-                <div style={styles.versionInfo}>
-                  <div style={styles.versionName}>
-                    {version}{' '}
-                    <span style={{ ...styles.badge, ...getBadgeStyle(meta.state) }}>
-                      {meta.state}
-                    </span>
-                  </div>
-                  <div style={styles.versionMeta}>
-                    {meta.modelType} • MAE: {meta.metrics?.mae?.toFixed(2) ?? '?'} • Dir: {meta.metrics?.directionalAccuracy?.toFixed(0) ?? '?'}%
-                  </div>
-                  <div style={styles.versionMeta}>
-                    {meta.createdAt || 'unknown'}
-                  </div>
-                </div>
-                <div style={styles.versionActions}>
-                  {meta.state !== 'production' && (
-                    <button
-                      style={styles.promoteBtn}
-                      onClick={() => handlePromote(selectedSymbol, version)}
-                    >
-                      Promote
-                    </button>
-                  )}
-                  {meta.state !== 'production' && (
-                    <button
-                      style={styles.deleteBtn}
-                      onClick={() => handleDelete(selectedSymbol, version)}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
+              {/* Train new version button at top */}
+              <div style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--pm-border)', display: 'flex', justifyContent: 'flex-end' }}>
+                {getTrainingStatus(selectedSymbol) ? (
+                  <span style={{ fontSize: '0.7rem', color: '#3b82f6' }}>
+                    ⏳ {getTrainingStatus(selectedSymbol) === 'processing' ? 'Training in progress...' : 'Queued for training'}
+                  </span>
+                ) : (
+                  <button
+                    style={training ? styles.trainBtnDisabled : styles.trainBtn}
+                    disabled={training}
+                    onClick={(e) => queueTraining(selectedSymbol, e)}
+                  >
+                    Train New Version
+                  </button>
+                )}
               </div>
-            ))}
+
+              {selectedVersions.map(([version, meta]) => (
+                <div key={version} style={styles.versionItem}>
+                  <div style={styles.versionInfo}>
+                    <div style={styles.versionName}>
+                      {version}{' '}
+                      <span style={{ ...styles.badge, ...getBadgeStyle(meta.state) }}>
+                        {meta.state}
+                      </span>
+                    </div>
+                    <div style={styles.versionMeta}>
+                      {meta.modelType} • MAE: {meta.metrics?.mae?.toFixed(2) ?? '?'} • Dir: {meta.metrics?.directionalAccuracy?.toFixed(0) ?? '?'}%
+                    </div>
+                    <div style={styles.versionMeta}>
+                      {meta.createdAt || 'unknown'}
+                    </div>
+                  </div>
+                  <div style={styles.versionActions}>
+                    {meta.state !== 'production' && (
+                      <button
+                        style={styles.promoteBtn}
+                        onClick={() => handlePromote(selectedSymbol, version)}
+                      >
+                        Promote
+                      </button>
+                    )}
+                    {meta.state !== 'production' && (
+                      <button
+                        style={styles.deleteBtn}
+                        onClick={() => handleDelete(selectedSymbol, version)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

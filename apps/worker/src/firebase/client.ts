@@ -235,6 +235,31 @@ export default class FirebaseClient {
   async getAllPendingPredictions(): Promise<Record<string, PendingPredictionEntry>> {
     return (await this._getValue("pending_predictions") as Record<string, PendingPredictionEntry>) || {};
   }
+
+  // ─── Pending Trainings ──────────────────────────────────────────────
+
+  onPendingTrainingAdded(callback: (key: string, entry: PendingTrainingEntry) => void): Unsubscribe {
+    return onChildAdded(ref(this.db, "pending_trainings"), (snapshot) => {
+      const key = snapshot.key;
+      const val = snapshot.val();
+      if (key && val) callback(key, val as PendingTrainingEntry);
+    });
+  }
+
+  async updatePendingTraining(key: string, update: Partial<PendingTrainingEntry>): Promise<void> {
+    const current = await this._getValue(`pending_trainings/${key}`) as PendingTrainingEntry | null;
+    if (current) {
+      await this._setValue(`pending_trainings/${key}`, { ...current, ...update });
+    }
+  }
+
+  async removePendingTraining(key: string): Promise<void> {
+    await this._remove(`pending_trainings/${key}`);
+  }
+
+  async getAllPendingTrainings(): Promise<Record<string, PendingTrainingEntry>> {
+    return (await this._getValue("pending_trainings") as Record<string, PendingTrainingEntry>) || {};
+  }
 }
 
 export interface PendingPredictionEntry {
@@ -246,4 +271,14 @@ export interface PendingPredictionEntry {
   processedDates?: number;
   totalDates?: number;
   error?: string;
+}
+
+export interface PendingTrainingEntry {
+  symbol: string;
+  modelType: string; // "auto" | "random-forest" | "linear-regression" | etc.
+  lookbackDays: number;
+  status: "pending" | "processing" | "completed" | "failed";
+  createdAt: string;
+  error?: string;
+  resultVersion?: string;
 }
