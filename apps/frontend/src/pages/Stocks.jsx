@@ -248,12 +248,14 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
             <DetailRow label="Name" value={stock.name} />
             <DetailRow label="Exchange" value={stock.exchange} />
             <DetailRow label="Security ID" value={stock.securityId} />
+            <DetailRow label="PML ID" value={stock.pmlId} />
             <DetailRow label="ISIN" value={stock.isin} />
             <DetailRow label="Industry" value={stock.industryName} />
             <DetailRow label="Market Cap (₹ Cr)" value={stock.mcap ? stock.mcap.toLocaleString('en-IN') : undefined} />
             <DetailRow label="Tick Size" value={stock.tickSize} />
             <DetailRow label="Lot Size" value={stock.lotSize} />
             <DetailRow label="Added" value={stock.addedAt ? new Date(stock.addedAt).toLocaleDateString('en-IN') : undefined} />
+            <DetailRow label="Updated" value={stock.updatedAt ? new Date(stock.updatedAt).toLocaleDateString('en-IN') : undefined} />
 
             {/* Configuration Section */}
             <div style={{ fontSize: '0.6rem', fontWeight: '700', textTransform: 'uppercase', color: colors.muted, letterSpacing: '0.05em', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: `1px solid ${colors.light}` }}>
