@@ -97,9 +97,20 @@ export default function Dashboard() {
     return () => { unsubPred(); unsubStocks() }
   }, [])
 
-  const today = new Date().toISOString().split('T')[0]
+  // Get last business day (skip weekends)
+  const getLastBusinessDay = () => {
+    const now = new Date()
+    // Use IST
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+    const day = ist.getDay() // 0=Sun, 6=Sat
+    if (day === 0) ist.setDate(ist.getDate() - 2) // Sun → Fri
+    else if (day === 6) ist.setDate(ist.getDate() - 1) // Sat → Fri
+    return ist.toISOString().split('T')[0]
+  }
 
-  // Get enabled stocks and merge with today's predictions
+  const businessDay = getLastBusinessDay()
+
+  // Get enabled stocks and merge with business day's predictions
   const enabledSymbols = Object.entries(stocks)
     .filter(([, s]) => s.enabled)
     .map(([symbol]) => symbol)
@@ -107,9 +118,9 @@ export default function Dashboard() {
 
   // Build list: prediction if exists, otherwise show as scheduled
   const rows = enabledSymbols.map((symbol) => {
-    const todayData = predictions[symbol]?.[today]
-    if (todayData) {
-      return { symbol, ...todayData, status: 'predicted' }
+    const dayData = predictions[symbol]?.[businessDay]
+    if (dayData) {
+      return { symbol, ...dayData, status: 'predicted' }
     }
     return { symbol, status: 'scheduled' }
   })
@@ -124,7 +135,7 @@ export default function Dashboard() {
       const predRef = query(
         ref(db, `predictions/${symbol}`),
         orderByKey(),
-        endAt(today)
+        endAt(businessDay)
       )
       const snap = await get(predRef)
       const data = snap.val() || {}
@@ -140,7 +151,7 @@ export default function Dashboard() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.sectionTitle}>Today's Predictions</div>
+      <div style={styles.sectionTitle}>Predictions — {businessDay}</div>
       <div style={styles.card}>
         {rows.length === 0 ? (
           <div style={styles.empty}>No enabled stocks</div>
