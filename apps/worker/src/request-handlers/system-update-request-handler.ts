@@ -71,11 +71,17 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     logger.info("Step 5: Installing new crons from cron-config.json...");
     this.installCronsFromConfig();
 
-    // ─── Step 6: Kill all running trade-bot processes ────────────────
-    logger.info("Step 6: Killing all running trade-bot processes...");
+    // ─── Step 6: Remove this request from Firebase before killing ────
+    if (_request._key) {
+      logger.info("Step 6: Removing request from queue...");
+      await _ctx.firebase.removeRequest(_request._key);
+    }
+
+    // ─── Step 7: Kill all running trade-bot processes ────────────────
+    logger.info("Step 7: Killing all running trade-bot processes...");
     logger.info("=== SYSTEM UPDATE COMPLETE — restarting via cron ===");
 
-    // Small delay to ensure logs flush and orchestrator can clean up the request
+    // Small delay to ensure logs flush
     await new Promise((r) => setTimeout(r, 1000));
 
     // Kill all trade-bot processes (including self)

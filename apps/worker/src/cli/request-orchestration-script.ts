@@ -109,6 +109,7 @@ class RequestOrchestrationScript extends BaseScript {
 
       await this.firebase.updateRequestStatus(key, "processing");
 
+      request._key = key;
       await this.dispatch(request);
 
       await this.firebase.removeRequest(key);

@@ -311,6 +311,8 @@ export interface QueuedRequest {
   payload: Record<string, unknown>;
   status: "pending" | "processing" | "completed" | "failed";
   createdAt: string;
+  /** Injected by orchestrator before dispatch — the Firebase key for this request */
+  _key?: string;
 }
 
 export interface PendingPredictionEntry {
