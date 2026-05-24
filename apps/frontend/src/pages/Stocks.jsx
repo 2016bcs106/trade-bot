@@ -53,44 +53,51 @@ const styles = {
     textAlign: 'center',
     flexShrink: 0,
   },
-  // Modal
+  // Modal (bottom-sheet style — same as Models page)
   overlay: {
     position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.5)',
+    top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.6)',
+    zIndex: 1000,
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    zIndex: 200,
-    padding: '1rem',
   },
   modal: {
-    background: colors.white,
-    borderRadius: '12px',
+    background: 'var(--pm-card-bg)',
+    borderRadius: '16px 16px 0 0',
     width: '100%',
-    maxWidth: '340px',
-    padding: '1.25rem',
+    maxWidth: '480px',
+    maxHeight: '70vh',
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.75rem',
   },
   modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: '1.25rem 1.25rem 0.75rem',
+    borderBottom: '1px solid var(--pm-border)',
+    flexShrink: 0,
+  },
+  modalBody: {
+    overflow: 'auto',
+    padding: '0 1.25rem',
+    paddingBottom: '5rem',
+    flex: 1,
   },
   modalTitle: {
-    fontSize: '1rem',
+    fontSize: '1.1rem',
     fontWeight: '700',
-    color: colors.dark,
+    color: 'var(--pm-text)',
   },
   modalClose: {
     background: 'none',
     border: 'none',
-    fontSize: '1.1rem',
-    color: colors.muted,
+    fontSize: '1.5rem',
+    color: 'var(--pm-text-muted)',
     cursor: 'pointer',
-    padding: '0.2rem',
+    padding: '0.25rem',
   },
   detailRow: {
     display: 'flex',
@@ -220,11 +227,10 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{stock.symbol}</span>
-          <button style={styles.modalClose} onClick={onClose}>
-            <FontAwesomeIcon icon={faTimes} />
-          </button>
+          <button style={styles.modalClose} onClick={onClose}>×</button>
         </div>
 
+        <div style={styles.modalBody}>
         {isPending ? (
           <div style={styles.detailRow}>
             <span style={styles.detailLabel}>Status</span>
@@ -275,6 +281,7 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
             <FontAwesomeIcon icon={faTrash} />
             Remove Stock
           </button>
+        </div>
         </div>
       </div>
     </div>
