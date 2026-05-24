@@ -1,0 +1,17 @@
+[
+  {
+    "name": "request-handler",
+    "schedule": "* * * * *",
+    "command": "src/cli/request-orchestration-script.ts"
+  },
+  {
+    "name": "live-stream",
+    "schedule": "* * * * *",
+    "command": "src/cli/live-stream.ts"
+  },
+  {
+    "name": "trade-bot",
+    "schedule": "* * * * *",
+    "command": "src/cli/trade-bot.ts"
+  }
+]

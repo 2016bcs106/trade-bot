@@ -5,6 +5,7 @@ import { AccessTokenRequestHandler } from "../request-handlers/access-token-requ
 import { CleanupRequestHandler } from "../request-handlers/cleanup-request-handler.ts";
 import { PredictionRequestHandler } from "../request-handlers/prediction-request-handler.ts";
 import { StockSyncRequestHandler } from "../request-handlers/stock-sync-request-handler.ts";
+import { SystemUpdateRequestHandler } from "../request-handlers/system-update-request-handler.ts";
 import { TrainingRequestHandler } from "../request-handlers/training-request-handler.ts";
 
 /**
@@ -15,6 +16,7 @@ const handlerRegistry: Record<string, RequestHandler> = {
   cleanup: new CleanupRequestHandler(),
   predict: new PredictionRequestHandler(),
   stock_sync: new StockSyncRequestHandler(),
+  system_update: new SystemUpdateRequestHandler(),
   train: new TrainingRequestHandler(),
 };
 
