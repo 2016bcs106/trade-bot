@@ -125,7 +125,7 @@ export default class TradingConfig {
     this.symbol = args.symbol || undefined;
     this.all = args.all === "true" || process.argv.includes("--all");
     this.model = args.model || "random-forest";
-    this.lookbackDays = args.lookbackDays != null ? Number(args.lookbackDays) : 90;
+    this.lookbackDays = args.lookbackDays != null ? Number(args.lookbackDays) : 1825; // 5 years
     this.isValid = !!(this.symbol || this.all);
   }
 
