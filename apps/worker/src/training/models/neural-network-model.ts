@@ -6,8 +6,13 @@ tf.env().set("PROD", true);
 
 /**
  * Feedforward Neural Network for regression using TensorFlow.js.
- * Architecture: Input → Dense(64,relu) → Dense(32,relu) → Dense(2, linear)
- * Output: [predictedHigh, predictedLow]
+ * Architecture: Input → Dense(64,relu) → Dropout → Dense(32,relu) → Dropout → Dense(2, linear)
+ *
+ * Anti-overfitting:
+ * - Dropout between layers (default 0.2)
+ * - L2 kernel regularization
+ * - Early stopping (patience-based on validation split)
+ * - Input/output standardization
  */
 export class NeuralNetworkModel implements TrainableModel {
   private model: tf.LayersModel | null = null;
@@ -20,17 +25,26 @@ export class NeuralNetworkModel implements TrainableModel {
   private readonly batchSize: number;
   private readonly hiddenLayers: number[];
   private readonly learningRate: number;
+  private readonly dropout: number;
+  private readonly l2Lambda: number;
+  private readonly earlyStopPatience: number;
 
   constructor(
-    epochs: number = 100,
+    epochs: number = 200,
     batchSize: number = 32,
     hiddenLayers: number[] = [64, 32],
     learningRate: number = 0.001,
+    dropout: number = 0.2,
+    l2Lambda: number = 0.001,
+    earlyStopPatience: number = 15,
   ) {
     this.epochs = epochs;
     this.batchSize = batchSize;
     this.hiddenLayers = hiddenLayers;
     this.learningRate = learningRate;
+    this.dropout = dropout;
+    this.l2Lambda = l2Lambda;
+    this.earlyStopPatience = earlyStopPatience;
   }
 
   fit(X: number[][], yHigh: number[], yLow: number[]): void {
@@ -62,7 +76,7 @@ export class NeuralNetworkModel implements TrainableModel {
       (yLow[i] - this.outputMean[1]) / this.outputStd[1],
     ]);
 
-    // Build model
+    // Build model with dropout and L2 regularization
     this.model = tf.sequential();
     const sequential = this.model as tf.Sequential;
 
@@ -71,14 +85,18 @@ export class NeuralNetworkModel implements TrainableModel {
       units: this.hiddenLayers[0],
       activation: "relu",
       kernelInitializer: "heNormal",
+      kernelRegularizer: tf.regularizers.l2({ l2: this.l2Lambda }),
     }));
+    sequential.add(tf.layers.dropout({ rate: this.dropout }));
 
     for (let i = 1; i < this.hiddenLayers.length; i++) {
       sequential.add(tf.layers.dense({
         units: this.hiddenLayers[i],
         activation: "relu",
         kernelInitializer: "heNormal",
+        kernelRegularizer: tf.regularizers.l2({ l2: this.l2Lambda }),
       }));
+      sequential.add(tf.layers.dropout({ rate: this.dropout }));
     }
 
     sequential.add(tf.layers.dense({ units: 2, activation: "linear" }));
@@ -88,17 +106,19 @@ export class NeuralNetworkModel implements TrainableModel {
       loss: "meanSquaredError",
     });
 
-    // Train synchronously via tf
     const xTensor = tf.tensor2d(xNorm);
     const yTensor = tf.tensor2d(yNorm);
 
-    // Note: fit is async but we use fitSync pattern (await handled by caller)
-    // Store the promise to be awaited
+    // Early stopping via custom callback
+    const earlyStop = new EarlyStoppingCallback(this.earlyStopPatience);
+
     (this as any)._trainPromise = sequential.fit(xTensor, yTensor, {
       epochs: this.epochs,
       batchSize: this.batchSize,
-      shuffle: false, // keep chronological order
+      validationSplit: 0.15, // 15% for internal validation (early stopping)
+      shuffle: false,
       verbose: 0,
+      callbacks: [earlyStop],
     }).then(() => {
       xTensor.dispose();
       yTensor.dispose();
@@ -127,8 +147,6 @@ export class NeuralNetworkModel implements TrainableModel {
   }
 
   serialize(): string {
-    // TF.js models can't easily serialize to a single JSON string,
-    // so we store the normalization params and weights
     const weights: number[][] = [];
     if (this.model) {
       for (const layer of this.model.layers) {
@@ -144,15 +162,14 @@ export class NeuralNetworkModel implements TrainableModel {
       batchSize: this.batchSize,
       hiddenLayers: this.hiddenLayers,
       learningRate: this.learningRate,
+      dropout: this.dropout,
+      l2Lambda: this.l2Lambda,
+      earlyStopPatience: this.earlyStopPatience,
       inputMean: this.inputMean,
       inputStd: this.inputStd,
       outputMean: this.outputMean,
       outputStd: this.outputStd,
       weights,
-      architecture: this.model ? (this.model as tf.Sequential).layers.map((l) => ({
-        units: (l as any).units,
-        activation: (l as any).activation?.getClassName?.() || "linear",
-      })) : [],
     });
   }
 
@@ -162,8 +179,12 @@ export class NeuralNetworkModel implements TrainableModel {
       batchSize: this.batchSize,
       hiddenLayers: this.hiddenLayers,
       learningRate: this.learningRate,
+      dropout: this.dropout,
+      l2Lambda: this.l2Lambda,
+      earlyStopPatience: this.earlyStopPatience,
       algorithm: "neural-network",
       library: "@tensorflow/tfjs",
+      regularization: "L2 + Dropout + EarlyStopping",
     };
   }
 
@@ -171,14 +192,14 @@ export class NeuralNetworkModel implements TrainableModel {
     const data = JSON.parse(json);
     const model = new NeuralNetworkModel(
       data.epochs, data.batchSize, data.hiddenLayers, data.learningRate,
+      data.dropout, data.l2Lambda, data.earlyStopPatience,
     );
     model.inputMean = data.inputMean;
     model.inputStd = data.inputStd;
     model.outputMean = data.outputMean;
     model.outputStd = data.outputStd;
 
-    // Rebuild architecture and load weights
-    if (data.weights && data.weights.length > 0 && data.architecture) {
+    if (data.weights && data.weights.length > 0) {
       const numFeatures = data.inputMean.length;
       const sequential = tf.sequential();
 
@@ -187,6 +208,7 @@ export class NeuralNetworkModel implements TrainableModel {
         units: data.hiddenLayers[0],
         activation: "relu",
       }));
+      // Dropout layers are not needed for inference (predict always uses test mode)
 
       for (let i = 1; i < data.hiddenLayers.length; i++) {
         sequential.add(tf.layers.dense({
@@ -198,7 +220,7 @@ export class NeuralNetworkModel implements TrainableModel {
       sequential.add(tf.layers.dense({ units: 2, activation: "linear" }));
       sequential.compile({ optimizer: "adam", loss: "meanSquaredError" });
 
-      // Restore weights
+      // Restore weights (only dense layer weights, skip dropout)
       let wIdx = 0;
       for (const layer of sequential.layers) {
         const layerWeights = layer.getWeights();
@@ -214,5 +236,32 @@ export class NeuralNetworkModel implements TrainableModel {
     }
 
     return model;
+  }
+}
+
+/**
+ * Early stopping callback — stops training when val_loss stops improving.
+ */
+class EarlyStoppingCallback extends tf.Callback {
+  private patience: number;
+  private bestLoss: number = Infinity;
+  private wait: number = 0;
+
+  constructor(patience: number = 15) {
+    super();
+    this.patience = patience;
+  }
+
+  override async onEpochEnd(_epoch: number, logs?: tf.Logs): Promise<void> {
+    const valLoss = logs?.val_loss ?? logs?.loss ?? Infinity;
+    if (valLoss < this.bestLoss) {
+      this.bestLoss = valLoss;
+      this.wait = 0;
+    } else {
+      this.wait++;
+      if (this.wait >= this.patience) {
+        this.model.stopTraining = true;
+      }
+    }
   }
 }
