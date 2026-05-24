@@ -46,6 +46,4 @@ export type AuditEventType =
   | "evaluation.completed"
   | "evaluation.failed"
   // System events
-  | "scheduler.started"
-  | "scheduler.stopped"
   | "system.error";

@@ -1,7 +1,6 @@
 import "../config/env.ts";
 import { nowFormatted } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
-import Scheduler, { createDefaultScheduler } from "../scheduler/scheduler.ts";
 import { handleTrain } from "../commands/train.ts";
 import { handlePredict } from "../commands/predict.ts";
 import { handleEvaluate } from "../commands/evaluate.ts";
@@ -9,7 +8,7 @@ import { handleOptimize } from "../commands/optimize.ts";
 
 const logger = createLogger("ml-cli");
 
-const COMMANDS = ["train", "predict", "evaluate", "retrain", "optimize", "scheduler:start", "scheduler:list"] as const;
+const COMMANDS = ["train", "predict", "evaluate", "retrain", "optimize"] as const;
 type Command = typeof COMMANDS[number];
 
 /**
@@ -41,34 +40,7 @@ async function main(): Promise<void> {
       return handleTrain();
     case "optimize":
       return handleOptimize();
-    case "scheduler:start":
-      return startScheduler();
-    case "scheduler:list":
-      return listJobs();
   }
-}
-
-function startScheduler(): Promise<void> {
-  const scheduler = createDefaultScheduler({
-    predict: () => handlePredict(),
-    evaluate: () => handleEvaluate(),
-    retrain: () => handleTrain(),
-    optimize: () => handleOptimize(),
-  });
-
-  scheduler.start();
-  logger.info(`Scheduler running (${scheduler.listJobs().length} jobs). Market hours: ${Scheduler.isMarketHours() ? "YES" : "NO"}`);
-  return new Promise(() => {});
-}
-
-function listJobs(): void {
-  const scheduler = createDefaultScheduler({
-    predict: async () => {},
-    evaluate: async () => {},
-    retrain: async () => {},
-    optimize: async () => {},
-  });
-  logger.info(`Jobs: ${scheduler.listJobs().join(", ")}`);
 }
 
 function printUsage(): void {
@@ -83,8 +55,6 @@ Commands:
   evaluate          Evaluate predictions against actuals
   retrain           Force shadow model retraining
   optimize          Run optimization review
-  scheduler:start   Start the cron scheduler
-  scheduler:list    List registered scheduler jobs
 
 Options:
   --symbol=SYMBOL   Stock symbol (e.g., --symbol=RELIANCE)
