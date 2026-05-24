@@ -84,20 +84,20 @@ export default class FirebaseClient {
 
   // ─── Ticks & Signals ──────────────────────────────────────────────
 
-  async storeTick(_date: string, data: TickData): Promise<void> {
-    await push(ref(this.db, "prices"), data);
+  async storeTick(symbol: string, _date: string, data: TickData): Promise<void> {
+    await push(ref(this.db, `prices/${symbol}`), data);
   }
 
-  async storeSignal(_date: string, data: SignalData): Promise<void> {
-    await push(ref(this.db, "signals"), data);
+  async storeSignal(symbol: string, _date: string, data: SignalData): Promise<void> {
+    await push(ref(this.db, `signals/${symbol}`), data);
   }
 
-  async clearTicks(): Promise<void> {
-    await this._remove("prices");
+  async clearTicks(symbol?: string): Promise<void> {
+    await this._remove(symbol ? `prices/${symbol}` : "prices");
   }
 
-  async clearSignals(): Promise<void> {
-    await this._remove("signals");
+  async clearSignals(symbol?: string): Promise<void> {
+    await this._remove(symbol ? `signals/${symbol}` : "signals");
   }
 
   // ─── Stocks ────────────────────────────────────────────────────────

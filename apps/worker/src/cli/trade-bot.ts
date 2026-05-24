@@ -1,22 +1,38 @@
 import "../config/env.ts";
-import { writeFileSync } from "fs";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
 import BaseScript from "./base-script.ts";
-import { now, nowMs, nowFormatted } from "../utils/time.ts";
+import { now, nowMs } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { LiveMarketDataResponse } from "../types/market-data/live-market-data.ts";
-import { AnalysisResult } from "../types/analysis/analysis-result.ts";
+import { StockConfig } from "../types/stocks/stock-config.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+/** Shared default config for all SMA analyzers */
+const DEFAULT_CONFIG = new TradingConfig("trade-bot");
+
 const OP_TIMEOUT_MS = 15000;
 
+/**
+ * Per-stock tracking state.
+ */
+interface StockTracker {
+  config: StockConfig;
+  analyzer: SmaCrossoverAnalyzer;
+}
+
+/**
+ * Trade Bot — tracks ALL enabled stocks from Firebase.
+ *
+ * Every minute during market hours (9:15-15:30 IST):
+ * - Fetches live price for each enabled stock
+ * - Runs SMA crossover analysis
+ * - Stores ticks at prices/{symbol}/ and signals at signals/{symbol}/
+ *
+ * Pre-market (9:00-9:14): clears previous day's ticks/signals for all stocks.
+ */
 class TradeBotScript extends BaseScript {
-  private config = new TradingConfig("trade-bot");
   private paytm = new PaytmMoneyClient();
-  private analyzer = new SmaCrossoverAnalyzer(this.config);
+  private trackers = new Map<string, StockTracker>();
   private ticksProcessed = 0;
   private signalsGenerated = 0;
   private running = false;
@@ -31,83 +47,56 @@ class TradeBotScript extends BaseScript {
       ticksProcessed: this.ticksProcessed,
       signalsGenerated: this.signalsGenerated,
       running: this.running,
-      dryRun: this.config.dryRun,
-      config: this.config.toJSON(),
+      trackedStocks: [...this.trackers.keys()],
     };
   }
 
   protected async run(): Promise<void> {
-    if (!this.config.isValid) {
-      TradingConfig.printHelp("trade-bot");
-      process.exit(0);
+    // Load enabled stocks
+    const allStocks = await this.firebase.getAllStocks();
+    const enabledStocks = Object.values(allStocks).filter((s) => s.enabled);
+
+    if (enabledStocks.length === 0) {
+      this.log.error("No enabled stocks found — nothing to track");
+      process.exit(1);
     }
 
-    this.log.info("Starting with config", this.config.toJSON());
-
-    if (this.config.dryRun) {
-      this.log.info("DRY RUN MODE — No data will be saved to Firebase");
-      await this.startDryRun();
-    } else {
-      this.log.info("Listening for config/enabled...");
-
-      this.firebase.onEnabledChange((enabled: boolean | null) => {
-        if (enabled === true && !this.running) {
-          this.log.info("Bot enabled — starting analysis loop");
-          this.analyzer.reset();
-          this.running = true;
-        } else if (enabled === false && this.running) {
-          this.log.info("Bot disabled — pausing analysis loop");
-          this.running = false;
-        } else if (enabled == null) {
-          this.log.warn("Config not set — waiting for enabled flag");
-        }
+    // Create a tracker per stock
+    for (const stock of enabledStocks) {
+      this.trackers.set(stock.symbol, {
+        config: stock,
+        analyzer: new SmaCrossoverAnalyzer(DEFAULT_CONFIG),
       });
-
-      await this.startLive();
     }
-  }
 
-  private async startDryRun(): Promise<void> {
-    const ohlcvData = await this.paytm.fetchOHLCV(this.config.pmlId!, this.config.fromDate!, this.config.toDate!);
-    const testData = ohlcvData.map(c => ({ date: c.timestamp, close: c.close, volume: c.volume }));
-    this.analyzer.reset();
+    this.log.info(`Tracking ${enabledStocks.length} stocks: ${enabledStocks.map((s) => s.symbol).join(", ")}`);
 
-    const ticks: Array<{ time: string; close: number; fastSma: number | null; slowSma: number | null }> = [];
-    const signals: Array<{ time: string; signal: string; triggerPrice: number; gain: number; status: string }> = [];
-
-    for (const point of testData) {
-      const [, time] = point.date.split(" ");
-      const analysis = this.analyzer.next(point);
-      this.ticksProcessed++;
-
-      ticks.push({ time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma });
-
-      if (analysis.signal !== null) {
-        this.signalsGenerated++;
-        signals.push({ time, signal: analysis.signal, triggerPrice: analysis.close, gain: analysis.runningProfit, status: "DRY_RUN" });
+    // Listen for enabled flag
+    this.firebase.onEnabledChange((enabled: boolean | null) => {
+      if (enabled === true && !this.running) {
+        this.log.info("Bot enabled — starting analysis");
+        for (const tracker of this.trackers.values()) tracker.analyzer.reset();
+        this.running = true;
+      } else if (enabled === false && this.running) {
+        this.log.info("Bot disabled — pausing");
+        this.running = false;
+      } else if (enabled == null) {
+        this.log.warn("Config not set — waiting for enabled flag");
       }
-    }
+    });
 
-    const outputPath = resolve(__dirname, "..", "..", "..", "frontend", "public", "dry-run-output.json");
-    const output = { ticks, signals, generatedAt: nowFormatted() };
-    writeFileSync(outputPath, JSON.stringify(output, null, 2));
-
-    this.log.info(`Processed ${testData.length} data points — output: ${outputPath}`);
-    this.log.info(`Net gain: ${signals.slice(-1)[0]?.gain ?? 0}`);
-  }
-
-  private async startLive(): Promise<void> {
+    // Get access token
     let accessToken = await this.withTimeout(this.firebase.getAccessToken(), "getAccessToken");
-    this.log.info("Access token loaded from Firebase");
+    this.log.info("Access token loaded");
 
     this.firebase.onAccessTokenChange((newToken: string) => {
       if (newToken !== accessToken) {
-        this.log.info("Access token updated from Firebase");
+        this.log.info("Access token updated");
         accessToken = newToken;
       }
     });
 
-    this.log.info(`Entering main loop — operation timeout: ${OP_TIMEOUT_MS}ms`);
+    this.log.info("Entering main loop");
 
     while (true) {
       const startTime = nowMs();
@@ -116,44 +105,20 @@ class TradeBotScript extends BaseScript {
         const time = now().format("HH:mm");
 
         if (time >= "09:15" && time <= "15:30") {
-          const lastTradedPrice = await this.withTimeout(
-            this.paytm.fetchLiveData(this.config.exchangeType, this.config.scripId, this.config.scripType, accessToken),
-            "fetchLiveData",
-          );
-          const price = this.extractLtp(lastTradedPrice);
-          const analysis: AnalysisResult = this.analyzer.next({ date: `${date} ${time}`, close: price });
-          this.ticksProcessed++;
-
-          await this.withTimeout(
-            this.firebase.storeTick(date, { time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma }),
-            "storeTick",
-          );
-
-          if (this.running) {
-            this.log.debug(`Tick processed — time=${time} price=${price} fastSma=${analysis.fastSma} slowSma=${analysis.slowSma}`);
-            if (analysis.signal !== null) {
-              this.signalsGenerated++;
-              this.log.info(`Signal generated: ${analysis.signal} @ ${price} | gain=${analysis.runningProfit}`);
-              await this.withTimeout(
-                this.firebase.storeSignal(date, { time, signal: analysis.signal, triggerPrice: price, gain: analysis.runningProfit, status: "DRY_RUN" }),
-                "storeSignal",
-              );
-            }
-          } else {
-            this.log.debug(`Tick stored but bot paused — time=${time}`);
-          }
+          await this.processAllStocks(date, time, accessToken);
         } else if (time >= "09:00" && time <= "09:14") {
           if (!this.resetDone) {
-            this.log.info("Pre-market reset — clearing ticks and signals");
-            await this.withTimeout(this.firebase.clearTicks(), "clearTicks");
-            await this.withTimeout(this.firebase.clearSignals(), "clearSignals");
-            this.analyzer.reset();
+            this.log.info("Pre-market reset — clearing ticks and signals for all stocks");
+            for (const symbol of this.trackers.keys()) {
+              await this.withTimeout(this.firebase.clearTicks(symbol), `clearTicks:${symbol}`);
+              await this.withTimeout(this.firebase.clearSignals(symbol), `clearSignals:${symbol}`);
+            }
+            for (const tracker of this.trackers.values()) tracker.analyzer.reset();
             this.resetDone = true;
             this.log.info("Pre-market reset complete");
           }
         } else {
           this.resetDone = false;
-          this.log.debug(`Outside market hours — time=${time}`);
         }
       } catch (error) {
         this.log.error("Loop error", error);
@@ -162,6 +127,44 @@ class TradeBotScript extends BaseScript {
       const elapsedTime = nowMs() - startTime;
       const waitTime = 60000 - elapsedTime;
       await this.wait(Math.max(0, waitTime));
+    }
+  }
+
+  /**
+   * Fetch live price and run analysis for all tracked stocks.
+   */
+  private async processAllStocks(date: string, time: string, accessToken: string): Promise<void> {
+    for (const [symbol, tracker] of this.trackers) {
+      try {
+        const { config } = tracker;
+        const scripId = String(config.securityId);
+        const exchangeType = config.exchange || "NSE";
+
+        const liveData = await this.withTimeout(
+          this.paytm.fetchLiveData(exchangeType, scripId, "ES", accessToken),
+          `fetchLiveData:${symbol}`,
+        );
+        const price = this.extractLtp(liveData);
+        const analysis = tracker.analyzer.next({ date: `${date} ${time}`, close: price });
+        this.ticksProcessed++;
+
+        await this.withTimeout(
+          this.firebase.storeTick(symbol, date, { time, close: analysis.close, fastSma: analysis.fastSma, slowSma: analysis.slowSma }),
+          `storeTick:${symbol}`,
+        );
+
+        if (this.running && analysis.signal !== null) {
+          this.signalsGenerated++;
+          this.log.info(`Signal [${symbol}]: ${analysis.signal} @ ${price} | gain=${analysis.runningProfit}`);
+          await this.withTimeout(
+            this.firebase.storeSignal(symbol, date, { time, signal: analysis.signal, triggerPrice: price, gain: analysis.runningProfit, status: "LIVE" }),
+            `storeSignal:${symbol}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log.error(`Error processing ${symbol}: ${msg}`);
+      }
     }
   }
 
