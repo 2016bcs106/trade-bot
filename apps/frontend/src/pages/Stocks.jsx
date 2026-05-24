@@ -154,11 +154,9 @@ function ToggleRow({ label, enabled, onToggle }) {
 }
 
 // ─── Stock Detail Modal ────────────────────────────────────────────────
-function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimize, onRemove, onRetrain }) {
+function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimize, onRemove, onSync }) {
   const isPending = stock.status === 'pending_sync'
   const isFailed = stock.status === 'sync_failed'
-  const isTraining = stock.status === 'pending_training'
-  const canRetrain = !isPending && !isTraining
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -166,13 +164,13 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{stock.symbol} — Details</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {canRetrain && (
+            {!isPending && (
               <button
                 style={{ ...styles.actionBtn, color: '#3b82f6', fontSize: '0.75rem', margin: 0 }}
-                onClick={onRetrain}
-                title="Retrain model"
+                onClick={onSync}
+                title="Sync stock data"
               >
-                <FontAwesomeIcon icon={faSync} /> Retrain
+                <FontAwesomeIcon icon={faSync} /> Sync
               </button>
             )}
             <button style={styles.modalClose} onClick={onClose}>×</button>
@@ -395,6 +393,15 @@ export default function Stocks() {
     })
   }
 
+  const handleSync = async (symbol) => {
+    await push(ref(db, 'request_queue'), {
+      type: 'stock_sync',
+      payload: { symbol, skipRetrain: true, skipPredict: true },
+      status: 'pending',
+      createdAt: moment().utcOffset('+05:30').toISOString(),
+    })
+  }
+
   // Get production model metadata for a stock
   const getProductionModel = (symbol) => {
     const stock = stocks?.[symbol]
@@ -432,8 +439,8 @@ export default function Stocks() {
                     {status.text}
                   </span>
                   {stock.status !== 'pending_sync' && stock.status !== 'pending_training' && (
-                    <button style={{ ...styles.iconBtn, color: '#3b82f6' }} title="Retrain" onClick={() => handleRetrain(stock.symbol)}>
-                      <FontAwesomeIcon icon={faSync} />
+                    <button style={{ ...styles.iconBtn, color: '#3b82f6', fontSize: '0.65rem', fontWeight: '600' }} title="Retrain" onClick={() => handleRetrain(stock.symbol)}>
+                      <FontAwesomeIcon icon={faSync} /> Retrain
                     </button>
                   )}
                   <button style={styles.iconBtn} title="View models" onClick={() => setModelsSymbol(stock.symbol)}>
@@ -492,7 +499,7 @@ export default function Stocks() {
           onToggleEnabled={() => handleToggleEnabled(selectedStock)}
           onToggleAutoOptimize={() => handleToggleAutoOptimize(selectedStock)}
           onRemove={() => handleRemove(selectedStock)}
-          onRetrain={() => handleRetrain(selectedStock.symbol)}
+          onSync={() => handleSync(selectedStock.symbol)}
         />
       )}
 
