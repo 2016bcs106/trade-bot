@@ -3,9 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev:frontend": "pnpm --filter frontend dev",
-    "dev:worker": "pnpm --filter worker dev",
-    "build:frontend": "pnpm --filter frontend build",
+    "w": "pnpm --filter worker",
+    "f": "pnpm --filter frontend",
     "deploy": "pnpm --filter frontend build && cd apps/frontend && firebase deploy --only hosting"
   },
   "description": "Quantitative research and intraday prediction platform"
