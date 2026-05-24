@@ -222,22 +222,27 @@ export default function Models() {
           <div key={row.symbol} style={styles.card} onClick={() => row.trained && setSelectedSymbol(row.symbol)}>
             <div style={styles.symbolHeader}>
               <span style={styles.symbolName}>{row.symbol}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                {row.trained ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {row.trained && (
                   <>
                     <span style={styles.versionBadge}>{row.version}</span>
                     <span style={{ ...styles.badge, ...getBadgeStyle(row.meta.state) }}>
                       {row.meta.state}
                     </span>
                   </>
-                ) : row.trainingStatus ? (
+                )}
+                {row.trainingStatus ? (
                   <span style={{ ...styles.badge, ...styles.badgeProcessing }}>
                     {row.trainingStatus === 'processing' ? '⏳ Training...' : '⏳ Queued'}
                   </span>
                 ) : (
-                  <span style={{ ...styles.badge, ...styles.badgeUntrained }}>
-                    No model
-                  </span>
+                  <button
+                    style={{ ...styles.badge, background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: 'none', cursor: 'pointer' }}
+                    onClick={(e) => queueTraining(row.symbol, e)}
+                    disabled={training}
+                  >
+                    {row.trained ? '↻ Retrain' : '+ Train'}
+                  </button>
                 )}
               </div>
             </div>
@@ -268,38 +273,10 @@ export default function Models() {
                     </div>
                   </div>
                 )}
-
-                {/* Retrain button */}
-                <div style={{ marginTop: '0.6rem', display: 'flex', justifyContent: 'flex-end' }}>
-                  {row.trainingStatus ? (
-                    <span style={{ fontSize: '0.6rem', color: '#3b82f6' }}>
-                      ⏳ {row.trainingStatus === 'processing' ? 'Training...' : 'Queued'}
-                    </span>
-                  ) : (
-                    <button
-                      style={training ? styles.trainBtnDisabled : styles.trainBtn}
-                      disabled={training}
-                      onClick={(e) => queueTraining(row.symbol, e)}
-                    >
-                      Retrain
-                    </button>
-                  )}
-                </div>
               </>
             ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
-                <span style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted)' }}>
-                  No model trained yet
-                </span>
-                {!row.trainingStatus && (
-                  <button
-                    style={training ? styles.trainBtnDisabled : styles.trainBtn}
-                    disabled={training}
-                    onClick={(e) => queueTraining(row.symbol, e)}
-                  >
-                    Train Model
-                  </button>
-                )}
+              <div style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted)', marginTop: '0.1rem' }}>
+                No model trained yet
               </div>
             )}
           </div>
@@ -311,27 +288,26 @@ export default function Models() {
         <div style={styles.overlay} onClick={() => setSelectedSymbol(null)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <span style={styles.modalTitle}>{selectedSymbol} — All Versions</span>
-              <button style={styles.closeBtn} onClick={() => setSelectedSymbol(null)}>×</button>
-            </div>
-
-            <div style={styles.modalBody}>
-              {/* Train new version button at top */}
-              <div style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--pm-border)', display: 'flex', justifyContent: 'flex-end' }}>
+              <span style={styles.modalTitle}>{selectedSymbol}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 {getTrainingStatus(selectedSymbol) ? (
-                  <span style={{ fontSize: '0.7rem', color: '#3b82f6' }}>
-                    ⏳ {getTrainingStatus(selectedSymbol) === 'processing' ? 'Training in progress...' : 'Queued for training'}
+                  <span style={{ ...styles.badge, ...styles.badgeProcessing }}>
+                    {getTrainingStatus(selectedSymbol) === 'processing' ? '⏳ Training...' : '⏳ Queued'}
                   </span>
                 ) : (
                   <button
-                    style={training ? styles.trainBtnDisabled : styles.trainBtn}
+                    style={{ ...styles.badge, background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: 'none', cursor: 'pointer' }}
                     disabled={training}
                     onClick={(e) => queueTraining(selectedSymbol, e)}
                   >
-                    Train New Version
+                    + Train
                   </button>
                 )}
+                <button style={styles.closeBtn} onClick={() => setSelectedSymbol(null)}>×</button>
               </div>
+            </div>
+
+            <div style={styles.modalBody}>
 
               {selectedVersions.map(([version, meta]) => (
                 <div key={version} style={styles.versionItem}>
