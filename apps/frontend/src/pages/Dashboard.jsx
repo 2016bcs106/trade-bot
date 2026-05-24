@@ -178,11 +178,14 @@ export default function Dashboard() {
       ) : (
         rows.map((row) => {
           const hasActual = row.status === 'predicted' && row.evaluated && row.actualHigh != null
-          const direction = hasActual
-            ? (row.actualHigh > row.predictedHigh ? 'Bullish' : row.actualLow < row.predictedLow ? 'Bearish' : 'In Range')
+          // Direction based on predicted midpoint vs reference price (price when prediction was made)
+          const midpoint = row.status === 'predicted' ? (row.predictedHigh + row.predictedLow) / 2 : 0
+          const refPrice = row.referencePrice
+          const direction = (row.status === 'predicted' && refPrice)
+            ? (midpoint >= refPrice ? 'Bullish' : 'Bearish')
             : null
-          const dirIcon = direction === 'Bullish' ? '▲' : direction === 'Bearish' ? '▼' : '●'
-          const dirColor = direction === 'Bullish' ? '#22c55e' : direction === 'Bearish' ? '#ef4444' : '#f59e0b'
+          const dirIcon = direction === 'Bullish' ? '▲' : '▼'
+          const dirColor = direction === 'Bullish' ? '#22c55e' : '#ef4444'
 
           return (
             <div key={row.symbol} style={{ ...styles.card, cursor: 'pointer' }} onClick={() => openHistory(row.symbol)}>
@@ -346,11 +349,12 @@ export default function Dashboard() {
                 <div style={styles.loadingText}>No historical predictions</div>
               ) : history && history.map(([date, pred]) => {
                 const hasActual = pred.evaluated && pred.actualHigh != null
-                const direction = hasActual
-                  ? (pred.actualHigh > pred.predictedHigh ? 'Bullish' : pred.actualLow < pred.predictedLow ? 'Bearish' : 'In Range')
-                  : null
-                const dirIcon = direction === 'Bullish' ? '▲' : direction === 'Bearish' ? '▼' : '●'
-                const dirColor = direction === 'Bullish' ? '#22c55e' : direction === 'Bearish' ? '#ef4444' : '#f59e0b'
+                // Direction based on predicted midpoint vs reference price
+                const midPred = (pred.predictedHigh + pred.predictedLow) / 2
+                const refP = pred.referencePrice
+                const direction = refP ? (midPred >= refP ? 'Bullish' : 'Bearish') : null
+                const dirIcon = direction === 'Bullish' ? '▲' : '▼'
+                const dirColor = direction === 'Bullish' ? '#22c55e' : '#ef4444'
 
                 return (
                   <div key={date} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--pm-border)' }}>

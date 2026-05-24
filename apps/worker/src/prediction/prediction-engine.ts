@@ -62,6 +62,10 @@ export default class PredictionEngine {
     const predictedLow = model.predictLow(featureArray);
 
     // Step 4: Build prediction object
+    // Reference price = candle close at 11:00 AM IST (scheduled prediction time)
+    // Market opens at 9:15, so 11:00 = 105 minutes in (candle index ~104 for 1-min candles)
+    const referencePrice = this.getReferencePriceAt1100(candles);
+
     return {
       symbol,
       date,
@@ -71,6 +75,7 @@ export default class PredictionEngine {
       modelType,
       generatedAt: moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss"),
       confidence: this.computeConfidence(predictedHigh, predictedLow, candles),
+      referencePrice,
       actualHigh: null,
       actualLow: null,
       evaluated: false,
@@ -119,6 +124,32 @@ export default class PredictionEngine {
       default:
         return null;
     }
+  }
+
+  /**
+   * Get the reference price at 11:00 AM IST (scheduled prediction time).
+   * This is the candle close at 11:00, which is 105 minutes after market open (9:15).
+   * Falls back to the last available candle if 11:00 candle is not available.
+   */
+  private getReferencePriceAt1100(candles: OHLCV[]): number | null {
+    if (candles.length === 0) return null;
+
+    // Try to find candle with timestamp matching 11:00
+    for (const candle of candles) {
+      const ts = candle.timestamp;
+      // Check for HH:mm pattern of 11:00
+      if (ts.includes("11:00") || ts.includes("T11:00")) {
+        return candle.close;
+      }
+    }
+
+    // Fallback: use candle at index 104 (105th minute = 11:00 for 1-min candles starting 9:15)
+    if (candles.length > 104) {
+      return candles[104].close;
+    }
+
+    // Final fallback: use the last available candle close
+    return candles[candles.length - 1].close;
   }
 
   /**

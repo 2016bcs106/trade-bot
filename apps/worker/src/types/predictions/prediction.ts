@@ -27,6 +27,9 @@ export interface Prediction {
   /** ISO timestamp when prediction was generated (YYYY-MM-DD HH:mm:ss) */
   generatedAt: string;
 
+  /** Price at the time prediction was made (last candle close from input data) */
+  referencePrice: number | null;
+
   /** Actual intraday high (filled after market close), null until evaluated */
   actualHigh: number | null;
 
