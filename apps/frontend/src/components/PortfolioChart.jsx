@@ -107,6 +107,19 @@ const styles = {
   },
 }
 
+/** Generate hourly market labels (9:15 to 15:30) as placeholders when no ticks */
+function generateMarketLabels() {
+  const labels = []
+  for (let h = 9; h <= 15; h++) {
+    const start = h === 9 ? 15 : 0
+    const end = h === 15 ? 30 : 59
+    for (let m = start; m <= end; m += 15) {
+      labels.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+    }
+  }
+  return labels
+}
+
 export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ticks = [], signals = [], predictedHigh = null, predictedLow = null }) {
   const [visible, setVisible] = useState({ close: true, fastSma: false, slowSma: false })
   const chartRef = useRef(null)
@@ -177,12 +190,18 @@ export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ti
     }
   }
 
+  // If no ticks but we have predictions, generate placeholder time labels (market hours)
+  const hasPrediction = predictedHigh !== null || predictedLow !== null
+  const effectiveLabels = timeLabels.length > 0
+    ? timeLabels
+    : (hasPrediction ? generateMarketLabels() : [])
+
   // Build prediction line datasets (horizontal dotted lines)
   const predictionDatasets = []
-  if (predictedHigh !== null && timeLabels.length > 0) {
+  if (predictedHigh !== null && effectiveLabels.length > 0) {
     predictionDatasets.push({
       label: 'Pred High',
-      data: timeLabels.map(() => predictedHigh),
+      data: effectiveLabels.map(() => predictedHigh),
       borderColor: 'rgba(34, 197, 94, 0.6)',
       borderWidth: 1.5,
       borderDash: [6, 4],
@@ -193,10 +212,10 @@ export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ti
       hidden: false,
     })
   }
-  if (predictedLow !== null && timeLabels.length > 0) {
+  if (predictedLow !== null && effectiveLabels.length > 0) {
     predictionDatasets.push({
       label: 'Pred Low',
-      data: timeLabels.map(() => predictedLow),
+      data: effectiveLabels.map(() => predictedLow),
       borderColor: 'rgba(239, 68, 68, 0.6)',
       borderWidth: 1.5,
       borderDash: [6, 4],
@@ -209,7 +228,7 @@ export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ti
   }
 
   const chartData = {
-    labels: timeLabels,
+    labels: effectiveLabels,
     datasets: [...Object.keys(SERIES).map(makeDataset), ...predictionDatasets],
   }
 
