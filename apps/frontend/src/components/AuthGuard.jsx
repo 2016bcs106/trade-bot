@@ -17,20 +17,39 @@ export default function AuthGuard({ children }) {
   const [authState, setAuthState] = useState('loading') // 'loading' | 'authenticated' | 'unauthenticated'
 
   useEffect(() => {
-    const updatedOnRef = ref(db, 'auth/updatedOn')
-    const unsubscribe = onValue(updatedOnRef, (snapshot) => {
-      const updatedOn = snapshot.val()
-      if (isTokenFreshToday(updatedOn)) {
+    let latestUpdatedOn = null
+
+    const checkAuth = () => {
+      if (isTokenFreshToday(latestUpdatedOn)) {
         setAuthState('authenticated')
       } else {
         setAuthState('unauthenticated')
       }
+    }
+
+    // Listen for Firebase auth/updatedOn changes
+    const updatedOnRef = ref(db, 'auth/updatedOn')
+    const unsubscribe = onValue(updatedOnRef, (snapshot) => {
+      latestUpdatedOn = snapshot.val()
+      checkAuth()
     }, (error) => {
       console.error('Error reading updatedOn from Firebase:', error)
       setAuthState('unauthenticated')
     })
 
-    return () => unsubscribe()
+    // Schedule re-check at midnight IST so session expires without page refresh
+    const nowIST = moment().utcOffset('+05:30')
+    const midnightIST = nowIST.clone().endOf('day').add(1, 'millisecond')
+    const msUntilMidnight = midnightIST.diff(nowIST)
+
+    const midnightTimer = setTimeout(() => {
+      checkAuth()
+    }, msUntilMidnight)
+
+    return () => {
+      unsubscribe()
+      clearTimeout(midnightTimer)
+    }
   }, [])
 
   if (authState === 'loading') {
