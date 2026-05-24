@@ -126,8 +126,10 @@ const styles = {
 }
 
 function getStatusStyle(stock) {
-  if (stock.status === 'pending_sync') return { background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', text: 'PENDING' }
-  if (stock.status === 'sync_failed') return { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', text: 'FAILED' }
+  if (stock.status === 'pending_sync') return { background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', text: 'SYNCING' }
+  if (stock.status === 'pending_training') return { background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', text: 'TRAINING' }
+  if (stock.status === 'sync_failed') return { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', text: 'SYNC FAILED' }
+  if (stock.status === 'training_failed') return { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', text: 'TRAIN FAILED' }
   if (stock.enabled) return { background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', text: 'ACTIVE' }
   return { background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', text: 'OFF' }
 }
@@ -326,6 +328,17 @@ export default function Stocks() {
   const handleAdd = async () => {
     const symbol = symbolInput.trim().toUpperCase()
     if (!symbol || existingSymbols.includes(symbol)) { setSymbolInput(''); return }
+    // Immediately show pending_sync status
+    await set(ref(db, `stocks/${symbol}`), {
+      symbol,
+      name: symbol,
+      status: 'pending_sync',
+      enabled: false,
+      autoOptimize: true,
+      currentProductionVersion: null,
+      addedAt: moment().utcOffset('+05:30').toISOString(),
+      updatedAt: moment().utcOffset('+05:30').toISOString(),
+    })
     await push(ref(db, 'request_queue'), {
       type: 'stock_sync',
       payload: { symbol },
@@ -385,6 +398,8 @@ export default function Stocks() {
   }
 
   const handleRetrain = async (symbol) => {
+    // Immediately show pending_training status
+    await set(ref(db, `stocks/${symbol}/status`), 'pending_training')
     await push(ref(db, 'request_queue'), {
       type: 'train',
       payload: { symbol },
