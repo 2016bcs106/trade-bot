@@ -40,9 +40,15 @@ export async function handleEvaluate(symbol: string | null, all: boolean): Promi
       continue;
     }
 
+    const pmlId = stock.pmlId;
+    if (!pmlId) {
+      logger.error(`Stock ${sym} has no pmlId — re-run stock-sync`);
+      continue;
+    }
+
     // Fetch full-day candles from API
     const candles = await provider.fetchOHLCV({
-      symbol: sym, securityId: String(stock.securityId), exchange: "NSE",
+      symbol: sym, securityId: pmlId, exchange: "NSE",
       fromDate: today, toDate: today, interval: "MINUTE",
     });
 

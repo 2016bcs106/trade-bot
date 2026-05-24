@@ -33,11 +33,15 @@ export async function handlePredict(symbol: string | null, all: boolean): Promis
       continue;
     }
 
-    const securityId = String(stock.securityId);
+    const pmlId = stock.pmlId;
+    if (!pmlId) {
+      logger.error(`Stock ${sym} has no pmlId — re-run stock-sync`);
+      continue;
+    }
 
     // Fetch today's candles from API
     const candles = await provider.fetchOHLCV({
-      symbol: sym, securityId, exchange: "NSE",
+      symbol: sym, securityId: pmlId, exchange: "NSE",
       fromDate: today, toDate: today, interval: "MINUTE",
     });
 
@@ -48,7 +52,7 @@ export async function handlePredict(symbol: string | null, all: boolean): Promis
 
     // Fetch yesterday's candles for previous day context
     const prevCandles = await provider.fetchOHLCV({
-      symbol: sym, securityId, exchange: "NSE",
+      symbol: sym, securityId: pmlId, exchange: "NSE",
       fromDate: yesterday, toDate: yesterday, interval: "MINUTE",
     });
 

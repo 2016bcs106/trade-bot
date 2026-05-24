@@ -126,6 +126,7 @@ class StockSyncScript extends BaseScript {
         symbol: result.symbol,
         name: result.name,
         securityId: result.security_id,
+        pmlId: result.id,
         isin: result.isin,
         industryName: result.industry_name !== "NULL" ? result.industry_name : undefined,
         mcap: result.mcap,

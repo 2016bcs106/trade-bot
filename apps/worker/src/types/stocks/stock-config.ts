@@ -9,8 +9,11 @@ export interface StockConfig {
   /** Display name (e.g., "Reliance Industries Ltd") */
   name: string;
 
-  /** Paytm Money security ID for data fetching */
+  /** Paytm Money security ID */
   securityId: number | string;
+
+  /** Paytm Money pmlId used for charts/historical data API */
+  pmlId: string;
 
   /** ISIN code (e.g., "INE040A01034") */
   isin?: string;

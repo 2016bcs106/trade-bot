@@ -35,10 +35,14 @@ export async function handleTrain(symbol: string | null, all: boolean): Promise<
       continue;
     }
 
-    const securityId = String(stock.securityId);
-    logger.info(`Training model for ${sym} (securityId: ${securityId})...`);
+    const pmlId = stock.pmlId;
+    if (!pmlId) {
+      logger.error(`Stock ${sym} has no pmlId — re-run stock-sync`);
+      continue;
+    }
 
-    const result = await trainer.train(sym, securityId, fromDate, toDate, "linear-regression");
+    logger.info(`Training model for ${sym} (pmlId: ${pmlId})...`);
+    const result = await trainer.train(sym, pmlId, fromDate, toDate, "linear-regression");
 
     if (!result) {
       logger.error(`Training failed for ${sym}`);
