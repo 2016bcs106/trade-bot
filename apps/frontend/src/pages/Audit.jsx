@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import moment from 'moment'
 import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -88,13 +89,11 @@ const styles = {
   empty: { textAlign: 'center', padding: '1.5rem', color: 'var(--pm-text-muted)', fontSize: '0.8rem' },
 }
 
-function getRelativeTime(ms) {
-  if (!ms) return '—'
-  const seconds = Math.floor((Date.now() - ms) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
+function getRelativeTime(value) {
+  if (!value) return '—'
+  const m = moment(value)
+  if (!m.isValid()) return '—'
+  return m.fromNow()
 }
 
 function CollapsibleJson({ label, data }) {
