@@ -396,7 +396,7 @@ export default function Stocks() {
   const handleSync = async (symbol) => {
     await push(ref(db, 'request_queue'), {
       type: 'stock_sync',
-      payload: { symbol, skipRetrain: true, skipPredict: true },
+      payload: { symbol, shouldSkipTraining: true, shouldSkipPredicting: true },
       status: 'pending',
       createdAt: moment().utcOffset('+05:30').toISOString(),
     })

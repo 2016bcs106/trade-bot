@@ -53,46 +53,70 @@ export class StockSyncRequestHandler implements RequestHandler {
 
     logger.info(`Syncing: ${symbol}`);
 
+    const existingStock = await firebase.getStock(symbol);
+    const isResync = !!existingStock;
+
     const result = await client.searchStock(symbol);
 
     if (!result) {
       logger.error(`No exact NSE match for symbol: ${symbol} — marking as sync_failed`);
-      await firebase.setStock(symbol, {
-        symbol,
-        name: symbol,
-        securityId: 0,
-        pmlId: "",
-        exchange: "NSE",
-        enabled: false,
-        autoOptimize: false,
-        currentProductionVersion: null,
-        addedAt: nowISO(),
-        updatedAt: nowISO(),
-        status: "sync_failed",
-      });
+      if (isResync) {
+        await firebase.updateStock(symbol, { status: "sync_failed", updatedAt: nowISO() });
+      } else {
+        await firebase.setStock(symbol, {
+          symbol,
+          name: symbol,
+          securityId: 0,
+          pmlId: "",
+          exchange: "NSE",
+          enabled: false,
+          autoOptimize: false,
+          currentProductionVersion: null,
+          addedAt: nowISO(),
+          updatedAt: nowISO(),
+          status: "sync_failed",
+        });
+      }
       throw new Error(`No exact NSE equity match for symbol: ${symbol}`);
     }
 
-    const config: StockConfig = {
-      symbol: result.symbol,
-      name: result.name,
-      securityId: result.security_id,
-      pmlId: result.id,
-      isin: result.isin,
-      industryName: result.industry_name !== "NULL" ? result.industry_name : undefined,
-      mcap: result.mcap,
-      tickSize: result.tick_size,
-      lotSize: result.lot_size,
-      exchange: "NSE",
-      enabled: true,
-      autoOptimize: true,
-      currentProductionVersion: null,
-      addedAt: nowISO(),
-      updatedAt: nowISO(),
-      status: "synced",
-    };
-
-    await firebase.setStock(symbol, config);
+    if (isResync) {
+      // Re-sync: update metadata but preserve user config (enabled, autoOptimize, currentProductionVersion)
+      await firebase.updateStock(symbol, {
+        name: result.name,
+        securityId: result.security_id,
+        pmlId: result.id,
+        isin: result.isin,
+        industryName: result.industry_name !== "NULL" ? result.industry_name : undefined,
+        mcap: result.mcap,
+        tickSize: result.tick_size,
+        lotSize: result.lot_size,
+        exchange: "NSE",
+        updatedAt: nowISO(),
+        status: "ready",
+      });
+    } else {
+      // First sync: create full record
+      const config: StockConfig = {
+        symbol: result.symbol,
+        name: result.name,
+        securityId: result.security_id,
+        pmlId: result.id,
+        isin: result.isin,
+        industryName: result.industry_name !== "NULL" ? result.industry_name : undefined,
+        mcap: result.mcap,
+        tickSize: result.tick_size,
+        lotSize: result.lot_size,
+        exchange: "NSE",
+        enabled: true,
+        autoOptimize: true,
+        currentProductionVersion: null,
+        addedAt: nowISO(),
+        updatedAt: nowISO(),
+        status: "synced",
+      };
+      await firebase.setStock(symbol, config);
+    }
     logger.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
 
     // ─── Step 2: Train model (5 years of data) ───────────────────────
