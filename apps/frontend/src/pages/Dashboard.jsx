@@ -1,6 +1,24 @@
 import { useState, useEffect } from 'react'
 import { db, ref, onValue, get, query, orderByKey, endAt, push, set } from '../utils/firebase'
 
+/** Convert a timestamp string (ISO or "YYYY-MM-DD HH:mm:ss") to relative time */
+function timeAgo(ts) {
+  if (!ts) return ''
+  const date = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + '+05:30')
+  const now = new Date()
+  const diffMs = now - date
+  const sec = Math.floor(diffMs / 1000)
+  if (sec < 10) return 'just now'
+  if (sec < 60) return `${sec}s ago`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const days = Math.floor(hr / 24)
+  if (days < 7) return `${days}d ago`
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
 const styles = {
   container: { padding: '1rem', paddingBottom: '5rem' },
   sectionTitle: { fontSize: '0.9rem', fontWeight: '700', color: 'var(--pm-text)', marginBottom: '0.75rem', marginTop: '0.5rem' },
@@ -180,7 +198,10 @@ export default function Dashboard() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {row.status === 'predicted' ? (
-                    <div style={styles.subtext}>{row.modelVersion} • {row.modelType}</div>
+                    <>
+                      <div style={styles.subtext}>{row.modelVersion} • {row.modelType}</div>
+                      {row.generatedAt && <div style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>{timeAgo(row.generatedAt)}</div>}
+                    </>
                   ) : (
                     <span style={{ fontSize: '0.65rem', fontWeight: '600', color: '#f59e0b', background: 'rgba(245,158,11,0.12)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
                       Scheduled
@@ -347,7 +368,7 @@ export default function Dashboard() {
                         <div style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>{pred.modelVersion}</div>
                         {pred.generatedAt && (
                           <div style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)' }}>
-                            {pred.generatedAt.split(' ')[1] || pred.generatedAt.slice(11, 16)}
+                            {timeAgo(pred.generatedAt)}
                           </div>
                         )}
                       </div>
