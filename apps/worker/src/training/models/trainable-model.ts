@@ -21,11 +21,13 @@ export interface TrainableModel {
   getHyperparameters(): Record<string, unknown>;
 }
 
+export type ModelType = "linear-regression" | "random-forest" | "gradient-boosted" | "neural-network";
+
 /**
  * Result of a successful model training.
  */
 export interface TrainingResult {
-  modelType: "linear-regression" | "random-forest";
+  modelType: ModelType;
   symbol: string;
   serializedModel: string;
   training: TrainingInfo;

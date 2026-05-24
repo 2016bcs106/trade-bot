@@ -5,6 +5,7 @@ import FirebaseClient from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
+import { ModelType } from "../training/models/trainable-model.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:train");
@@ -24,7 +25,7 @@ export async function handleTrain(): Promise<void> {
     process.exit(1);
   }
 
-  const modelType = config.model || "random-forest";
+  const modelType = (config.model || "random-forest") as ModelType | "auto";
   const lookbackDays = config.lookbackDays || 90;
 
   const firebase = new FirebaseClient();
@@ -49,7 +50,7 @@ export async function handleTrain(): Promise<void> {
     }
 
     logger.info(`Training ${sym} (pmlId: ${pmlId}, model: ${modelType}, lookback: ${lookbackDays}d)...`);
-    const result = await trainer.train(sym, pmlId, fromDate, toDate, modelType as "linear-regression" | "random-forest");
+    const result = await trainer.train(sym, pmlId, fromDate, toDate, modelType);
 
     if (!result) {
       logger.error(`Training failed for ${sym}`);

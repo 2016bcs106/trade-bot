@@ -10,7 +10,7 @@ export interface ModelMetadata {
   version: string;
 
   /** Algorithm type */
-  modelType: "linear-regression" | "random-forest";
+  modelType: string;
 
   /** Current lifecycle state */
   state: ModelState;

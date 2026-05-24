@@ -22,8 +22,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
     "dotenv": "^17.4.2",
     "firebase": "^12.13.0",
+    "ml-cart": "^2.1.1",
     "ml-random-forest": "^2.1.0",
     "ml-regression-multivariate-linear": "^2.0.4",
     "moment": "^2.30.1",

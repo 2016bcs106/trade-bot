@@ -19,7 +19,7 @@ export interface Prediction {
   modelVersion: string;
 
   /** Model type that generated this prediction */
-  modelType: "linear-regression" | "random-forest";
+  modelType: string;
 
   /** Confidence score (0-1) if available, null otherwise */
   confidence: number | null;
