@@ -6,13 +6,21 @@ import ModelManager from "../model-management/model-manager.ts";
 import PredictionEngine from "../prediction/prediction-engine.ts";
 import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
+import { ScriptStatus } from "../types/script-status.ts";
 
-const logger = createLogger("prediction-listener");
+const SCRIPT_NAME = "prediction-listener";
+const HEARTBEAT_INTERVAL_MS = 60_000;
+const logger = createLogger(SCRIPT_NAME);
+
+let processedCount = 0;
+let currentTask: string | null = null;
 
 /**
  * Long-running listener that watches `pending_predictions/` in Firebase.
  * When a new entry is added (status=pending), it expands the date range
  * into business days and generates predictions for each.
+ *
+ * Emits heartbeat every 60s to scripts/<SCRIPT_NAME>.
  *
  * Usage: pnpm prediction-listener
  */
@@ -21,6 +29,37 @@ async function main(): Promise<void> {
   const modelManager = new ModelManager();
   const predictionEngine = new PredictionEngine();
   const provider = new PaytmMoneyHistoricalProvider();
+
+  const startedAt = moment().utcOffset("+05:30").valueOf();
+
+  // ─── Heartbeat ──────────────────────────────────────────────────────
+  const reportStatus = async (status: ScriptStatus["status"], error: string | null = null) => {
+    const payload: ScriptStatus = {
+      status,
+      lastHeartbeat: moment().utcOffset("+05:30").valueOf(),
+      startedAt,
+      error,
+      metadata: { processedCount, currentTask },
+    };
+    try {
+      await firebase.updateScriptStatus(SCRIPT_NAME, payload);
+    } catch (err) {
+      logger.error(`Heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  await reportStatus("running");
+  const heartbeatTimer = setInterval(() => reportStatus("running"), HEARTBEAT_INTERVAL_MS);
+
+  // ─── Graceful Shutdown ──────────────────────────────────────────────
+  const shutdown = async (reason: string) => {
+    logger.info(`Shutting down — reason=${reason}`);
+    clearInterval(heartbeatTimer);
+    await reportStatus("stopped");
+    process.exit(0);
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   logger.info("Prediction listener started — watching pending_predictions/");
 
@@ -74,6 +113,7 @@ async function processEntry(
   provider: PaytmMoneyHistoricalProvider,
 ): Promise<void> {
   const { symbol, fromDate, toDate } = entry;
+  currentTask = `${symbol} ${fromDate}→${toDate}`;
 
   try {
     const dates = getBusinessDays(fromDate, toDate);
@@ -173,11 +213,14 @@ async function processEntry(
 
     // All done — remove from queue
     await firebase.removePendingPrediction(key);
+    processedCount += processed;
+    currentTask = null;
     logger.info(`✓ Completed ${symbol} range: ${fromDate} → ${toDate} (${processed}/${dates.length} dates)`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`✗ ${symbol} ${fromDate}→${toDate}: ${msg}`);
     await firebase.updatePendingPrediction(key, { status: "failed", error: msg });
+    currentTask = null;
   }
 }
 
