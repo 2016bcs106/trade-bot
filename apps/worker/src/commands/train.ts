@@ -1,32 +1,47 @@
+import moment from "moment";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelTrainer from "../training/model-trainer.ts";
 import ModelManager from "../model-management/model-manager.ts";
+import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:train");
+const DEFAULT_LOOKBACK_DAYS = 90;
 
 /**
  * Train a new model for one or all enabled stocks.
- * Saves model to disk, metadata to Firebase, auto-promotes first model.
+ * Fetches data live from Paytm Money API, trains, saves to disk + Firebase.
  */
 export async function handleTrain(symbol: string | null, all: boolean): Promise<void> {
   const symbols = await getEnabledSymbols(symbol, all);
   if (symbols.length === 0) {
-    logger.error("Please specify --symbol or --all");
+    logger.error("Please specify --symbol=SYMBOL or --all");
     process.exit(1);
   }
 
   const firebase = new FirebaseClient();
-  const trainer = new ModelTrainer();
+  const provider = new PaytmMoneyHistoricalProvider();
+  const trainer = new ModelTrainer(provider);
   const modelManager = new ModelManager();
 
+  const toDate = moment().utcOffset("+05:30").format("YYYY-MM-DD");
+  const fromDate = moment().utcOffset("+05:30").subtract(DEFAULT_LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
+
   for (const sym of symbols) {
-    logger.info(`Training model for ${sym}...`);
-    const result = trainer.train(sym, "linear-regression");
+    const stock = await firebase.getStock(sym);
+    if (!stock) {
+      logger.error(`Stock ${sym} not found in Firebase`);
+      continue;
+    }
+
+    const securityId = String(stock.securityId);
+    logger.info(`Training model for ${sym} (securityId: ${securityId})...`);
+
+    const result = await trainer.train(sym, securityId, fromDate, toDate, "linear-regression");
 
     if (!result) {
-      logger.error(`Training failed for ${sym} — insufficient data`);
+      logger.error(`Training failed for ${sym}`);
       continue;
     }
 

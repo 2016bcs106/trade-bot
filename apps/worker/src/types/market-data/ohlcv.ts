@@ -23,7 +23,7 @@ export interface OHLCV {
 }
 
 /** Time interval for OHLCV data */
-export type OHLCVInterval = "1min" | "5min" | "15min" | "30min" | "60min" | "daily";
+export type OHLCVInterval = "MINUTE" | "DAY";
 
 /** Request parameters for fetching historical data */
 export interface HistoricalDataRequest {

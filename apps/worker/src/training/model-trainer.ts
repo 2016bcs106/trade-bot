@@ -1,5 +1,3 @@
-import { readdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { FeatureVector, PreviousDayContext } from "../types/features/feature-vector.ts";
 import FeatureEngineer from "../features/feature-engineer.ts";
@@ -7,7 +5,7 @@ import { TrainableModel, TrainingResult } from "../training/models/trainable-mod
 import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
 import { RandomForestModel } from "../training/models/random-forest-model.ts";
 import { ModelMetrics } from "../types/models/model-metadata.ts";
-import NdjsonStorage from "../data/storage/ndjson-storage.ts";
+import { HistoricalDataProvider } from "../data/providers/historical-data-provider.ts";
 import createLogger from "../utils/logger.ts";
 
 const logger = createLogger("model-trainer");
@@ -24,8 +22,8 @@ interface TrainingSample {
 }
 
 /**
- * Model trainer orchestrator — loads data, computes features, trains model,
- * evaluates on validation set using walk-forward expanding window.
+ * Model trainer orchestrator — fetches data from provider, computes features,
+ * trains model, evaluates on validation set using walk-forward expanding window.
  *
  * Walk-forward validation:
  * - Data sorted chronologically
@@ -34,63 +32,86 @@ interface TrainingSample {
  */
 export default class ModelTrainer {
   private featureEngineer: FeatureEngineer;
-  private storage: NdjsonStorage;
+  private provider: HistoricalDataProvider;
 
-  constructor(dataDir?: string) {
+  constructor(provider: HistoricalDataProvider) {
     this.featureEngineer = new FeatureEngineer();
-    this.storage = new NdjsonStorage(dataDir);
+    this.provider = provider;
   }
 
   /**
-   * Train a model for a given symbol using available historical 1-min data.
+   * Train a model for a given symbol using historical data from the provider.
    *
    * @param symbol Stock symbol
+   * @param securityId Paytm Money pmlId for the stock
+   * @param fromDate Start date for training data (YYYY-MM-DD)
+   * @param toDate End date for training data (YYYY-MM-DD)
    * @param modelType Algorithm to use
    * @param validationRatio Fraction of data for validation (default 0.2 = last 20%)
    * @returns TrainingResult or null if insufficient data
    */
-  train(
+  async train(
     symbol: string,
+    securityId: string,
+    fromDate: string,
+    toDate: string,
     modelType: "linear-regression" | "random-forest" = "linear-regression",
     validationRatio: number = 0.2,
-  ): TrainingResult | null {
+  ): Promise<TrainingResult | null> {
     const startTime = Date.now();
 
-    // Step 1: Load and prepare training samples
-    logger.info(`Loading data for ${symbol}...`);
-    const samples = this.buildSamples(symbol);
+    // Step 1: Fetch historical data from provider
+    logger.info(`Fetching ${symbol} data from ${fromDate} to ${toDate}...`);
+    const allCandles = await this.provider.fetchOHLCV({
+      symbol,
+      securityId,
+      exchange: "NSE",
+      fromDate,
+      toDate,
+      interval: "MINUTE",
+    });
+
+    if (allCandles.length === 0) {
+      logger.error(`No data returned for ${symbol}`);
+      return null;
+    }
+
+    logger.info(`Fetched ${allCandles.length} candles for ${symbol}`);
+
+    // Step 2: Group candles by day
+    const samples = this.buildSamples(symbol, allCandles);
 
     if (samples.length < 30) {
-      logger.error(`Insufficient data for ${symbol}: ${samples.length} samples (need ≥30)`);
+      logger.error(`Insufficient data for ${symbol}: ${samples.length} days (need ≥30)`);
       return null;
     }
 
     logger.info(`Built ${samples.length} training samples for ${symbol}`);
 
-    // Step 2: Walk-forward split (chronological)
+    // Step 3: Walk-forward split (chronological)
     const splitIdx = Math.floor(samples.length * (1 - validationRatio));
     const trainSet = samples.slice(0, splitIdx);
     const valSet = samples.slice(splitIdx);
 
     logger.info(`Split: ${trainSet.length} train / ${valSet.length} validation`);
 
-    // Step 3: Prepare feature matrices
+    // Step 4: Prepare feature matrices
     const X_train = trainSet.map((s) => s.featureArray);
     const yHigh_train = trainSet.map((s) => s.targetHigh);
     const yLow_train = trainSet.map((s) => s.targetLow);
 
-    // Step 4: Create and fit model
+    // Step 5: Create and fit model
     const model = this.createModel(modelType);
     logger.info(`Training ${modelType} model...`);
     model.fit(X_train, yHigh_train, yLow_train);
 
-    // Step 5: Evaluate on validation set
+    // Step 6: Evaluate on validation set
     const metrics = this.evaluateModel(model, valSet);
     const durationMs = Date.now() - startTime;
 
     logger.info(`Training complete in ${durationMs}ms — MAE: ${metrics.mae.toFixed(2)}, MAPE: ${metrics.mape.toFixed(2)}%`);
 
-    // Step 6: Build result
+    // Step 7: Build result
     return {
       modelType,
       symbol,
@@ -109,25 +130,30 @@ export default class ModelTrainer {
   }
 
   /**
-   * Build training samples from local ndjson data.
-   * Each sample = features from first 45 min + targets from full day.
+   * Build training samples from fetched candles.
+   * Groups candles by day, computes features from first 45 min,
+   * uses full day's high/low as targets.
    */
-  private buildSamples(symbol: string): TrainingSample[] {
+  private buildSamples(symbol: string, allCandles: OHLCV[]): TrainingSample[] {
     const samples: TrainingSample[] = [];
 
-    // Get available dates by reading the data directory
-    const dates = this.getAvailableDates(symbol, "1min");
+    // Group candles by date
+    const byDate = new Map<string, OHLCV[]>();
+    for (const candle of allCandles) {
+      const date = candle.timestamp.split(" ")[0];
+      const existing = byDate.get(date) || [];
+      existing.push(candle);
+      byDate.set(date, existing);
+    }
 
-    if (dates.length < 2) return samples;
-
+    // Sort dates chronologically
+    const dates = [...byDate.keys()].sort();
     let prevDayContext: PreviousDayContext | null = null;
 
-    for (let i = 0; i < dates.length; i++) {
-      const date = dates[i];
-      const candles = this.storage.read(symbol, "1min", date);
+    for (const date of dates) {
+      const candles = byDate.get(date)!;
 
       if (candles.length < 30) {
-        // Update prevDay for next iteration regardless
         prevDayContext = this.buildPrevDayContext(candles);
         continue;
       }
@@ -151,7 +177,6 @@ export default class ModelTrainer {
         date,
       });
 
-      // Update previous day context for next day
       prevDayContext = this.buildPrevDayContext(candles);
     }
 
@@ -185,15 +210,12 @@ export default class ModelTrainer {
       totalHighPctErr += sample.targetHigh > 0 ? (highErr / sample.targetHigh) * 100 : 0;
       totalLowPctErr += sample.targetLow > 0 ? (lowErr / sample.targetLow) * 100 : 0;
 
-      // Directional: predicted midpoint direction
       const predMid = (predHigh + predLow) / 2;
       const actualMid = (sample.targetHigh + sample.targetLow) / 2;
-      const firstOpen = sample.features.cumulativeReturn; // relative to open
-      if ((predMid > actualMid) === (firstOpen > 0)) {
+      if ((predMid > actualMid) === (sample.features.cumulativeReturn > 0)) {
         directionalCorrect++;
       }
 
-      // Range containment
       if (sample.targetHigh <= predHigh && sample.targetLow >= predLow) {
         rangeContained++;
       }
@@ -204,7 +226,6 @@ export default class ModelTrainer {
     const rmse = Math.sqrt((totalHighSqErr + totalLowSqErr) / (2 * n));
     const mape = (totalHighPctErr + totalLowPctErr) / (2 * n);
 
-    // R² computation (using combined high+low)
     const allActuals = [...valSet.map((s) => s.targetHigh), ...valSet.map((s) => s.targetLow)];
     const allPreds = [
       ...valSet.map((s) => model.predictHigh(s.featureArray)),
@@ -223,37 +244,14 @@ export default class ModelTrainer {
     };
   }
 
-  /**
-   * Build previous day context for feature engineering.
-   */
   private buildPrevDayContext(candles: OHLCV[]): PreviousDayContext | null {
     if (candles.length === 0) return null;
-
     const close = candles[candles.length - 1].close;
     const first45 = candles.slice(0, 45);
-    const avg45MinVolume = first45.length > 0
-      ? first45.reduce((s, c) => s + c.volume, 0)
-      : 0;
-
+    const avg45MinVolume = first45.reduce((s, c) => s + c.volume, 0);
     return { close, avg45MinVolume };
   }
 
-  /**
-   * Get available dates with data for a symbol+interval, sorted chronologically.
-   */
-  private getAvailableDates(symbol: string, interval: string): string[] {
-    const dir = join((this.storage as any).baseDir, symbol, interval);
-    if (!existsSync(dir)) return [];
-
-    return readdirSync(dir)
-      .filter((f) => f.endsWith(".ndjson"))
-      .map((f) => f.replace(".ndjson", ""))
-      .sort();
-  }
-
-  /**
-   * Create a model instance by type.
-   */
   private createModel(modelType: "linear-regression" | "random-forest"): TrainableModel {
     switch (modelType) {
       case "linear-regression":
@@ -263,17 +261,12 @@ export default class ModelTrainer {
     }
   }
 
-  /**
-   * Compute R² (coefficient of determination).
-   */
   private computeR2(actuals: number[], predictions: number[]): number {
     const n = actuals.length;
     if (n === 0) return 0;
-
     const meanActual = actuals.reduce((s, v) => s + v, 0) / n;
     const ssRes = actuals.reduce((s, v, i) => s + (v - predictions[i]) ** 2, 0);
     const ssTot = actuals.reduce((s, v) => s + (v - meanActual) ** 2, 0);
-
     if (ssTot === 0) return 0;
     return 1 - ssRes / ssTot;
   }

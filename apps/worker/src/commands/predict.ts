@@ -3,27 +3,28 @@ import createLogger from "../utils/logger.ts";
 import FirebaseClient from "../firebase/client.ts";
 import ModelManager from "../model-management/model-manager.ts";
 import PredictionEngine from "../prediction/prediction-engine.ts";
-import NdjsonStorage from "../data/storage/ndjson-storage.ts";
+import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
 import { PreviousDayContext } from "../types/features/feature-vector.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:predict");
 
 /**
- * Generate predictions for one or all enabled stocks using today's data.
+ * Generate predictions for one or all enabled stocks using today's live data.
  */
 export async function handlePredict(symbol: string | null, all: boolean): Promise<void> {
   const symbols = await getEnabledSymbols(symbol, all);
   if (symbols.length === 0) {
-    logger.error("Please specify --symbol or --all");
+    logger.error("Please specify --symbol=SYMBOL or --all");
     process.exit(1);
   }
 
   const firebase = new FirebaseClient();
   const modelManager = new ModelManager();
   const predictionEngine = new PredictionEngine();
-  const storage = new NdjsonStorage();
+  const provider = new PaytmMoneyHistoricalProvider();
   const today = moment().utcOffset("+05:30").format("YYYY-MM-DD");
+  const yesterday = moment(today).subtract(1, "day").format("YYYY-MM-DD");
 
   for (const sym of symbols) {
     const stock = await firebase.getStock(sym);
@@ -32,16 +33,25 @@ export async function handlePredict(symbol: string | null, all: boolean): Promis
       continue;
     }
 
-    // Load today's first 45-min candles
-    const candles = storage.read(sym, "1min", today);
+    const securityId = String(stock.securityId);
+
+    // Fetch today's candles from API
+    const candles = await provider.fetchOHLCV({
+      symbol: sym, securityId, exchange: "NSE",
+      fromDate: today, toDate: today, interval: "MINUTE",
+    });
+
     if (candles.length < 30) {
       logger.error(`Insufficient data for ${sym} today (${candles.length} candles, need ≥30)`);
       continue;
     }
 
-    // Load previous day context
-    const yesterday = moment(today).subtract(1, "day").format("YYYY-MM-DD");
-    const prevCandles = storage.read(sym, "1min", yesterday);
+    // Fetch yesterday's candles for previous day context
+    const prevCandles = await provider.fetchOHLCV({
+      symbol: sym, securityId, exchange: "NSE",
+      fromDate: yesterday, toDate: yesterday, interval: "MINUTE",
+    });
+
     const prevDay: PreviousDayContext | null = prevCandles.length > 0
       ? {
           close: prevCandles[prevCandles.length - 1].close,

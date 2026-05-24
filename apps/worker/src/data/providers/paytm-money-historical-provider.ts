@@ -29,7 +29,7 @@ export default class PaytmMoneyHistoricalProvider implements HistoricalDataProvi
         // Note: Paytm API has fromDate/toDate swapped in their payload
         toDate: fromDate,
         fromDate: toDate,
-        interval: this.mapInterval(request.interval),
+        interval: request.interval,
         pmlId: securityId,
       }),
     });
@@ -106,15 +106,4 @@ export default class PaytmMoneyHistoricalProvider implements HistoricalDataProvi
     return timestamp.split(" ")[0];
   }
 
-  private mapInterval(interval: string): string {
-    switch (interval) {
-      case "1min": return "MINUTE";
-      case "5min": return "5MINUTE";
-      case "15min": return "15MINUTE";
-      case "30min": return "30MINUTE";
-      case "60min": return "60MINUTE";
-      case "daily": return "DAY";
-      default: return "MINUTE";
-    }
-  }
 }

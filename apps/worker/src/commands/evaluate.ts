@@ -2,24 +2,24 @@ import moment from "moment";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient from "../firebase/client.ts";
 import EvaluationEngine from "../evaluation/evaluation-engine.ts";
-import NdjsonStorage from "../data/storage/ndjson-storage.ts";
+import PaytmMoneyHistoricalProvider from "../data/providers/paytm-money-historical-provider.ts";
 import { getEnabledSymbols } from "./utils.ts";
 
 const logger = createLogger("cmd:evaluate");
 
 /**
- * Evaluate today's predictions against actual high/low after market close.
+ * Evaluate today's predictions against actual high/low fetched from API.
  */
 export async function handleEvaluate(symbol: string | null, all: boolean): Promise<void> {
   const symbols = await getEnabledSymbols(symbol, all);
   if (symbols.length === 0) {
-    logger.error("Please specify --symbol or --all");
+    logger.error("Please specify --symbol=SYMBOL or --all");
     process.exit(1);
   }
 
   const firebase = new FirebaseClient();
   const evaluationEngine = new EvaluationEngine();
-  const storage = new NdjsonStorage();
+  const provider = new PaytmMoneyHistoricalProvider();
   const today = moment().utcOffset("+05:30").format("YYYY-MM-DD");
 
   for (const sym of symbols) {
@@ -34,10 +34,20 @@ export async function handleEvaluate(symbol: string | null, all: boolean): Promi
       continue;
     }
 
-    // Get actual high/low from full-day data
-    const candles = storage.read(sym, "1min", today);
+    const stock = await firebase.getStock(sym);
+    if (!stock) {
+      logger.error(`Stock ${sym} not found`);
+      continue;
+    }
+
+    // Fetch full-day candles from API
+    const candles = await provider.fetchOHLCV({
+      symbol: sym, securityId: String(stock.securityId), exchange: "NSE",
+      fromDate: today, toDate: today, interval: "MINUTE",
+    });
+
     if (candles.length < 100) {
-      logger.error(`Insufficient full-day data for ${sym} (${candles.length} candles)`);
+      logger.error(`Insufficient full-day data for ${sym} (${candles.length} candles) — market may not have closed`);
       continue;
     }
 
