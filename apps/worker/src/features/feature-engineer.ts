@@ -4,8 +4,10 @@ import { FeatureVector, PreviousDayContext } from "../types/features/feature-vec
 /**
  * Feature engineering pipeline for intraday prediction.
  *
- * Generates a complete feature vector from available intraday data.
- * All features are designed to be computable BEFORE market close (no future leakage).
+ * v2: Redesigned for better directional accuracy:
+ * - Replaced absolute price features with relative/normalized features
+ * - Added directional momentum features (RSI, buying pressure, momentum ratio)
+ * - All features are scale-invariant (works across different price levels)
  *
  * Market hours: 9:15 AM - 3:30 PM IST (375 minutes total)
  * Window size is always provided by the caller (horizon-specific models).
@@ -45,11 +47,20 @@ export default class FeatureEngineer {
     const windowHigh = Math.max(...highs);
     const windowLow = Math.min(...lows);
 
+    // Previous day values with fallback chains
+    const prevClose1 = prevDay?.close ?? firstOpen;
+    const prevHigh1 = prevDay?.high ?? firstOpen;
+    const prevLow1 = prevDay?.low ?? firstOpen;
+    const prevClose2 = prevDay?.close2 ?? prevClose1;
+    const prevHigh2 = prevDay?.high2 ?? prevHigh1;
+    const prevLow2 = prevDay?.low2 ?? prevLow1;
+    const prevClose3 = prevDay?.close3 ?? prevClose2;
+
     return {
       symbol,
       date,
 
-      // Price features
+      // ─── Price Features ──────────────────────────────────────────
       cumulativeReturn: (lastClose - firstOpen) / firstOpen,
       openingGap: prevDay ? (firstOpen - prevDay.close) / prevDay.close : 0,
       rollingReturn5: this.rollingReturn(closes, 5),
@@ -62,13 +73,13 @@ export default class FeatureEngineer {
       trendSlope: this.linearSlope(closes),
       vwapDistance: this.vwapDistance(window),
 
-      // Volatility features
+      // ─── Volatility Features ──────────────────────────────────────
       atr14: this.atr(window, 14) / lastClose,
       realizedVolatility: this.realizedVolatility(closes),
       rollingStddev14: this.rollingStddev(closes, 14) / lastClose,
       rangeExpansion: (windowHigh - windowLow) / firstOpen,
 
-      // Volume features
+      // ─── Volume Features ──────────────────────────────────────────
       cumulativeVolume: volumes.reduce((sum, v) => sum + v, 0),
       relativeVolume: prevDay && prevDay.averageMinVolume > 0
         ? volumes.reduce((sum, v) => sum + v, 0) / prevDay.averageMinVolume
@@ -76,19 +87,30 @@ export default class FeatureEngineer {
       volumeSpike: this.volumeSpike(volumes),
       volumeTrend: this.linearSlope(volumes),
 
-      // Historical context features (last 3 trading days high, low and close)
-      // Fallback chain: prevXyz3 → prevXyz2 → prevXyz1 → firstOpen
-      prevClose1: prevDay?.close ?? firstOpen,
-      prevHigh1: prevDay?.high ?? firstOpen,
-      prevLow1: prevDay?.low ?? firstOpen,
-      prevClose2: prevDay?.close2 ?? prevDay?.close ?? firstOpen,
-      prevHigh2: prevDay?.high2 ?? prevDay?.high ?? firstOpen,
-      prevLow2: prevDay?.low2 ?? prevDay?.low ?? firstOpen,
-      prevClose3: prevDay?.close3 ?? prevDay?.close2 ?? prevDay?.close ?? firstOpen,
-      prevHigh3: prevDay?.high3 ?? prevDay?.high2 ?? prevDay?.high ?? firstOpen,
-      prevLow3: prevDay?.low3 ?? prevDay?.low2 ?? prevDay?.low ?? firstOpen,
+      // ─── Relative Historical Context Features (v2) ─────────────────
+      prevReturn1: prevClose2 > 0 ? (prevClose1 - prevClose2) / prevClose2 : 0,
+      prevReturn2: prevClose3 > 0 ? (prevClose2 - prevClose3) / prevClose3 : 0,
+      prevTrend3d: prevClose3 > 0 ? (prevClose1 - prevClose3) / prevClose3 : 0,
+      prevRange1: prevClose1 > 0 ? (prevHigh1 - prevLow1) / prevClose1 : 0,
+      prevRange2: prevClose2 > 0 ? (prevHigh2 - prevLow2) / prevClose2 : 0,
+      prevPosition1: (prevHigh1 - prevLow1) > 0
+        ? (prevClose1 - prevLow1) / (prevHigh1 - prevLow1)
+        : 0.5,
+      prevPosition2: (prevHigh2 - prevLow2) > 0
+        ? (prevClose2 - prevLow2) / (prevHigh2 - prevLow2)
+        : 0.5,
+      priceFromMA3: this.priceFromMA(lastClose, prevClose1, prevClose2, prevClose3),
+      gapToRangeRatio: this.gapToRangeRatio(firstOpen, prevClose1, prevHigh1, prevLow1),
 
-      // Time features
+      // ─── Directional Momentum Features (v2) ────────────────────────
+      rsiIntraday: this.rsi(closes, 14),
+      buyingPressure: this.buyingPressure(window),
+      volumeWeightedDirection: this.volumeWeightedDirection(window),
+      priceAcceleration: this.priceAcceleration(closes),
+      lastBarsStrength: this.lastBarsStrength(closes),
+      intradayMomentumRatio: this.intradayMomentumRatio(closes),
+
+      // ─── Time Features ────────────────────────────────────────────
       weekday: new Date(date).getDay() === 0 ? 6 : new Date(date).getDay() - 1, // 0=Mon, 4=Fri
       month: new Date(date).getMonth() + 1,
       isExpiryDay: this.isExpiryDay(date),
@@ -120,15 +142,21 @@ export default class FeatureEngineer {
       features.relativeVolume,
       features.volumeSpike,
       features.volumeTrend,
-      features.prevClose1,
-      features.prevHigh1,
-      features.prevLow1,
-      features.prevClose2,
-      features.prevHigh2,
-      features.prevLow2,
-      features.prevClose3,
-      features.prevHigh3,
-      features.prevLow3,
+      features.prevReturn1,
+      features.prevReturn2,
+      features.prevTrend3d,
+      features.prevRange1,
+      features.prevRange2,
+      features.prevPosition1,
+      features.prevPosition2,
+      features.priceFromMA3,
+      features.gapToRangeRatio,
+      features.rsiIntraday,
+      features.buyingPressure,
+      features.volumeWeightedDirection,
+      features.priceAcceleration,
+      features.lastBarsStrength,
+      features.intradayMomentumRatio,
       features.weekday,
       features.month,
       features.isExpiryDay ? 1 : 0,
@@ -159,15 +187,21 @@ export default class FeatureEngineer {
       "relativeVolume",
       "volumeSpike",
       "volumeTrend",
-      "prevClose1",
-      "prevHigh1",
-      "prevLow1",
-      "prevClose2",
-      "prevHigh2",
-      "prevLow2",
-      "prevClose3",
-      "prevHigh3",
-      "prevLow3",
+      "prevReturn1",
+      "prevReturn2",
+      "prevTrend3d",
+      "prevRange1",
+      "prevRange2",
+      "prevPosition1",
+      "prevPosition2",
+      "priceFromMA3",
+      "gapToRangeRatio",
+      "rsiIntraday",
+      "buyingPressure",
+      "volumeWeightedDirection",
+      "priceAcceleration",
+      "lastBarsStrength",
+      "intradayMomentumRatio",
       "weekday",
       "month",
       "isExpiryDay",
@@ -180,7 +214,7 @@ export default class FeatureEngineer {
     if (closes.length < period) return 0;
     const recent = closes[closes.length - 1];
     const past = closes[closes.length - 1 - period];
-    return (recent - past) / past;
+    return past > 0 ? (recent - past) / past : 0;
   }
 
   private avgBodyRatio(candles: OHLCV[]): number {
@@ -226,11 +260,11 @@ export default class FeatureEngineer {
     if (closes.length < 15) return 0;
     const current = closes[closes.length - 1];
     const past = closes[closes.length - 15];
-    return (current - past) / past;
+    return past > 0 ? (current - past) / past : 0;
   }
 
   private vwapDistance(candles: OHLCV[]): number {
-    let cumulativeTPV = 0; // typical price * volume
+    let cumulativeTPV = 0;
     let cumulativeVolume = 0;
 
     for (const c of candles) {
@@ -264,7 +298,6 @@ export default class FeatureEngineer {
       trueRanges.push(tr);
     }
 
-    // Simple average of last `period` true ranges
     const recent = trueRanges.slice(-period);
     return recent.reduce((s, v) => s + v, 0) / recent.length;
   }
@@ -288,6 +321,142 @@ export default class FeatureEngineer {
     const avg = volumes.reduce((s, v) => s + v, 0) / volumes.length;
     if (avg === 0) return 0;
     return Math.max(...volumes) / avg;
+  }
+
+  // ─── Relative Historical Context Helpers (v2) ──────────────────────
+
+  private priceFromMA(currentPrice: number, c1: number, c2: number, c3: number): number {
+    const ma = (c1 + c2 + c3) / 3;
+    return ma > 0 ? (currentPrice - ma) / ma : 0;
+  }
+
+  private gapToRangeRatio(todayOpen: number, prevClose: number, prevHigh: number, prevLow: number): number {
+    const prevRange = prevHigh - prevLow;
+    if (prevRange <= 0) return 0;
+    const gap = todayOpen - prevClose;
+    return gap / prevRange;
+  }
+
+  // ─── Directional Momentum Helpers (v2) ─────────────────────────────
+
+  /**
+   * Relative Strength Index (RSI) computed from candle closes.
+   * 0-100 scale: >70 = overbought, <30 = oversold.
+   */
+  private rsi(closes: number[], period: number): number {
+    if (closes.length < period + 1) return 50; // neutral default
+
+    let avgGain = 0;
+    let avgLoss = 0;
+
+    // Initial average
+    for (let i = 1; i <= period; i++) {
+      const change = closes[i] - closes[i - 1];
+      if (change > 0) avgGain += change;
+      else avgLoss += Math.abs(change);
+    }
+    avgGain /= period;
+    avgLoss /= period;
+
+    // Smoothed RSI using all remaining data
+    for (let i = period + 1; i < closes.length; i++) {
+      const change = closes[i] - closes[i - 1];
+      if (change > 0) {
+        avgGain = (avgGain * (period - 1) + change) / period;
+        avgLoss = (avgLoss * (period - 1)) / period;
+      } else {
+        avgGain = (avgGain * (period - 1)) / period;
+        avgLoss = (avgLoss * (period - 1) + Math.abs(change)) / period;
+      }
+    }
+
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - 100 / (1 + rs);
+  }
+
+  /**
+   * Buying pressure: fraction of candles where close > open (bullish candles).
+   * 0 = all bearish, 1 = all bullish.
+   */
+  private buyingPressure(candles: OHLCV[]): number {
+    if (candles.length === 0) return 0.5;
+    const bullish = candles.filter((c) => c.close > c.open).length;
+    return bullish / candles.length;
+  }
+
+  /**
+   * Volume-weighted direction: measures whether volume favors bulls or bears.
+   * Range: [-1, 1]. Positive = volume concentrated in bullish candles.
+   */
+  private volumeWeightedDirection(candles: OHLCV[]): number {
+    let totalVolume = 0;
+    let dirVolume = 0;
+
+    for (const c of candles) {
+      totalVolume += c.volume;
+      const sign = c.close > c.open ? 1 : c.close < c.open ? -1 : 0;
+      dirVolume += c.volume * sign;
+    }
+
+    return totalVolume > 0 ? dirVolume / totalVolume : 0;
+  }
+
+  /**
+   * Price acceleration: slope of rolling returns (is momentum speeding up?).
+   * Positive = price is accelerating upward, negative = decelerating/reversing.
+   */
+  private priceAcceleration(closes: number[]): number {
+    if (closes.length < 10) return 0;
+
+    // Compute 5-period returns at various points
+    const returns: number[] = [];
+    for (let i = 5; i < closes.length; i++) {
+      const ret = closes[i - 5] > 0 ? (closes[i] - closes[i - 5]) / closes[i - 5] : 0;
+      returns.push(ret);
+    }
+
+    if (returns.length < 3) return 0;
+    return this.linearSlope(returns);
+  }
+
+  /**
+   * Last bars strength: compares return in last 1/3 of window vs first 1/3.
+   * Positive = strengthening into close, negative = weakening.
+   */
+  private lastBarsStrength(closes: number[]): number {
+    const n = closes.length;
+    if (n < 6) return 0;
+
+    const third = Math.floor(n / 3);
+    const firstThirdReturn = closes[third - 1] > 0
+      ? (closes[third - 1] - closes[0]) / closes[0]
+      : 0;
+    const lastThirdReturn = closes[n - third - 1] > 0
+      ? (closes[n - 1] - closes[n - third - 1]) / closes[n - third - 1]
+      : 0;
+
+    return lastThirdReturn - firstThirdReturn;
+  }
+
+  /**
+   * Intraday momentum ratio: avg(positive returns) / avg(|negative returns|).
+   * >1 = bulls stronger than bears, <1 = bears stronger.
+   * Normalized to [0, 2] range and centered at 1.
+   */
+  private intradayMomentumRatio(closes: number[]): number {
+    const returns = this.simpleReturns(closes);
+    if (returns.length === 0) return 1;
+
+    const gains = returns.filter((r) => r > 0);
+    const losses = returns.filter((r) => r < 0);
+
+    const avgGain = gains.length > 0 ? gains.reduce((s, v) => s + v, 0) / gains.length : 0;
+    const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, v) => s + v, 0) / losses.length) : 0;
+
+    if (avgLoss === 0) return 2; // all gains, cap at 2
+    const ratio = avgGain / avgLoss;
+    return Math.min(ratio, 2); // cap at 2
   }
 
   // ─── Time Feature Helpers ──────────────────────────────────────────
@@ -325,8 +494,18 @@ export default class FeatureEngineer {
   private logReturns(closes: number[]): number[] {
     const returns: number[] = [];
     for (let i = 1; i < closes.length; i++) {
-      if (closes[i - 1] > 0) {
+      if (closes[i - 1] > 0 && closes[i] > 0) {
         returns.push(Math.log(closes[i] / closes[i - 1]));
+      }
+    }
+    return returns;
+  }
+
+  private simpleReturns(closes: number[]): number[] {
+    const returns: number[] = [];
+    for (let i = 1; i < closes.length; i++) {
+      if (closes[i - 1] > 0) {
+        returns.push((closes[i] - closes[i - 1]) / closes[i - 1]);
       }
     }
     return returns;

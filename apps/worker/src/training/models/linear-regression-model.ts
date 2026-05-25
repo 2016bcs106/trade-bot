@@ -149,6 +149,9 @@ export class LinearRegressionModel implements TrainableModel {
       method: "Ridge (L2)",
       lambda: this.lambda,
       regularization: "L2 + FeatureStandardization",
+      weightsClose: this.weightsClose,
+      weightsHigh: this.weightsHigh,
+      weightsLow: this.weightsLow,
     };
   }
 

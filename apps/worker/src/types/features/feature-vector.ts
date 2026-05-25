@@ -1,6 +1,9 @@
 /**
- * Complete feature vector generated from data up to 11:00 AM (first 105 minutes).
- * Used as input to ML models for predicting daily high/low.
+ * Complete feature vector generated from intraday candles.
+ * Used as input to ML models for predicting daily high/low/close.
+ *
+ * v2: Replaced absolute price features with relative features for better
+ * directional accuracy. Added directional momentum features.
  */
 export interface FeatureVector {
   /** Stock symbol */
@@ -11,7 +14,7 @@ export interface FeatureVector {
 
   // ─── Price Features ────────────────────────────────────────────────
 
-  /** Cumulative return from open to 11:00 AM close: (close_105 - open) / open */
+  /** Cumulative return from open to window close: (close_N - open) / open */
   cumulativeReturn: number;
 
   /** Opening gap: (today_open - prev_close) / prev_close */
@@ -35,13 +38,13 @@ export interface FeatureVector {
   /** Average lower wick ratio: (min(open,close) - low) / (high - low) */
   avgLowerWickRatio: number;
 
-  /** Price momentum: close_45 vs close_15 (direction + magnitude) */
+  /** Price momentum: close_N vs close_(N-15) (direction + magnitude) */
   momentum: number;
 
-  /** Linear regression slope of close prices over 45 candles */
+  /** Linear regression slope of close prices over window candles */
   trendSlope: number;
 
-  /** Distance from VWAP at 45-min mark: (close - vwap) / vwap */
+  /** Distance from VWAP: (close - vwap) / vwap */
   vwapDistance: number;
 
   // ─── Volatility Features ───────────────────────────────────────────
@@ -49,57 +52,78 @@ export interface FeatureVector {
   /** Average True Range (14-period) normalized by close */
   atr14: number;
 
-  /** Realized volatility: std(returns) over 45 candles */
+  /** Realized volatility: std(returns) over window candles */
   realizedVolatility: number;
 
   /** Rolling standard deviation of close prices (14-period) / close */
   rollingStddev14: number;
 
-  /** Range expansion: (high_45 - low_45) / open */
+  /** Range expansion: (high_N - low_N) / open */
   rangeExpansion: number;
 
   // ─── Volume Features ───────────────────────────────────────────────
 
-  /** Cumulative volume over 45 minutes */
+  /** Cumulative volume over window */
   cumulativeVolume: number;
 
-  /** Relative volume: cum_volume / avg_45min_volume (from history) */
+  /** Relative volume: cum_volume / avg_volume (from history) */
   relativeVolume: number;
 
   /** Max volume spike: max(volume_i) / avg(volume) */
   volumeSpike: number;
 
-  /** Volume trend: linear regression slope of volume over 45 candles */
+  /** Volume trend: linear regression slope of volume over window */
   volumeTrend: number;
 
-  // ─── Historical Context Features ───────────────────────────────────
+  // ─── Relative Historical Context Features (v2) ─────────────────────
+  // All relative to current price — no absolute prices
 
-  /** Previous day (D-1) closing price */
-  prevClose1: number;
+  /** D-1 return: (prevClose1 - prevClose2) / prevClose2 */
+  prevReturn1: number;
 
-  /** Previous day (D-1) daily high */
-  prevHigh1: number;
+  /** D-2 return: (prevClose2 - prevClose3) / prevClose3 */
+  prevReturn2: number;
 
-  /** Previous day (D-1) daily low */
-  prevLow1: number;
+  /** 3-day trend: (prevClose1 - prevClose3) / prevClose3 */
+  prevTrend3d: number;
 
-  /** D-2 closing price */
-  prevClose2: number;
+  /** D-1 normalized range: (prevHigh1 - prevLow1) / prevClose1 */
+  prevRange1: number;
 
-  /** D-2 daily high */
-  prevHigh2: number;
+  /** D-2 normalized range: (prevHigh2 - prevLow2) / prevClose2 */
+  prevRange2: number;
 
-  /** D-2 daily low */
-  prevLow2: number;
+  /** D-1 close position within range: (prevClose1 - prevLow1) / (prevHigh1 - prevLow1) */
+  prevPosition1: number;
 
-  /** D-3 closing price */
-  prevClose3: number;
+  /** D-2 close position within range: (prevClose2 - prevLow2) / (prevHigh2 - prevLow2) */
+  prevPosition2: number;
 
-  /** D-3 daily high */
-  prevHigh3: number;
+  /** Deviation from 3-day moving average: (currentPrice - avg(prevClose1..3)) / avg */
+  priceFromMA3: number;
 
-  /** D-3 daily low */
-  prevLow3: number;
+  /** Opening gap relative to D-1 range: gap / prevRange1 (how big is today's gap vs yesterday's range) */
+  gapToRangeRatio: number;
+
+  // ─── Directional Momentum Features (v2) ─────────────────────────────
+
+  /** Intraday RSI (14-period): 0-100, measures overbought/oversold within window */
+  rsiIntraday: number;
+
+  /** Buying pressure: % of candles where close > open */
+  buyingPressure: number;
+
+  /** Volume-weighted direction: sum(volume * sign(close-open)) / totalVolume [-1, 1] */
+  volumeWeightedDirection: number;
+
+  /** Price acceleration: slope of returns (is momentum increasing or decreasing?) */
+  priceAcceleration: number;
+
+  /** Last N bars strength: cumReturn of last 1/3 vs first 1/3 of window */
+  lastBarsStrength: number;
+
+  /** Intraday momentum ratio: avg(positive returns) / avg(|negative returns|) */
+  intradayMomentumRatio: number;
 
   // ─── Time Features ─────────────────────────────────────────────────
 
