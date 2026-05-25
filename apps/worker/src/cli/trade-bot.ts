@@ -4,7 +4,6 @@ import { now, nowMs } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import SmaCrossoverAnalyzer from "../features/sma-crossover-analyzer.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
-import { LiveMarketDataResponse } from "../types/market-data/live-market-data.ts";
 import { StockConfig } from "../types/stocks/stock-config.ts";
 
 /** Shared default config for all SMA analyzers */
@@ -131,20 +130,33 @@ class TradeBotScript extends BaseScript {
   }
 
   /**
-   * Fetch live price and run analysis for all tracked stocks.
+   * Fetch latest price via historical OHLCV API and run analysis for all tracked stocks.
    */
-  private async processAllStocks(date: string, time: string, accessToken: string): Promise<void> {
+  private async processAllStocks(date: string, time: string, _accessToken: string): Promise<void> {
     for (const [symbol, tracker] of this.trackers) {
       try {
         const { config } = tracker;
-        const scripId = String(config.securityId);
-        const exchangeType = config.exchange || "NSE";
+        const pmlId = config.pmlId;
 
-        const liveData = await this.withTimeout(
-          this.paytm.fetchLiveData(exchangeType, scripId, "ES", accessToken),
-          `fetchLiveData:${symbol}`,
+        if (!pmlId) {
+          this.log.warn(`${symbol}: no pmlId configured — skipping`);
+          continue;
+        }
+
+        const candles = await this.withTimeout(
+          this.paytm.fetchOHLCV(pmlId, date, date, "MINUTE"),
+          `fetchOHLCV:${symbol}`,
         );
-        const price = this.extractLtp(liveData);
+
+        if (candles.length === 0) {
+          this.log.warn(`${symbol}: no candles returned for ${date}`);
+          continue;
+        }
+
+        // Use the latest candle's close as the current price
+        const latestCandle = candles[candles.length - 1];
+        const price = latestCandle.close;
+
         const analysis = tracker.analyzer.next({ date: `${date} ${time}`, close: price });
         this.ticksProcessed++;
 
@@ -181,13 +193,6 @@ class TradeBotScript extends BaseScript {
     ]);
   }
 
-  private extractLtp(response: LiveMarketDataResponse): number {
-    const price = response?.data?.[0]?.last_price;
-    if (typeof price !== "number" || Number.isNaN(price)) {
-      throw new Error(`Invalid live data response: ${JSON.stringify(response)}`);
-    }
-    return price;
-  }
 }
 
 new TradeBotScript().start();
