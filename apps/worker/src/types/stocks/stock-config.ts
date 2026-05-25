@@ -50,4 +50,21 @@ export interface StockConfig {
 
   /** Lifecycle status of this stock */
   status?: "pending_sync" | "sync_failed" | "synced" | "pending_training" | "training_failed" | "ready";
+
+  /** Optimal intraday entry time (e.g., "09:25") determined by backtesting */
+  optimalEntry?: string;
+
+  /** Optimal intraday exit time (e.g., "14:30") determined by backtesting */
+  optimalExit?: string;
+
+  /** Backtest stats for the optimal strategy */
+  optimalStats?: {
+    winRate: number;
+    avgPnL: number;
+    sharpe: number;
+    consistency: number;
+    maxDrawdown: number;
+    daysBacktested: number;
+    backtestDate: string;
+  };
 }
