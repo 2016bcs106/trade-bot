@@ -29,7 +29,7 @@ export async function handleEvaluate(): Promise<void> {
   for (const sym of enabledSymbols) {
     await firebase.pushRequest({
       type: "evaluate",
-      payload: { symbol: sym, date: today, dataSource: "local" },
+      payload: { symbol: sym, date: today, dataSource: "api" },
     });
     logger.info(`✓ Queued evaluation for ${sym} (${today})`);
   }

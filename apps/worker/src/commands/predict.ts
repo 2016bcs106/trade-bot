@@ -29,7 +29,7 @@ export async function handlePredict(): Promise<void> {
   for (const sym of enabledSymbols) {
     await firebase.pushRequest({
       type: "predict",
-      payload: { symbol: sym, fromDate: today, toDate: today, dataSource: "local" },
+      payload: { symbol: sym, fromDate: today, toDate: today, dataSource: "api" },
     });
     logger.info(`✓ Queued prediction for ${sym} (${today})`);
   }
