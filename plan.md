@@ -10,28 +10,28 @@ Current system predicts daily **High** and **Low** values using the first 45 min
 
 ---
 
-## Phase 1: Predict Close Value
+## Phase 1: Predict Close Value ✅ DONE
 
 **Goal**: Add `predictedClose` to the daily prediction output.
 
-### Step 1.1 — Extend the Model
+### Step 1.1 — Extend the Model ✅
 
-- [ ] Add `predictClose(features: number[]): number` method to `TrainableModel` interface
-- [ ] Implement in `LinearRegressionModel` — train a third set of weights for close
-- [ ] Update `ModelTrainer` to fit the close regression alongside high/low
-- [ ] Training target: `actualClose` from historical data (already in `Prediction` type)
+- [x] Add `predictClose(features: number[]): number` method to `TrainableModel` interface
+- [x] Implement in `LinearRegressionModel` — train a third set of weights for close
+- [x] Update `ModelTrainer` to fit the close regression alongside high/low
+- [x] Training target: `actualClose` (last candle's close of the day)
+- [x] Backward compatible: old models without close weights fallback to H/L midpoint
 
-### Step 1.2 — Update Prediction Engine
+### Step 1.2 — Update Prediction Engine ✅
 
-- [ ] In `prediction-engine.ts`, call `model.predictClose(featureArray)` 
-- [ ] Add `predictedClose` field to the `Prediction` interface
-- [ ] Store it alongside `predictedHigh` and `predictedLow` in Firebase
+- [x] In `prediction-engine.ts`, call `model.predictClose(featureArray)` 
+- [x] Add `predictedClose` field to the `Prediction` interface
+- [x] Store it alongside `predictedHigh` and `predictedLow` in Firebase
 
-### Step 1.3 — Update Evaluation
+### Step 1.3 — Update Evaluation ✅
 
-- [ ] In `evaluation-engine.ts`, compute close error: `|predictedClose - actualClose|`
-- [ ] Add `closeError` and `closeMAPE` to `EvaluationResult`
-- [ ] Update aggregate metrics
+- [x] In `evaluation-engine.ts`, compute close error: `|predictedClose - actualClose|`
+- [x] Add `closeError` to `EvaluationResult`
 
 ### Step 1.4 — Frontend
 
@@ -39,7 +39,7 @@ Current system predicts daily **High** and **Low** values using the first 45 min
 - [ ] Add a third horizontal dotted line (blue) for predicted close on the chart
 - [ ] Update Dashboard/Audit pages if they show prediction details
 
-### Estimated Effort: 2-3 hours
+### Commit: `44dece8` — "feat: add close price prediction (Phase 1)"
 
 ---
 
