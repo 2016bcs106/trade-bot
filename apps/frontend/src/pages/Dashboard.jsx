@@ -185,12 +185,8 @@ export default function Dashboard() {
       ) : (
         rows.map((row) => {
           const hasActual = row.status === 'predicted' && row.evaluated && row.actualHigh != null
-          // Direction based on predicted midpoint vs reference price (price when prediction was made)
-          const midpoint = row.status === 'predicted' ? (row.predictedHigh + row.predictedLow) / 2 : 0
-          const refPrice = row.referencePrice
-          const direction = (row.status === 'predicted' && refPrice)
-            ? (midpoint >= refPrice ? 'Bullish' : 'Bearish')
-            : null
+          // Direction stored in prediction (based on predictedClose vs referencePrice)
+          const direction = row.direction || null
           const dirIcon = direction === 'Bullish' ? '▲' : '▼'
           const dirColor = direction === 'Bullish' ? '#22c55e' : '#ef4444'
 
@@ -225,9 +221,9 @@ export default function Dashboard() {
                       {dirIcon} {direction}
                     </span>
                   )}
-                  {refPrice && (
+                  {row.referencePrice && (
                     <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)' }}>
-                      @₹{refPrice.toFixed(2)}{row.referencePriceTime ? ` (${row.referencePriceTime})` : ''}
+                      @₹{row.referencePrice.toFixed(2)}{row.referencePriceTime ? ` (${row.referencePriceTime})` : ''}
                     </span>
                   )}
                 </div>
@@ -372,10 +368,8 @@ export default function Dashboard() {
                 <div style={styles.loadingText}>No historical predictions</div>
               ) : history && history.map(([date, pred]) => {
                 const hasActual = pred.evaluated && pred.actualHigh != null
-                // Direction based on predicted midpoint vs reference price
-                const midPred = (pred.predictedHigh + pred.predictedLow) / 2
-                const refP = pred.referencePrice
-                const direction = refP ? (midPred >= refP ? 'Bullish' : 'Bearish') : null
+                // Direction stored in prediction (based on predictedClose vs referencePrice)
+                const direction = pred.direction || null
                 const dirIcon = direction === 'Bullish' ? '▲' : '▼'
                 const dirColor = direction === 'Bullish' ? '#22c55e' : '#ef4444'
 
@@ -390,9 +384,9 @@ export default function Dashboard() {
                             {dirIcon} {direction}
                           </span>
                         )}
-                        {refP && (
+                        {pred.referencePrice && (
                           <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)' }}>
-                            @₹{refP.toFixed(2)}{pred.referencePriceTime ? ` (${pred.referencePriceTime})` : ''}
+                            @₹{pred.referencePrice.toFixed(2)}{pred.referencePriceTime ? ` (${pred.referencePriceTime})` : ''}
                           </span>
                         )}
                       </div>

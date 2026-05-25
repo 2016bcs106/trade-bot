@@ -16,7 +16,10 @@ export interface Prediction {
   predictedLow: number;
 
   /** Predicted closing price (3:30 PM) */
-  predictedClose: number | null;
+  predictedClose: number;
+
+  /** Predicted direction based on predictedClose vs referencePrice */
+  direction: "Bullish" | "Bearish";
 
   /** Model version used for this prediction (e.g., "v3") */
   modelVersion: string;
@@ -30,11 +33,11 @@ export interface Prediction {
   /** ISO timestamp when prediction was generated (YYYY-MM-DD HH:mm:ss) */
   generatedAt: string;
 
-  /** Price at the time prediction was made (11:00 AM IST candle close) */
-  referencePrice: number | null;
+  /** Price at the time prediction was made (last candle close in feature window) */
+  referencePrice: number;
 
   /** Timestamp of the reference price candle (e.g. "11:00") */
-  referencePriceTime: string | null;
+  referencePriceTime: string;
 
   /** Actual intraday high (filled after market close), null until evaluated */
   actualHigh: number | null;

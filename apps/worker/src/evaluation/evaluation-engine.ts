@@ -44,14 +44,12 @@ export default class EvaluationEngine {
     const lowPctError = actualLow > 0 ? (lowError / actualLow) * 100 : 0;
     const mape = (highPctError + lowPctError) / 2;
 
-    // Directional accuracy: predicted direction vs actual direction relative to reference price
+    // Directional accuracy: predicted close direction vs actual close direction relative to reference price
     const referencePrice = prediction.referencePrice;
     let directionalAccuracy = false;
-    if (referencePrice !== null && referencePrice > 0) {
-      const predictedMid = (predictedHigh + predictedLow) / 2;
-      const actualMid = (actualHigh + actualLow) / 2;
-      const predictedBullish = predictedMid >= referencePrice;
-      const actualBullish = actualMid >= referencePrice;
+    if (referencePrice > 0 && actualClose !== null) {
+      const predictedBullish = predictedClose >= referencePrice;
+      const actualBullish = actualClose >= referencePrice;
       directionalAccuracy = predictedBullish === actualBullish;
     }
 

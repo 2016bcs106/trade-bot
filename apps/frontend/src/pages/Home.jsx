@@ -115,10 +115,8 @@ export default function Home() {
 
   const enabledSymbols = Object.keys(stocks).sort()
 
-  // Compute direction from prediction
-  const direction = prediction?.predictedHigh && prediction?.predictedLow && prediction?.referencePrice
-    ? ((prediction.predictedHigh + prediction.predictedLow) / 2 >= prediction.referencePrice ? 'Bullish' : 'Bearish')
-    : null
+  // Direction is stored in the prediction (based on predictedClose vs referencePrice)
+  const direction = prediction?.direction || null
 
   return (
     <div style={{ ...layout.page, paddingBottom: '4rem' }}>

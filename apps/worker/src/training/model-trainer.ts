@@ -208,13 +208,12 @@ export default class ModelTrainer {
       totalLowPctErr += sample.targetLow > 0 ? (lowErr / sample.targetLow) * 100 : 0;
 
       // Directional accuracy: did the model correctly predict whether
-      // today's midpoint (avg of high/low) would be above or below prev close?
-      const predMid = (predHigh + predLow) / 2;
-      const actualMid = (sample.targetHigh + sample.targetLow) / 2;
+      // today's close would be above or below prev close (reference price)?
+      const predClose = model.predictClose(sample.featureArray);
       const prevClose = sample.features.prevClose1;
       if (prevClose > 0) {
-        const predDirection = predMid > prevClose; // model predicts bullish day
-        const actualDirection = actualMid > prevClose; // day was actually bullish
+        const predDirection = predClose >= prevClose; // model predicts bullish day
+        const actualDirection = sample.targetClose >= prevClose; // day was actually bullish
         if (predDirection === actualDirection) {
           directionalCorrect++;
         }

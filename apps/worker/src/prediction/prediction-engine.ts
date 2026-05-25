@@ -61,6 +61,7 @@ export default class PredictionEngine {
 
     // Step 4: Build prediction object
     const { price: referencePrice, time: referencePriceTime } = this.getReferencePrice(candles);
+    const direction: "Bullish" | "Bearish" = predictedClose >= referencePrice ? "Bullish" : "Bearish";
 
     return {
       symbol,
@@ -68,6 +69,7 @@ export default class PredictionEngine {
       predictedHigh,
       predictedLow,
       predictedClose,
+      direction,
       modelVersion,
       modelType,
       generatedAt: nowFormatted(),
@@ -120,13 +122,11 @@ export default class PredictionEngine {
   }
 
   /**
-   * Get the reference price at 11:00 AM IST from the candle data.
-   * Finds the candle whose timestamp contains hour 11 and minute 0.
+   * Get the reference price — prefers 11:00 AM IST candle, falls back to last candle in window.
    * Timestamps are already in IST format (YYYY-MM-DD HH:mm).
    */
-  private getReferencePrice(candles: OHLCV[]): { price: number | null; time: string | null } {
-    if (candles.length === 0) return { price: null, time: null };
-
+  private getReferencePrice(candles: OHLCV[]): { price: number; time: string } {
+    // Try to find 11:00 AM candle
     for (const candle of candles) {
       const time = candle.timestamp.split(" ")[1]; // "HH:mm"
       if (time === "11:00") {
@@ -134,7 +134,10 @@ export default class PredictionEngine {
       }
     }
 
-    return { price: null, time: null };
+    // Fall back to last candle in window (feature window end)
+    const last = candles[candles.length - 1];
+    const time = last.timestamp.split(" ")[1] || "09:15";
+    return { price: last.close, time };
   }
 
   /**
