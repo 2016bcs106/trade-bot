@@ -206,7 +206,7 @@ export class TrainingRequestHandler implements RequestHandler {
     const optimalHandler = new OptimalTradeTimeRequestHandler();
     await optimalHandler.handle({
       type: "optimal_trade_time",
-      payload: { symbol, days: 30 },
+      payload: { symbol, days: 90 },
       status: "processing",
       createdAt: request.createdAt,
     }, ctx);

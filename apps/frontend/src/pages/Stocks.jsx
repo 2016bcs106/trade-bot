@@ -210,6 +210,25 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
               <ToggleRow label="Predictions Enabled" enabled={!!stock.enabled} onToggle={onToggleEnabled} />
               <ToggleRow label="Auto Model Selection" enabled={!!stock.autoOptimize} onToggle={onToggleAutoOptimize} />
               <DetailRow label="Active Model" value={stock.currentProductionVersion || '—'} />
+
+              {stock.optimalEntry && stock.optimalExit && (
+                <>
+                  <div style={styles.sectionHeader}>Optimal Trade Window</div>
+                  <DetailRow label="Entry Time" value={stock.optimalEntry} />
+                  <DetailRow label="Exit Time" value={stock.optimalExit} />
+                  {stock.optimalStats && (
+                    <>
+                      <DetailRow label="Win Rate" value={`${stock.optimalStats.winRate.toFixed(1)}%`} />
+                      <DetailRow label="Avg PnL" value={`${stock.optimalStats.avgPnL >= 0 ? '+' : ''}${stock.optimalStats.avgPnL.toFixed(2)}%`} />
+                      <DetailRow label="Sharpe Ratio" value={stock.optimalStats.sharpe.toFixed(2)} />
+                      <DetailRow label="Consistency" value={`${stock.optimalStats.consistency.toFixed(0)}%`} />
+                      <DetailRow label="Max Drawdown" value={`${stock.optimalStats.maxDrawdown.toFixed(2)}%`} />
+                      <DetailRow label="Days Backtested" value={stock.optimalStats.daysBacktested} />
+                      <DetailRow label="Backtest Date" value={stock.optimalStats.backtestDate} />
+                    </>
+                  )}
+                </>
+              )}
             </>
           )}
           <div style={{ ...styles.actionRow, justifyContent: 'flex-end' }}>
@@ -476,6 +495,30 @@ export default function Stocks() {
                     {prodModel.trainedAt && (
                       <span style={{ marginLeft: 'auto', fontSize: '0.6rem', color: colors.muted }}>
                         {new Date(prodModel.trainedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {/* Optimal trade window row */}
+                {stock.optimalEntry && stock.optimalExit && (
+                  <div style={styles.modelRow}>
+                    <FontAwesomeIcon icon={faClock} style={{ color: '#22c55e', fontSize: '0.7rem' }} />
+                    <span style={{ fontWeight: '600', color: colors.dark }}>
+                      {stock.optimalEntry} → {stock.optimalExit}
+                    </span>
+                    {stock.optimalStats?.winRate != null && (
+                      <span style={{ color: '#22c55e', fontWeight: '600' }}>
+                        {stock.optimalStats.winRate.toFixed(0)}% win
+                      </span>
+                    )}
+                    {stock.optimalStats?.avgPnL != null && (
+                      <span style={{ color: stock.optimalStats.avgPnL >= 0 ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
+                        {stock.optimalStats.avgPnL >= 0 ? '+' : ''}{stock.optimalStats.avgPnL.toFixed(2)}%
+                      </span>
+                    )}
+                    {stock.optimalStats?.sharpe != null && (
+                      <span style={{ marginLeft: 'auto', fontSize: '0.6rem', color: colors.muted }}>
+                        SR: {stock.optimalStats.sharpe.toFixed(2)}
                       </span>
                     )}
                   </div>

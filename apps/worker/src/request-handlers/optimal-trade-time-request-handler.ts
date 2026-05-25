@@ -13,13 +13,14 @@ const logger = createLogger("handler:optimal-trade-time");
 /** Market timing constants */
 const MARKET_OPEN_HOUR = 9;
 const MARKET_OPEN_MIN = 15;
-const MARKET_CLOSE_HOUR = 15;
-const MARKET_CLOSE_MIN = 30;
 const STEP = 5; // 5-min intervals
+
+/** Fixed exit time — always exit at 15:14 (1 min before last candle to avoid closing auction noise) */
+const FIXED_EXIT_TIME = "15:14";
+const FIXED_EXIT_MINUTES = 15 * 60 + 14 - (MARKET_OPEN_HOUR * 60 + MARKET_OPEN_MIN); // offset from 9:15
 
 interface TradeResult {
   entryTime: string;
-  exitTime: string;
   entryPrice: number;
   exitPrice: number;
   pnlPct: number;
@@ -40,16 +41,16 @@ interface StrategyStats {
 }
 
 /**
- * Handles "optimal_trade_time" requests — backtests all (entry, exit) time combinations
- * using horizon models to find the most profitable intraday strategy.
+ * Handles "optimal_trade_time" requests — backtests all entry times with a fixed exit (15:14)
+ * using horizon models to find the most profitable intraday entry strategy.
  *
  * Expected payload:
  * - symbol: string (stock symbol)
- * - days: number (number of past trading days to backtest)
+ * - days: number (number of past trading days to backtest, default 90)
  */
 export class OptimalTradeTimeRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
-    const { symbol, days = 30 } = request.payload as {
+    const { symbol, days = 90 } = request.payload as {
       symbol: string;
       days?: number;
     };
@@ -80,9 +81,8 @@ export class OptimalTradeTimeRequestHandler implements RequestHandler {
 
     logger.info(`Backtesting ${symbol} (${version}): ${businessDays.length} days, ${businessDays[0]} → ${businessDays[businessDays.length - 1]}`);
 
-    // Generate all entry times (9:20 to 14:30) and exit times (entry+5 to 15:25)
+    // Generate all entry times (9:20 to 14:30) — exit is always fixed at 15:14
     const entryTimes = this.generateTimes(MARKET_OPEN_HOUR, MARKET_OPEN_MIN + STEP, 14, 30);
-    const exitTimes = this.generateTimes(MARKET_OPEN_HOUR, MARKET_OPEN_MIN + STEP * 2, MARKET_CLOSE_HOUR, MARKET_CLOSE_MIN - STEP);
 
     // Collect all trade results across all days
     const allResults: TradeResult[] = [];
@@ -104,6 +104,14 @@ export class OptimalTradeTimeRequestHandler implements RequestHandler {
 
         // Index candles by minute offset from 9:15
         const candleByMinute = this.indexCandlesByMinute(candles);
+
+        // Get exit candle (fixed at 15:14)
+        const exitCandle = candleByMinute.get(FIXED_EXIT_MINUTES);
+        if (!exitCandle) {
+          logger.warn(`Skipping ${date}: no candle at exit time ${FIXED_EXIT_TIME}`);
+          continue;
+        }
+        const exitPrice = exitCandle.close;
 
         // For each entry time, get model prediction and record trades
         for (const entryTime of entryTimes) {
@@ -140,27 +148,16 @@ export class OptimalTradeTimeRequestHandler implements RequestHandler {
           //           if model predicts close < entry → sell now buy later (positive if price goes down)
           const isLong = predictedClose >= entryPrice;
 
-          // For each valid exit time after entry
-          for (const exitTime of exitTimes) {
-            const exitMinutes = this.timeToMinutes(exitTime) - this.timeToMinutes("09:15");
-            if (exitMinutes <= entryMinutes) continue;
+          const rawPnl = (exitPrice - entryPrice) / entryPrice * 100;
+          const pnlPct = isLong ? rawPnl : -rawPnl;
 
-            const exitCandle = candleByMinute.get(exitMinutes);
-            if (!exitCandle) continue;
-            const exitPrice = exitCandle.close;
-
-            const rawPnl = (exitPrice - entryPrice) / entryPrice * 100;
-            const pnlPct = isLong ? rawPnl : -rawPnl;
-
-            allResults.push({
-              entryTime,
-              exitTime,
-              entryPrice,
-              exitPrice,
-              pnlPct,
-              date,
-            });
-          }
+          allResults.push({
+            entryTime,
+            entryPrice,
+            exitPrice,
+            pnlPct,
+            date,
+          });
         }
 
         processedDays++;
@@ -179,7 +176,7 @@ export class OptimalTradeTimeRequestHandler implements RequestHandler {
       throw new Error("No valid trade results — check if models exist and data is available");
     }
 
-    // Aggregate into (entry, exit) strategy stats
+    // Aggregate into entry-time strategy stats (exit is always 15:14)
     const strategies = this.computeStrategyStats(allResults, processedDays);
 
     // Sort by composite score
@@ -189,29 +186,29 @@ export class OptimalTradeTimeRequestHandler implements RequestHandler {
     const top = strategies.slice(0, 20);
 
     // Print results
-    logger.info("\n" + "═".repeat(90));
-    logger.info(`TOP STRATEGIES for ${symbol} (${version}) — ${processedDays} days backtested`);
-    logger.info("═".repeat(90));
+    logger.info("\n" + "═".repeat(85));
+    logger.info(`TOP ENTRY TIMES for ${symbol} (${version}) — Exit fixed at ${FIXED_EXIT_TIME} — ${processedDays} days backtested`);
+    logger.info("═".repeat(85));
     logger.info(
-      "Rank  Entry   Exit    Dir    WinRate  AvgPnL   Sharpe  Consistency  MaxDD    Score",
+      "Rank  Entry   Exit     WinRate  AvgPnL   Sharpe  Consistency  MaxDD    Score",
     );
-    logger.info("-".repeat(90));
+    logger.info("-".repeat(85));
 
     for (let i = 0; i < top.length; i++) {
       const s = top[i];
       logger.info(
-        `${String(i + 1).padStart(3)}   ${s.entryTime}   ${s.exitTime}   ${s.trades > 0 ? "LONG" : "SHORT"}` +
+        `${String(i + 1).padStart(3)}   ${s.entryTime}   ${s.exitTime}` +
         `    ${s.winRate.toFixed(0).padStart(3)}%     ${s.avgPnL >= 0 ? "+" : ""}${s.avgPnL.toFixed(2)}%` +
         `    ${s.sharpe.toFixed(2).padStart(5)}   ${s.consistency.toFixed(0).padStart(5)}%` +
         `       ${s.maxDrawdown.toFixed(2)}%   ${s.score.toFixed(2)}`,
       );
     }
 
-    logger.info("═".repeat(90));
+    logger.info("═".repeat(85));
 
     if (top.length > 0) {
       const best = top[0];
-      logger.info(`\n🏆 RECOMMENDATION: Entry at ${best.entryTime}, Exit at ${best.exitTime}`);
+      logger.info(`\n🏆 RECOMMENDATION: Entry at ${best.entryTime}, Exit at ${FIXED_EXIT_TIME}`);
       logger.info(`   Win rate: ${best.winRate.toFixed(1)}% | Avg PnL: ${best.avgPnL >= 0 ? "+" : ""}${best.avgPnL.toFixed(2)}% | Sharpe: ${best.sharpe.toFixed(2)} | Consistency: ${best.consistency.toFixed(0)}%`);
     }
 
@@ -298,22 +295,21 @@ export class OptimalTradeTimeRequestHandler implements RequestHandler {
   }
 
   /**
-   * Compute strategy stats for each (entry, exit) combination.
+   * Compute strategy stats for each entry time (exit is always fixed at 15:14).
    */
   private computeStrategyStats(results: TradeResult[], _totalDays: number): StrategyStats[] {
-    // Group by (entryTime, exitTime)
+    // Group by entryTime only (exit is fixed)
     const groups = new Map<string, TradeResult[]>();
     for (const r of results) {
-      const key = `${r.entryTime}|${r.exitTime}`;
-      const arr = groups.get(key) || [];
+      const arr = groups.get(r.entryTime) || [];
       arr.push(r);
-      groups.set(key, arr);
+      groups.set(r.entryTime, arr);
     }
 
     const stats: StrategyStats[] = [];
 
-    for (const [key, trades] of groups) {
-      const [entryTime, exitTime] = key.split("|");
+    for (const [entryTime, trades] of groups) {
+      const exitTime = FIXED_EXIT_TIME;
       const n = trades.length;
       if (n < 5) continue; // Need at least 5 trades for meaningful stats
 
