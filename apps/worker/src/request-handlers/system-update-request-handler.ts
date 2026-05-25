@@ -57,7 +57,9 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     // ─── Step 3: Deploy frontend ─────────────────────────────────────
     logger.info("Step 3: Deploying frontend...");
     try {
-      this.exec("pnpm --filter frontend deploy", PROJECT_ROOT);
+      const frontendDir = resolve(PROJECT_ROOT, "apps", "frontend");
+      this.exec("pnpm --filter frontend build", PROJECT_ROOT);
+      this.exec("firebase deploy --only hosting", frontendDir);
       logger.info("  ✓ Frontend deployed");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
