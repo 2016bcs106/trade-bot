@@ -9,6 +9,7 @@ import { SystemUpdateRequestHandler } from "../request-handlers/system-update-re
 import { TrainingRequestHandler } from "../request-handlers/training-request-handler.ts";
 import { EvaluationRequestHandler } from "../request-handlers/evaluation-request-handler.ts";
 import { OptimalTradeTimeRequestHandler } from "../request-handlers/optimal-trade-time-request-handler.ts";
+import { ShortPredictDryRunHandler } from "../request-handlers/short-predict-dry-run-handler.ts";
 
 /**
  * Registry: maps request type → handler instance.
@@ -19,6 +20,7 @@ const handlerRegistry: Record<string, RequestHandler> = {
   evaluate: new EvaluationRequestHandler(),
   optimal_trade_time: new OptimalTradeTimeRequestHandler(),
   predict: new PredictionRequestHandler(),
+  short_predict_dry_run: new ShortPredictDryRunHandler(),
   stock_sync: new StockSyncRequestHandler(),
   system_update: new SystemUpdateRequestHandler(),
   train: new TrainingRequestHandler(),

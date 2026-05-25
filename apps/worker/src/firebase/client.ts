@@ -205,6 +205,12 @@ export default class FirebaseClient {
     return id;
   }
 
+  // ─── Public Helpers (for dynamic paths) ───────────────────────────
+
+  async _setValuePublic(path: string, value: unknown): Promise<void> {
+    await set(ref(this.db, path), value);
+  }
+
   // ─── Private Helpers ──────────────────────────────────────────────
 
   private async _getValue(path: string): Promise<unknown> {

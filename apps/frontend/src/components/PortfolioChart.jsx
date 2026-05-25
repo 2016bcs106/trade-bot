@@ -120,9 +120,84 @@ function generateMarketLabels() {
   return labels
 }
 
-export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ticks = [], signals = [], predictedHigh = null, predictedLow = null, predictedClose = null }) {
+export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ticks = [], signals = [], predictedHigh = null, predictedLow = null, predictedClose = null, isDryRun = false }) {
   const [visible, setVisible] = useState({ close: true, fastSma: false, slowSma: false })
   const chartRef = useRef(null)
+
+  // ─── Dry Run Mode: dual-line chart (actual vs predicted) ────────
+  if (isDryRun && ticks.length > 0) {
+    const dryLabels = ticks.map((t) => t.time)
+    const actualPrices = ticks.map((t) => t.price)
+    const predictedPrices = ticks.map((t) => t.predictedPrice)
+
+    const dryOpenPrice = actualPrices[0] || 0
+    const dryCurrentPrice = actualPrices[actualPrices.length - 1] || 0
+    const dryChange = dryCurrentPrice - dryOpenPrice
+    const dryChangePercent = dryOpenPrice !== 0 ? (dryChange / dryOpenPrice) * 100 : 0
+
+    const dryChartData = {
+      labels: dryLabels,
+      datasets: [
+        {
+          label: 'Actual Price',
+          data: actualPrices,
+          borderColor: '#22c55e',
+          backgroundColor: (ctx) => {
+            if (!ctx.chart) return 'transparent'
+            const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height)
+            gradient.addColorStop(0, 'rgba(34, 197, 94, 0.2)')
+            gradient.addColorStop(1, 'rgba(34, 197, 94, 0.02)')
+            return gradient
+          },
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: true,
+          spanGaps: true,
+        },
+        {
+          label: 'Predicted Price',
+          data: predictedPrices,
+          borderColor: '#8b5cf6',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+          spanGaps: true,
+        },
+      ],
+    }
+
+    return (
+      <div style={styles.container}>
+        <div style={styles.stockInfo}>
+          <div style={{ ...styles.icon, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>🔮</div>
+          <div style={styles.name}>{name} — Dry Run</div>
+          <div style={styles.price}>{dryCurrentPrice.toFixed(2)}</div>
+          <div style={merge(styles.change, { color: dryChange >= 0 ? colors.green : colors.red })}>
+            {dryChange >= 0 ? '+' : ''}{dryChange.toFixed(2)} ({dryChangePercent.toFixed(2)}%)
+          </div>
+        </div>
+        <div style={styles.chart}>
+          <Line ref={chartRef} data={dryChartData} options={chartOptions} />
+        </div>
+        <div style={styles.labels}>
+          <div style={merge(styles.label, { borderColor: '#22c55e' })}>
+            <span style={merge(styles.labelDot, { background: '#22c55e' })} />
+            Actual
+          </div>
+          <div style={merge(styles.label, { borderColor: '#8b5cf6' })}>
+            <span style={merge(styles.labelDot, { background: '#8b5cf6' })} />
+            Predicted (5min ahead)
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Normal Mode ────────────────────────────────────────────────
 
   // Build signal map from signals prop
   const signalMap = {}
