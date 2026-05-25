@@ -102,12 +102,16 @@ Divide the trading day (9:15-15:30 = 375 minutes) into 6 buckets:
 
 ```
 9:15  → Initial prediction (based on opening candle + previous day context)
-9:45  → Update 1 (30 min of data)
-10:00 → Update 2 (45 min of data) ← current model's sweet spot
-10:30 → Update 3 (75 min of data)
-11:00 → Update 4 (105 min of data)
-...every 30 min until 15:00
+9:20  → Update 1 (5 min of data)
+9:25  → Update 2 (10 min of data)
+9:30  → Update 3 (15 min of data)
+...
+10:00 → Update 9 (45 min of data) ← current model's sweet spot
+...every 5 min until 15:25
+15:25 → Final prediction (370 min of data)
 ```
+
+**Update frequency: every 5 minutes** (~75 updates per stock per day)
 
 ### Step 3.1 — Multi-Horizon Feature Engineering
 
@@ -131,7 +135,7 @@ Divide the trading day (9:15-15:30 = 375 minutes) into 6 buckets:
 
 ### Step 3.3 — Realtime Prediction Loop
 
-- [ ] In `trade-bot.ts`, every 30 minutes during market hours:
+- [ ] In `trade-bot.ts`, every **5 minutes** during market hours:
   1. Fetch all candles so far today via `fetchOHLCV(pmlId, today, today)`
   2. Compute features from available candles
   3. Run prediction model
@@ -237,9 +241,9 @@ fetchOHLCV(pmlId, date, date) → OHLCV[]
 
 ---
 
-## Open Questions
+## Decisions
 
-1. Should we use the same model architecture (linear regression) for close, or try something more expressive (e.g., gradient boosted trees via simple JS implementation)?
-2. For realtime forecast, should we update every 15 min or 30 min? (tradeoff: API calls vs freshness)
-3. Should time-of-event prediction be shown as a shaded region on the chart?
-4. Do we want to track "prediction flip" events (bullish→bearish) as notable audit entries?
+1. **Model architecture for Close**: Start with linear regression (same as H/L). Upgrade to polynomial features or trees only if MAPE > 2%.
+2. **Realtime forecast frequency**: Every **5 minutes** — aggressive updates for maximum freshness.
+3. **Time-of-event visualization**: Yes — show as a **shaded region** on the chart in the predicted time bucket.
+4. **Prediction flip tracking**: No — not needed as audit entry.
