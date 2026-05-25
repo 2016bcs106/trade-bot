@@ -12,8 +12,10 @@ import { TrainableModel } from "./trainable-model.ts";
 export class LinearRegressionModel implements TrainableModel {
   private weightsHigh: number[] = [];
   private weightsLow: number[] = [];
+  private weightsClose: number[] = [];
   private biasHigh: number = 0;
   private biasLow: number = 0;
+  private biasClose: number = 0;
   private featureMeans: number[] = [];
   private featureStds: number[] = [];
   private readonly lambda: number;
@@ -22,7 +24,7 @@ export class LinearRegressionModel implements TrainableModel {
     this.lambda = lambda;
   }
 
-  fit(X: number[][], yHigh: number[], yLow: number[]): void {
+  fit(X: number[][], yHigh: number[], yLow: number[], yClose: number[] = []): void {
     const n = X.length;
     const p = X[0].length;
 
@@ -55,6 +57,7 @@ export class LinearRegressionModel implements TrainableModel {
     // X^T y
     const XtYHigh = this.matVecMul(this.transpose(Xaug), yHigh);
     const XtYLow = this.matVecMul(this.transpose(Xaug), yLow);
+    const XtYClose = yClose.length > 0 ? this.matVecMul(this.transpose(Xaug), yClose) : null;
 
     // Solve: β = (X^T X + λI)^(-1) X^T y
     const XtXInv = this.invertMatrix(XtX);
@@ -71,6 +74,11 @@ export class LinearRegressionModel implements TrainableModel {
         this.biasHigh = betaHigh[p];
         this.weightsLow = betaLow.slice(0, p);
         this.biasLow = betaLow[p];
+        if (XtYClose) {
+          const betaClose = this.matVecMul(fallbackInv, XtYClose);
+          this.weightsClose = betaClose.slice(0, p);
+          this.biasClose = betaClose[p];
+        }
       }
       return;
     }
@@ -82,6 +90,12 @@ export class LinearRegressionModel implements TrainableModel {
     this.biasHigh = betaHigh[p];
     this.weightsLow = betaLow.slice(0, p);
     this.biasLow = betaLow[p];
+
+    if (XtYClose) {
+      const betaClose = this.matVecMul(XtXInv, XtYClose);
+      this.weightsClose = betaClose.slice(0, p);
+      this.biasClose = betaClose[p];
+    }
   }
 
   predictHigh(x: number[]): number {
@@ -102,14 +116,29 @@ export class LinearRegressionModel implements TrainableModel {
     return pred;
   }
 
+  predictClose(x: number[]): number {
+    // Fallback: if no close weights trained (old model), return midpoint of H/L
+    if (this.weightsClose.length === 0) {
+      return (this.predictHigh(x) + this.predictLow(x)) / 2;
+    }
+    const xStd = x.map((v, j) => (v - this.featureMeans[j]) / this.featureStds[j]);
+    let pred = this.biasClose;
+    for (let j = 0; j < xStd.length; j++) {
+      pred += this.weightsClose[j] * xStd[j];
+    }
+    return pred;
+  }
+
   serialize(): string {
     return JSON.stringify({
       type: "linear-regression",
       lambda: this.lambda,
       weightsHigh: this.weightsHigh,
       weightsLow: this.weightsLow,
+      weightsClose: this.weightsClose,
       biasHigh: this.biasHigh,
       biasLow: this.biasLow,
+      biasClose: this.biasClose,
       featureMeans: this.featureMeans,
       featureStds: this.featureStds,
     });
@@ -128,8 +157,10 @@ export class LinearRegressionModel implements TrainableModel {
     const model = new LinearRegressionModel(data.lambda || 1.0);
     model.weightsHigh = data.weightsHigh || [];
     model.weightsLow = data.weightsLow || [];
+    model.weightsClose = data.weightsClose || [];
     model.biasHigh = data.biasHigh || 0;
     model.biasLow = data.biasLow || 0;
+    model.biasClose = data.biasClose || 0;
     model.featureMeans = data.featureMeans || [];
     model.featureStds = data.featureStds || [];
     return model;

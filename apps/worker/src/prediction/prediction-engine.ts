@@ -57,6 +57,7 @@ export default class PredictionEngine {
     const featureArray = this.featureEngineer.toNumericArray(features);
     const predictedHigh = model.predictHigh(featureArray);
     const predictedLow = model.predictLow(featureArray);
+    const predictedClose = model.predictClose(featureArray);
 
     // Step 4: Build prediction object
     const { price: referencePrice, time: referencePriceTime } = this.getReferencePrice(candles);
@@ -66,6 +67,7 @@ export default class PredictionEngine {
       date,
       predictedHigh,
       predictedLow,
+      predictedClose,
       modelVersion,
       modelType,
       generatedAt: nowFormatted(),

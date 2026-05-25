@@ -18,6 +18,9 @@ export interface EvaluationResult {
   /** Absolute error on low prediction */
   lowError: number;
 
+  /** Absolute error on close prediction (null if no close prediction) */
+  closeError: number | null;
+
   /** Mean Absolute Error across high and low */
   mae: number;
 

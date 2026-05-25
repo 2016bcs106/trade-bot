@@ -26,10 +26,15 @@ export default class EvaluationEngine {
       return null;
     }
 
-    const { predictedHigh, predictedLow, actualHigh, actualLow } = prediction;
+    const { predictedHigh, predictedLow, predictedClose, actualHigh, actualLow, actualClose } = prediction;
 
     const highError = Math.abs(predictedHigh - actualHigh);
     const lowError = Math.abs(predictedLow - actualLow);
+
+    // Close error (only if both predicted and actual are available)
+    const closeError = (predictedClose !== null && actualClose !== null)
+      ? Math.abs(predictedClose - actualClose)
+      : null;
 
     const mae = (highError + lowError) / 2;
     const rmse = Math.sqrt((highError ** 2 + lowError ** 2) / 2);
@@ -59,6 +64,7 @@ export default class EvaluationEngine {
       modelVersion: prediction.modelVersion,
       highError,
       lowError,
+      closeError,
       mae,
       rmse,
       mape,

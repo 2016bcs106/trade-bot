@@ -10,13 +10,14 @@ import createLogger from "../utils/logger.ts";
 const logger = createLogger("model-trainer");
 
 /**
- * Training sample: feature vector + target labels (actual daily high/low).
+ * Training sample: feature vector + target labels (actual daily high/low/close).
  */
 interface TrainingSample {
   features: FeatureVector;
   featureArray: number[];
   targetHigh: number;
   targetLow: number;
+  targetClose: number;
   date: string;
 }
 
@@ -90,12 +91,13 @@ export default class ModelTrainer {
     const X_train = trainSet.map((s) => s.featureArray);
     const yHigh_train = trainSet.map((s) => s.targetHigh);
     const yLow_train = trainSet.map((s) => s.targetLow);
+    const yClose_train = trainSet.map((s) => s.targetClose);
 
     // Step 5: Train model
     const resolvedType: ModelType = "linear-regression";
     const model = this.createModel(resolvedType);
     logger.info(`Training ${resolvedType} model...`);
-    model.fit(X_train, yHigh_train, yLow_train);
+    model.fit(X_train, yHigh_train, yLow_train, yClose_train);
 
     // Step 6: Evaluate on validation set
     const metrics = this.evaluateModel(model, valSet);
@@ -158,15 +160,17 @@ export default class ModelTrainer {
         continue;
       }
 
-      // Target: actual daily high and low from ALL candles
+      // Target: actual daily high, low, and close from ALL candles
       const dailyHigh = Math.max(...candles.map((c) => c.high));
       const dailyLow = Math.min(...candles.map((c) => c.low));
+      const dailyClose = candles[candles.length - 1].close;
 
       samples.push({
         features,
         featureArray: this.featureEngineer.toNumericArray(features),
         targetHigh: dailyHigh,
         targetLow: dailyLow,
+        targetClose: dailyClose,
         date,
       });
 

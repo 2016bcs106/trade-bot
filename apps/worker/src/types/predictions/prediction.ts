@@ -15,6 +15,9 @@ export interface Prediction {
   /** Predicted intraday low price */
   predictedLow: number;
 
+  /** Predicted closing price (3:30 PM) */
+  predictedClose: number | null;
+
   /** Model version used for this prediction (e.g., "v3") */
   modelVersion: string;
 
