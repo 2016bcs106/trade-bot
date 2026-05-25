@@ -209,9 +209,9 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              {/* Sub-row: date, direction, reference price */}
+              {/* Sub-row: date, direction, confidence, reference price */}
               {row.status === 'predicted' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                   {row.predictionDate && row.predictionDate !== businessDay && (
                     <span style={{ fontSize: '0.6rem', color: '#f59e0b', fontWeight: '600' }}>
                       {row.predictionDate}
@@ -220,6 +220,16 @@ export default function Dashboard() {
                   {direction && (
                     <span style={{ fontSize: '0.6rem', fontWeight: '700', color: dirColor }}>
                       {dirIcon} {direction}
+                    </span>
+                  )}
+                  {row.confidence != null && (
+                    <span style={{
+                      fontSize: '0.55rem', fontWeight: '600',
+                      padding: '0.1rem 0.35rem', borderRadius: '4px',
+                      background: row.confidence >= 0.7 ? 'rgba(34,197,94,0.12)' : row.confidence >= 0.4 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+                      color: row.confidence >= 0.7 ? '#22c55e' : row.confidence >= 0.4 ? '#f59e0b' : '#ef4444',
+                    }}>
+                      {Math.round(row.confidence * 100)}% conf
                     </span>
                   )}
                   {row.referencePrice && (
@@ -403,6 +413,16 @@ export default function Dashboard() {
                         {direction && (
                           <span style={{ fontSize: '0.6rem', fontWeight: '700', color: dirColor }}>
                             {dirIcon} {direction}
+                          </span>
+                        )}
+                        {pred.confidence != null && (
+                          <span style={{
+                            fontSize: '0.5rem', fontWeight: '600',
+                            padding: '0.08rem 0.3rem', borderRadius: '3px',
+                            background: pred.confidence >= 0.7 ? 'rgba(34,197,94,0.12)' : pred.confidence >= 0.4 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+                            color: pred.confidence >= 0.7 ? '#22c55e' : pred.confidence >= 0.4 ? '#f59e0b' : '#ef4444',
+                          }}>
+                            {Math.round(pred.confidence * 100)}%
                           </span>
                         )}
                         {pred.referencePrice && (
