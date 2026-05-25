@@ -18,8 +18,8 @@ export interface ModelMetadata {
   /** Training configuration and hyperparameters */
   training: TrainingInfo;
 
-  /** Performance metrics from walk-forward validation */
-  metrics: ModelMetrics;
+  /** Promotion metrics — weighted percentile across all horizon models */
+  promotionMetrics: PromotionMetrics;
 
   /** IST timestamp when model was created (YYYY-MM-DD HH:mm:ss) */
   createdAt: string;
@@ -83,4 +83,46 @@ export interface ModelMetrics {
 
   /** Number of validation samples */
   validationSamples: number;
+}
+
+/**
+ * Promotion metrics — used to decide whether a new version should replace the current production model.
+ * Uses weighted percentile-based scoring that favors early horizons (intraday trading focus).
+ */
+export interface PromotionMetrics {
+  /** Weighted P75 MAE — primary promotion criterion (lower = better) */
+  weightedP75MAE: number;
+
+  /** Average MAE across all horizons (informational) */
+  avgMAE: number;
+
+  /** Maximum MAPE in first hour (horizons 5-60 min) — hard floor check */
+  maxMAPE_firstHour: number;
+
+  /** Average directional accuracy in first hour (horizons 5-60 min) */
+  directionalAccuracy_firstHour: number;
+
+  /** Number of horizon models trained successfully */
+  horizonCount: number;
+
+  /** Per-horizon breakdown for debugging and analysis */
+  perHorizon: HorizonMetricEntry[];
+}
+
+/** Per-horizon metric entry */
+export interface HorizonMetricEntry {
+  /** Horizon in minutes (5, 10, 15, ..., 375) */
+  horizon: number;
+
+  /** MAE for this horizon */
+  mae: number;
+
+  /** MAPE for this horizon */
+  mape: number;
+
+  /** Directional accuracy for this horizon */
+  directionalAccuracy: number;
+
+  /** Exponential weight applied (higher for early horizons) */
+  weight: number;
 }

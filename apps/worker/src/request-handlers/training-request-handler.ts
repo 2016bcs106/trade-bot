@@ -78,8 +78,50 @@ export class TrainingRequestHandler implements RequestHandler {
       throw error;
     }
 
-    // Use the full-day (375) model as the primary for version management/metrics
-    // Fall back to the largest available horizon if 375 didn't train
+    // --- Compute PromotionMetrics using weighted P75 strategy ---
+    const LAMBDA = 0.005; // Decay rate: higher = more aggressive early-weight bias
+    const PERCENTILE = 75; // Use 75th percentile (protects against worst-case without being overly strict)
+    const MAX_MAPE_FIRST_HOUR = 3.0; // Hard floor: no early horizon can exceed 3% MAPE
+    const MIN_DIR_FIRST_HOUR = 55.0; // Minimum directional accuracy for first hour horizons
+
+    // Build per-horizon entries with exponential weights
+    const perHorizon = horizonResults.map((hr) => ({
+      horizon: hr.horizon,
+      mae: hr.metrics.mae,
+      mape: hr.metrics.mape,
+      directionalAccuracy: hr.metrics.directionalAccuracy,
+      weight: Math.exp(-LAMBDA * hr.horizon),
+    }));
+
+    // Compute weighted MAE values and sort descending for percentile
+    const weightedMAEs = perHorizon.map((h) => h.mae * h.weight).sort((a, b) => b - a);
+    const p75Index = Math.floor(weightedMAEs.length * (1 - PERCENTILE / 100));
+    const weightedP75MAE = weightedMAEs[Math.min(p75Index, weightedMAEs.length - 1)];
+
+    // Compute average MAE (informational)
+    const avgMAE = perHorizon.reduce((sum, h) => sum + h.mae, 0) / perHorizon.length;
+
+    // First hour horizons (5-60 min)
+    const firstHourHorizons = perHorizon.filter((h) => h.horizon >= 5 && h.horizon <= 60);
+    const maxMAPE_firstHour = firstHourHorizons.length > 0
+      ? Math.max(...firstHourHorizons.map((h) => h.mape))
+      : 0;
+    const directionalAccuracy_firstHour = firstHourHorizons.length > 0
+      ? firstHourHorizons.reduce((sum, h) => sum + h.directionalAccuracy, 0) / firstHourHorizons.length
+      : 0;
+
+    const promotionMetrics = {
+      weightedP75MAE,
+      avgMAE,
+      maxMAPE_firstHour,
+      directionalAccuracy_firstHour,
+      horizonCount: horizonResults.length,
+      perHorizon,
+    };
+
+    logger.info(`Promotion metrics: P75=${weightedP75MAE.toFixed(2)}, avgMAE=${avgMAE.toFixed(2)}, 1hr maxMAPE=${maxMAPE_firstHour.toFixed(1)}%, 1hr dir=${directionalAccuracy_firstHour.toFixed(1)}%`);
+
+    // Use the full-day (375) model as the primary serialized model for version management
     const primaryResult = horizonResults.find((r) => r.horizon === 375) || horizonResults[horizonResults.length - 1];
 
     // Build a TrainingResult for saveModel (version management)
@@ -90,14 +132,14 @@ export class TrainingRequestHandler implements RequestHandler {
       training: {
         dataStartDate: fromDate,
         dataEndDate: toDate,
-        sampleCount: 0, // filled from metrics
+        sampleCount: horizonResults.length,
         featureCount: trainer.getFeatureCount(),
         features: trainer.getFeatureNames(),
         hyperparameters: {},
         durationMs: 0,
         windowSize: primaryResult.windowSize,
       },
-      metrics: primaryResult.metrics,
+      promotionMetrics,
     };
 
     // Save primary model to disk and get version
@@ -124,7 +166,7 @@ export class TrainingRequestHandler implements RequestHandler {
       logger.info(`Pruned ${pruned.length} old version(s): ${pruned.join(", ")}`);
     }
 
-    // Auto-promotion logic — use Firebase as single source of truth
+    // --- Auto-promotion logic using weighted P75 + hard floors ---
     const currentProd = stock.currentProductionVersion;
     if (!currentProd) {
       // First model → always promote to production
@@ -135,20 +177,28 @@ export class TrainingRequestHandler implements RequestHandler {
       logger.info(`First model for ${symbol} — promoted ${version} to production`);
     } else if (stock.autoOptimize) {
       const prodMetadata = modelManager.loadMetadata(symbol, currentProd);
-      if (prodMetadata && result.metrics.mae < prodMetadata.metrics.mae) {
+      const prodP75 = prodMetadata?.promotionMetrics?.weightedP75MAE ?? Infinity;
+
+      // Check hard floors: first hour MAPE and directional accuracy
+      const passesHardFloor = maxMAPE_firstHour <= MAX_MAPE_FIRST_HOUR
+        && directionalAccuracy_firstHour >= MIN_DIR_FIRST_HOUR;
+
+      if (passesHardFloor && weightedP75MAE < prodP75) {
         modelManager.promote(symbol, version);
         await firebase.updateStock(symbol, { currentProductionVersion: version });
         await firebase.setModelMetadata(symbol, version, modelManager.loadMetadata(symbol, version)!);
         await firebase.setModelMetadata(symbol, currentProd, modelManager.loadMetadata(symbol, currentProd)!);
-        logger.info(`Auto-promoted ${symbol} ${version} (MAE: ${result.metrics.mae.toFixed(2)} < ${prodMetadata.metrics.mae.toFixed(2)})`);
+        logger.info(`Auto-promoted ${symbol} ${version} (P75: ${weightedP75MAE.toFixed(2)} < ${prodP75.toFixed(2)}, 1hr MAPE=${maxMAPE_firstHour.toFixed(1)}%, dir=${directionalAccuracy_firstHour.toFixed(1)}%)`);
+      } else if (!passesHardFloor) {
+        logger.info(`Shadow ${symbol} ${version} NOT promoted — hard floor failed (1hr MAPE=${maxMAPE_firstHour.toFixed(1)}% max=${MAX_MAPE_FIRST_HOUR}%, dir=${directionalAccuracy_firstHour.toFixed(1)}% min=${MIN_DIR_FIRST_HOUR}%)`);
       } else {
-        logger.info(`Shadow ${symbol} ${version} not promoted (MAE not better than production ${currentProd})`);
+        logger.info(`Shadow ${symbol} ${version} NOT promoted (P75: ${weightedP75MAE.toFixed(2)} >= ${prodP75.toFixed(2)})`);
       }
     }
 
     // Mark stock as ready
     await firebase.updateStock(symbol, { status: "ready" });
-    logger.info(`✓ ${symbol}: trained ${version} (${result.modelType}, MAE=${result.metrics.mae.toFixed(2)})`);
+    logger.info(`✓ ${symbol}: trained ${version} (${result.modelType}, P75=${weightedP75MAE.toFixed(2)}, avgMAE=${avgMAE.toFixed(2)})`);
   }
 
   private async handleFailure(firebase: FirebaseClient, symbol: string, isFirstTraining: boolean, err: unknown): Promise<void> {

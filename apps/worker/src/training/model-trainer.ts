@@ -1,7 +1,7 @@
 import { OHLCV } from "../types/market-data/ohlcv.ts";
 import { FeatureVector, PreviousDayContext } from "../types/features/feature-vector.ts";
 import FeatureEngineer from "../features/feature-engineer.ts";
-import { TrainableModel, TrainingResult, ModelType } from "../training/models/trainable-model.ts";
+import { TrainableModel, SingleTrainResult, ModelType } from "../training/models/trainable-model.ts";
 import { LinearRegressionModel } from "../training/models/linear-regression-model.ts";
 import { ModelMetrics } from "../types/models/model-metadata.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
@@ -67,7 +67,7 @@ export default class ModelTrainer {
     toDate: string,
     windowSize: number,
     validationRatio: number = 0.2,
-  ): Promise<TrainingResult | null> {
+  ): Promise<SingleTrainResult | null> {
     const startTime = Date.now();
 
     // Step 1: Fetch historical data

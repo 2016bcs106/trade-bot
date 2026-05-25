@@ -1,4 +1,4 @@
-import { ModelMetrics, TrainingInfo } from "../../types/models/model-metadata.ts";
+import { ModelMetrics, TrainingInfo, PromotionMetrics } from "../../types/models/model-metadata.ts";
 
 /**
  * Interface for all trainable ML models.
@@ -27,12 +27,25 @@ export interface TrainableModel {
 export type ModelType = "linear-regression";
 
 /**
- * Result of a successful model training.
+ * Result of a single-horizon model training (used internally by ModelTrainer.train()).
+ * Does NOT contain promotion metrics — those are computed across all horizons.
+ */
+export interface SingleTrainResult {
+  modelType: ModelType;
+  symbol: string;
+  serializedModel: string;
+  training: TrainingInfo;
+  metrics: ModelMetrics;
+}
+
+/**
+ * Final assembled training result for version management (saveModel).
+ * Contains promotionMetrics computed across all horizon models.
  */
 export interface TrainingResult {
   modelType: ModelType;
   symbol: string;
   serializedModel: string;
   training: TrainingInfo;
-  metrics: ModelMetrics;
+  promotionMetrics: PromotionMetrics;
 }

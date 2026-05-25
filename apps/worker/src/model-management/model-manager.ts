@@ -27,7 +27,7 @@ export default class ModelManager {
    * Returns the version string (e.g., "v1", "v2").
    */
   saveModel(result: TrainingResult): string {
-    const { symbol, serializedModel, training, metrics, modelType } = result;
+    const { symbol, serializedModel, training, promotionMetrics, modelType } = result;
     const version = this.getNextVersion(symbol);
 
     const versionDir = join(this.modelsDir, symbol, version);
@@ -45,7 +45,7 @@ export default class ModelManager {
       modelType,
       state: "shadow", // New models start as shadow
       training,
-      metrics,
+      promotionMetrics,
       createdAt: nowFormatted(),
       promotedAt: null,
       retiredAt: null,
