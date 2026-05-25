@@ -2,6 +2,7 @@ import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
+import { OptimalTradeTimeRequestHandler } from "./optimal-trade-time-request-handler.ts";
 
 const logger = createLogger("handler:train");
 
@@ -199,6 +200,16 @@ export class TrainingRequestHandler implements RequestHandler {
     // Mark stock as ready
     await firebase.updateStock(symbol, { status: "ready" });
     logger.info(`✓ ${symbol}: trained ${version} (${result.modelType}, P75=${weightedP75MAE.toFixed(2)}, avgMAE=${avgMAE.toFixed(2)})`);
+
+    // Chain: re-compute optimal trade window with the new model
+    logger.info(`Chaining optimal trade time computation for ${symbol}...`);
+    const optimalHandler = new OptimalTradeTimeRequestHandler();
+    await optimalHandler.handle({
+      type: "optimal_trade_time",
+      payload: { symbol, days: 30 },
+      status: "processing",
+      createdAt: request.createdAt,
+    }, ctx);
   }
 
   private async handleFailure(firebase: FirebaseClient, symbol: string, isFirstTraining: boolean, err: unknown): Promise<void> {
