@@ -138,7 +138,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Direction badge + last updated */}
+      {/* Direction badge + confidence + last updated */}
       {direction && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.25rem 0', gap: '0.2rem' }}>
           <span style={{
@@ -149,6 +149,28 @@ export default function Home() {
           }}>
             {direction === 'Bullish' ? '▲' : '▼'} {direction} • H: ₹{prediction.predictedHigh.toFixed(1)} • L: ₹{prediction.predictedLow.toFixed(1)} • C: ₹{prediction.predictedClose.toFixed(1)}
           </span>
+          {prediction.confidence != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
+              <div style={{
+                width: '60px', height: '4px', borderRadius: '2px',
+                background: 'var(--pm-border)',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${Math.round(prediction.confidence * 100)}%`,
+                  height: '100%',
+                  borderRadius: '2px',
+                  background: prediction.confidence >= 0.7 ? '#22c55e' : prediction.confidence >= 0.4 ? '#f59e0b' : '#ef4444',
+                }} />
+              </div>
+              <span style={{
+                fontSize: '0.6rem', fontWeight: '600',
+                color: prediction.confidence >= 0.7 ? '#22c55e' : prediction.confidence >= 0.4 ? '#f59e0b' : '#ef4444',
+              }}>
+                {Math.round(prediction.confidence * 100)}% confidence
+              </span>
+            </div>
+          )}
           {prediction.updatedAt && (
             <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-secondary)' }}>
               Updated {moment(prediction.updatedAt, 'YYYY-MM-DD HH:mm:ss').fromNow()}
