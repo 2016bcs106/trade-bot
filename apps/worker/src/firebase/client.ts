@@ -8,6 +8,7 @@ import { SignalData } from "../types/market-data/signal-data.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { Prediction, EvaluationResult } from "../types/predictions/index.ts";
+import { ShortPrediction } from "../types/predictions/short-prediction.ts";
 import { ModelMetadata } from "../types/models/index.ts";
 import { AuditEvent } from "../types/audit/index.ts";
 
@@ -153,6 +154,26 @@ export default class FirebaseClient {
 
   async setEvaluation(symbol: string, date: string, evaluation: EvaluationResult): Promise<void> {
     await this._setValue(`predictions/${symbol}/${date}/evaluation`, evaluation);
+  }
+
+  // ─── Short Predictions (5-min ahead) ───────────────────────────────
+
+  async setShortPrediction(symbol: string, date: string, time: string, prediction: ShortPrediction): Promise<void> {
+    await this._setValue(`short_predictions/${symbol}/${date}/${time}`, prediction);
+  }
+
+  async getShortPrediction(symbol: string, date: string, time: string): Promise<ShortPrediction | null> {
+    const data = await this._getValue(`short_predictions/${symbol}/${date}/${time}`);
+    return data as ShortPrediction | null;
+  }
+
+  async getShortPredictions(symbol: string, date: string): Promise<Record<string, ShortPrediction>> {
+    const data = await this._getValue(`short_predictions/${symbol}/${date}`);
+    return (data as Record<string, ShortPrediction>) || {};
+  }
+
+  async removeShortPredictions(symbol: string): Promise<void> {
+    await this._remove(`short_predictions/${symbol}`);
   }
 
   // ─── Models ────────────────────────────────────────────────────────

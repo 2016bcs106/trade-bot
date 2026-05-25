@@ -1,8 +1,11 @@
 import { now } from "../utils/time.ts";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
 import { OptimalTradeTimeRequestHandler } from "./optimal-trade-time-request-handler.ts";
+import ShortHorizonTrainer from "../training/short-horizon-trainer.ts";
 
 const logger = createLogger("handler:train");
 
@@ -195,6 +198,28 @@ export class TrainingRequestHandler implements RequestHandler {
       } else {
         logger.info(`Shadow ${symbol} ${version} NOT promoted (P75: ${weightedP75MAE.toFixed(2)} >= ${prodP75.toFixed(2)})`);
       }
+    }
+
+    // ─── Short-Horizon (5-min ahead) Model Training ───────────────────
+    try {
+      logger.info(`Training short-horizon 5-min model for ${symbol}...`);
+      const shortTrainer = new ShortHorizonTrainer();
+      const shortResult = shortTrainer.train(symbol, allCandles);
+
+      if (shortResult) {
+        // Save to the same version directory
+        const versionDir = join(process.cwd(), "models", symbol, version);
+        if (!existsSync(versionDir)) {
+          mkdirSync(versionDir, { recursive: true });
+        }
+        writeFileSync(join(versionDir, "short-horizon-5min.json"), shortResult.serializedModel, "utf-8");
+        logger.info(`✓ ${symbol}: short-horizon model saved (Dir=${shortResult.metrics.directionalAccuracy.toFixed(1)}%, MAE=${(shortResult.metrics.mae * 100).toFixed(4)}%, Lambda=${shortResult.lambda}, samples=${shortResult.metrics.sampleCount})`);
+      } else {
+        logger.warn(`${symbol}: short-horizon training skipped (insufficient data)`);
+      }
+    } catch (shortErr) {
+      const msg = shortErr instanceof Error ? shortErr.message : String(shortErr);
+      logger.error(`${symbol}: short-horizon training failed (non-fatal): ${msg}`);
     }
 
     // Mark stock as ready
