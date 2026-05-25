@@ -2,7 +2,6 @@ import { now } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient, { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
-import { PredictionRequestHandler } from "./prediction-request-handler.ts";
 
 const logger = createLogger("handler:train");
 
@@ -19,13 +18,11 @@ const logger = createLogger("handler:train");
  *
  * Expected payload:
  * - symbol: string (stock symbol)
- * - lookbackDays: number (default 1825 = 5 years)
  */
 export class TrainingRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
-    const { symbol, lookbackDays = 1825 } = request.payload as {
+    const { symbol } = request.payload as {
       symbol: string;
-      lookbackDays?: number;
     };
 
     if (!symbol) {
@@ -50,9 +47,9 @@ export class TrainingRequestHandler implements RequestHandler {
     await firebase.updateStock(symbol, { status: "pending_training" });
 
     const toDate = now().format("YYYY-MM-DD");
-    const fromDate = now().subtract(lookbackDays, "days").format("YYYY-MM-DD");
+    const fromDate = "2015-01-01";
 
-    logger.info(`Training ${symbol}: ${fromDate} → ${toDate} (${lookbackDays}d lookback)`);
+    logger.info(`Training ${symbol}: ${fromDate} → ${toDate}`);
 
     let result;
     try {

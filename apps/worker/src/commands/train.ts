@@ -26,7 +26,7 @@ export async function handleTrain(): Promise<void> {
   for (const sym of enabledSymbols) {
     await firebase.pushRequest({
       type: "train",
-      payload: { symbol: sym, lookbackDays: 1825 },
+      payload: { symbol: sym },
     });
     logger.info(`✓ Queued training for ${sym}`);
   }
