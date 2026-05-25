@@ -56,6 +56,9 @@ export interface TrainingInfo {
 
   /** Training duration in milliseconds */
   durationMs: number;
+
+  /** Window size (number of 1-min candles from market open) used for feature computation */
+  windowSize: number;
 }
 
 /** Model performance metrics from validation */

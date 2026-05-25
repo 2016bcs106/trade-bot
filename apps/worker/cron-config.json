@@ -21,7 +21,7 @@
   },
   {
     "name": "predict",
-    "schedule": "30 5 * * 1-5",
+    "schedule": "*/5 3-10 * * 1-5",
     "command": "src/cli/ml-cli.ts predict"
   },
   {

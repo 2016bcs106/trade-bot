@@ -4,38 +4,35 @@ import { FeatureVector, PreviousDayContext } from "../types/features/feature-vec
 /**
  * Feature engineering pipeline for intraday prediction.
  *
- * Generates a complete feature vector from data up to 11:00 AM (first 105 minutes).
+ * Generates a complete feature vector from available intraday data.
  * All features are designed to be computable BEFORE market close (no future leakage).
  *
- * Market hours: 9:15 AM - 3:30 PM IST
- * Feature window: 9:15 AM - 11:00 AM (first 105 candles)
+ * Market hours: 9:15 AM - 3:30 PM IST (375 minutes total)
+ * Window size is always provided by the caller (horizon-specific models).
  */
 export default class FeatureEngineer {
-  /** Number of 1-min candles to use (9:15 AM to 11:00 AM = 105 minutes) */
-  private readonly WINDOW_SIZE = 105;
-
   /**
    * Compute the full feature vector from a day's 1-min OHLCV candles.
    *
    * @param symbol Stock symbol
    * @param date Date string (YYYY-MM-DD)
-   * @param candles All 1-min OHLCV candles for the day (will be truncated to first 105)
+   * @param candles All 1-min OHLCV candles for the day
    * @param prevDay Previous day context for computing opening gap and relative volume
-   * @returns FeatureVector or null if insufficient data
+   * @param windowSize Number of candles required from the start of the day
+   * @returns FeatureVector or null if candles.length < windowSize
    */
   compute(
     symbol: string,
     date: string,
     candles: OHLCV[],
     prevDay: PreviousDayContext | null,
+    windowSize: number,
   ): FeatureVector | null {
-    // Use only candles up to 11:00 AM (first 105 minutes from 9:15)
-    const window = candles.slice(0, this.WINDOW_SIZE);
-
-    if (window.length < 60) {
-      // Need at least 60 candles (1 hour) for meaningful features
+    if (candles.length < windowSize) {
       return null;
     }
+
+    const window = candles.slice(0, windowSize);
 
     const closes = window.map((c) => c.close);
     const opens = window.map((c) => c.open);

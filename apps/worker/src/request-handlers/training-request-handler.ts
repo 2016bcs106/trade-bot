@@ -51,22 +51,63 @@ export class TrainingRequestHandler implements RequestHandler {
 
     logger.info(`Training ${symbol}: ${fromDate} → ${toDate}`);
 
-    let result;
+    // Fetch all candles once, then train horizon-specific models
+    let allCandles;
     try {
-      result = await trainer.train(symbol, pmlId, fromDate, toDate);
+      allCandles = await ctx.paytm.fetchOHLCV(pmlId, fromDate, toDate, "MINUTE");
     } catch (err) {
       await this.handleFailure(firebase, symbol, isFirstTraining, err);
       throw err;
     }
 
-    if (!result) {
-      const error = new Error("Training returned no result — insufficient data or model failure");
+    if (allCandles.length === 0) {
+      const error = new Error("No candle data returned for training");
       await this.handleFailure(firebase, symbol, isFirstTraining, error);
       throw error;
     }
 
-    // Save model to disk and get version
+    logger.info(`Fetched ${allCandles.length} candles for ${symbol}`);
+
+    // Train all horizons: 5, 10, 15, ..., 370, 375 (full day)
+    const horizons = Array.from({ length: 75 }, (_, i) => (i + 1) * 5); // [5, 10, ..., 375]
+    const horizonResults = trainer.trainHorizons(symbol, allCandles, horizons);
+
+    if (horizonResults.length === 0) {
+      const error = new Error("Training returned no results — insufficient data for all horizons");
+      await this.handleFailure(firebase, symbol, isFirstTraining, error);
+      throw error;
+    }
+
+    // Use the full-day (375) model as the primary for version management/metrics
+    // Fall back to the largest available horizon if 375 didn't train
+    const primaryResult = horizonResults.find((r) => r.horizon === 375) || horizonResults[horizonResults.length - 1];
+
+    // Build a TrainingResult for saveModel (version management)
+    const result = {
+      modelType: "linear-regression" as const,
+      symbol,
+      serializedModel: primaryResult.serializedModel,
+      training: {
+        dataStartDate: fromDate,
+        dataEndDate: toDate,
+        sampleCount: 0, // filled from metrics
+        featureCount: trainer.getFeatureCount(),
+        features: trainer.getFeatureNames(),
+        hyperparameters: {},
+        durationMs: 0,
+        windowSize: primaryResult.windowSize,
+      },
+      metrics: primaryResult.metrics,
+    };
+
+    // Save primary model to disk and get version
     const version = modelManager.saveModel(result);
+
+    // Save all horizon-specific model files
+    for (const hr of horizonResults) {
+      modelManager.saveHorizonModel(symbol, version, hr.horizon, hr.serializedModel);
+    }
+    logger.info(`Trained ${horizonResults.length} horizon models for ${symbol} ${version}`);
 
     // Save metadata to Firebase
     const metadata = modelManager.loadMetadata(symbol, version);

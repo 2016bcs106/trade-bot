@@ -108,6 +108,7 @@ export default function Dashboard() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [genFrom, setGenFrom] = useState('')
   const [genTo, setGenTo] = useState('')
+  const [genPredictAt, setGenPredictAt] = useState('')
   const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
@@ -199,7 +200,7 @@ export default function Dashboard() {
                   {row.status === 'predicted' ? (
                     <>
                       <div style={styles.subtext}>{row.modelVersion} • {row.modelType}</div>
-                      {row.generatedAt && <div style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>{timeAgo(row.generatedAt)}</div>}
+                      {(row.updatedAt || row.generatedAt) && <div style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>{timeAgo(row.updatedAt || row.generatedAt)}{row.windowSize ? ` • ${row.windowSize}min` : ''}</div>}
                     </>
                   ) : (
                     <span style={{ fontSize: '0.65rem', fontWeight: '600', color: '#f59e0b', background: 'rgba(245,158,11,0.12)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
@@ -313,6 +314,22 @@ export default function Dashboard() {
                     style={{ flex: 1, minWidth: '110px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
                   />
                 </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.4rem' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--pm-text-muted)', whiteSpace: 'nowrap' }}>Predict at</span>
+                  <input
+                    type="time"
+                    value={genPredictAt}
+                    min="09:20"
+                    max="15:30"
+                    step="300"
+                    onChange={(e) => setGenPredictAt(e.target.value)}
+                    placeholder="HH:mm"
+                    style={{ flex: 1, maxWidth: '100px', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--pm-border)', background: 'var(--pm-bg)', color: 'var(--pm-text)', fontSize: '0.7rem' }}
+                  />
+                  <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)' }}>
+                    {genPredictAt ? `${Math.floor((parseInt(genPredictAt.split(':')[0]) * 60 + parseInt(genPredictAt.split(':')[1]) - 555) / 5) * 5}min window` : 'optional — uses full day if empty'}
+                  </span>
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <button
                     disabled={!genFrom || !genTo || generating}
@@ -321,19 +338,23 @@ export default function Dashboard() {
                       try {
                         const queueRef = ref(db, 'request_queue')
                         const newRef = push(queueRef)
+                        const payload = {
+                          symbol: selectedSymbol,
+                          fromDate: genFrom,
+                          toDate: genTo,
+                        }
+                        if (genPredictAt) payload.predictAt = genPredictAt
                         await set(newRef, {
                           type: 'predict',
-                          payload: {
-                            symbol: selectedSymbol,
-                            fromDate: genFrom,
-                            toDate: genTo,
-                          },
+                          payload,
                           status: 'pending',
                           createdAt: new Date().toISOString(),
                         })
-                        alert(`Queued predictions for ${selectedSymbol}: ${genFrom} → ${genTo}`)
+                        const timeStr = genPredictAt ? ` @${genPredictAt}` : ''
+                        alert(`Queued predictions for ${selectedSymbol}: ${genFrom} → ${genTo}${timeStr}`)
                         setGenFrom('')
                         setGenTo('')
+                        setGenPredictAt('')
                       } catch (e) {
                         console.error(e)
                         alert('Failed to queue predictions')

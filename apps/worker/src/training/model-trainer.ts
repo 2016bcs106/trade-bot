@@ -39,6 +39,16 @@ export default class ModelTrainer {
     this.client = client;
   }
 
+  /** Get the number of features used by the feature engineer. */
+  getFeatureCount(): number {
+    return this.featureEngineer.getFeatureNames().length;
+  }
+
+  /** Get the feature names used by the feature engineer. */
+  getFeatureNames(): string[] {
+    return this.featureEngineer.getFeatureNames();
+  }
+
   /**
    * Train a model for a given symbol using historical data from the provider.
    *
@@ -55,6 +65,7 @@ export default class ModelTrainer {
     securityId: string,
     fromDate: string,
     toDate: string,
+    windowSize: number,
     validationRatio: number = 0.2,
   ): Promise<TrainingResult | null> {
     const startTime = Date.now();
@@ -71,7 +82,7 @@ export default class ModelTrainer {
     logger.info(`Fetched ${allCandles.length} candles for ${symbol}`);
 
     // Step 2: Group candles by day
-    const samples = this.buildSamples(symbol, allCandles);
+    const samples = this.buildSamples(symbol, allCandles, windowSize);
 
     if (samples.length < 30) {
       logger.error(`Insufficient data for ${symbol}: ${samples.length} days (need ≥30)`);
@@ -118,6 +129,7 @@ export default class ModelTrainer {
         features: this.featureEngineer.getFeatureNames(),
         hyperparameters: model.getHyperparameters(),
         durationMs,
+        windowSize,
       },
       metrics,
     };
@@ -129,7 +141,7 @@ export default class ModelTrainer {
    * Groups candles by day, computes features from first 45 min,
    * uses full day's high/low as targets.
    */
-  private buildSamples(symbol: string, allCandles: OHLCV[]): TrainingSample[] {
+  private buildSamples(symbol: string, allCandles: OHLCV[], windowSize: number): TrainingSample[] {
     const samples: TrainingSample[] = [];
 
     // Group candles by date
@@ -148,13 +160,13 @@ export default class ModelTrainer {
     for (const date of dates) {
       const candles = byDate.get(date)!;
 
-      if (candles.length < 60) {
+      if (candles.length < windowSize) {
         prevDayContext = this.buildPrevDayContext(candles, prevDayContext);
         continue;
       }
 
-      // Compute features from data up to 11:00 AM (first 105 min)
-      const features = this.featureEngineer.compute(symbol, date, candles, prevDayContext);
+      // Compute features from the specified window
+      const features = this.featureEngineer.compute(symbol, date, candles, prevDayContext, windowSize);
       if (!features) {
         prevDayContext = this.buildPrevDayContext(candles, prevDayContext);
         continue;
@@ -267,6 +279,52 @@ export default class ModelTrainer {
       high3: prevContext?.high2 ?? null,
       low3: prevContext?.low2 ?? null,
     };
+  }
+
+  /**
+   * Train horizon-specific models (every 5 min from 5 to 370) using pre-fetched candles.
+   * Returns an array of { horizon, serializedModel, metrics } for each successful horizon.
+   * Callers should save these as `model-{horizon}.json` in the version directory.
+   */
+  trainHorizons(
+    symbol: string,
+    allCandles: OHLCV[],
+    horizons: number[],
+  ): Array<{ horizon: number; serializedModel: string; metrics: ModelMetrics; windowSize: number }> {
+    const results: Array<{ horizon: number; serializedModel: string; metrics: ModelMetrics; windowSize: number }> = [];
+
+    for (const horizon of horizons) {
+      const samples = this.buildSamples(symbol, allCandles, horizon);
+      if (samples.length < 30) {
+        logger.warn(`Horizon ${horizon}: only ${samples.length} samples (need ≥30), skipping`);
+        continue;
+      }
+
+      const splitIdx = Math.floor(samples.length * 0.8);
+      const trainSet = samples.slice(0, splitIdx);
+      const valSet = samples.slice(splitIdx);
+
+      const X_train = trainSet.map((s) => s.featureArray);
+      const yHigh_train = trainSet.map((s) => s.targetHigh);
+      const yLow_train = trainSet.map((s) => s.targetLow);
+      const yClose_train = trainSet.map((s) => s.targetClose);
+
+      const model = this.createModel("linear-regression");
+      model.fit(X_train, yHigh_train, yLow_train, yClose_train);
+
+      const metrics = this.evaluateModel(model, valSet);
+
+      results.push({
+        horizon,
+        serializedModel: model.serialize(),
+        metrics,
+        windowSize: horizon,
+      });
+
+      logger.info(`  Horizon ${horizon}min: MAE=${metrics.mae.toFixed(2)}, Dir=${metrics.directionalAccuracy.toFixed(1)}%`);
+    }
+
+    return results;
   }
 
   private createModel(_modelType: ModelType): TrainableModel {

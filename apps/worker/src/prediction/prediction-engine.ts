@@ -44,13 +44,14 @@ export default class PredictionEngine {
     prevDay: PreviousDayContext | null,
     modelVersion: string,
     modelType: string,
+    windowSize: number,
   ): Prediction | null {
     // Step 1: Compute features
-    const features = this.featureEngineer.compute(symbol, date, candles, prevDay);
+    const features = this.featureEngineer.compute(symbol, date, candles, prevDay, windowSize);
     if (!features) return null;
 
-    // Step 2: Load model
-    const model = this.loadModel(symbol, modelVersion, modelType);
+    // Step 2: Load model (horizon-specific if available)
+    const model = this.loadModel(symbol, modelVersion, modelType, windowSize);
     if (!model) return null;
 
     // Step 3: Predict
@@ -60,9 +61,10 @@ export default class PredictionEngine {
     const predictedClose = model.predictClose(featureArray);
 
     // Step 4: Build prediction object
-    const { price: referencePrice, time: referencePriceTime } = this.getReferencePrice(candles);
+    const { price: referencePrice, time: referencePriceTime } = this.getReferencePrice(candles, windowSize);
     const direction: "Bullish" | "Bearish" = predictedClose >= referencePrice ? "Bullish" : "Bearish";
 
+    const timestamp = nowFormatted();
     return {
       symbol,
       date,
@@ -72,7 +74,9 @@ export default class PredictionEngine {
       direction,
       modelVersion,
       modelType,
-      generatedAt: nowFormatted(),
+      generatedAt: timestamp,
+      updatedAt: timestamp,
+      windowSize,
       confidence: this.computeConfidence(predictedHigh, predictedLow, candles),
       referencePrice,
       referencePriceTime,
@@ -99,13 +103,22 @@ export default class PredictionEngine {
 
   /**
    * Load a serialized model from disk.
+   * For horizon-specific models, tries `model-{windowSize}.json` first, falls back to `model.json`.
    */
   loadModel(
     symbol: string,
     version: string,
     modelType: string,
+    windowSize?: number,
   ): TrainableModel | null {
-    const modelPath = join(this.modelsDir, symbol, version, "model.json");
+    // Try horizon-specific model file first
+    let modelPath: string;
+    if (windowSize) {
+      const horizonPath = join(this.modelsDir, symbol, version, `model-${windowSize}.json`);
+      modelPath = existsSync(horizonPath) ? horizonPath : join(this.modelsDir, symbol, version, "model.json");
+    } else {
+      modelPath = join(this.modelsDir, symbol, version, "model.json");
+    }
 
     if (!existsSync(modelPath)) {
       return null;
@@ -122,22 +135,16 @@ export default class PredictionEngine {
   }
 
   /**
-   * Get the reference price — prefers 11:00 AM IST candle, falls back to last candle in window.
+   * Get the reference price — always uses the last candle in the window.
+   * This is the most recent price available at prediction time, appropriate for all horizons.
    * Timestamps are already in IST format (YYYY-MM-DD HH:mm).
    */
-  private getReferencePrice(candles: OHLCV[]): { price: number; time: string } {
-    // Try to find 11:00 AM candle
-    for (const candle of candles) {
-      const time = candle.timestamp.split(" ")[1]; // "HH:mm"
-      if (time === "11:00") {
-        return { price: candle.close, time: "11:00" };
-      }
-    }
-
-    // Fall back to last candle in window (feature window end)
-    const last = candles[candles.length - 1];
-    const time = last.timestamp.split(" ")[1] || "09:15";
-    return { price: last.close, time };
+  private getReferencePrice(candles: OHLCV[], windowSize: number): { price: number; time: string } {
+    // Use the last candle within the window (not beyond it)
+    const windowEnd = Math.min(windowSize, candles.length) - 1;
+    const refCandle = candles[windowEnd];
+    const time = refCandle.timestamp.split(" ")[1] || "09:15";
+    return { price: refCandle.close, time };
   }
 
   /**

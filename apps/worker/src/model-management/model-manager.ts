@@ -133,6 +133,26 @@ export default class ModelManager {
   }
 
   /**
+   * Save a horizon-specific model file within a version directory.
+   * Stored as `models/{symbol}/{version}/model-{horizon}.json`
+   */
+  saveHorizonModel(symbol: string, version: string, horizon: number, serializedModel: string): void {
+    const versionDir = join(this.modelsDir, symbol, version);
+    if (!existsSync(versionDir)) {
+      mkdirSync(versionDir, { recursive: true });
+    }
+    writeFileSync(join(versionDir, `model-${horizon}.json`), serializedModel, "utf-8");
+  }
+
+  /**
+   * Check if a horizon-specific model exists for a given symbol/version.
+   */
+  hasHorizonModel(symbol: string, version: string, horizon: number): boolean {
+    const modelPath = join(this.modelsDir, symbol, version, `model-${horizon}.json`);
+    return existsSync(modelPath);
+  }
+
+  /**
    * Load model metadata for a given symbol and version.
    */
   loadMetadata(symbol: string, version: string): ModelMetadata | null {

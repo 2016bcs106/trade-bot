@@ -138,9 +138,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* Direction badge */}
+      {/* Direction badge + last updated */}
       {direction && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.25rem 0' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.25rem 0', gap: '0.2rem' }}>
           <span style={{
             fontSize: '0.7rem', fontWeight: '700',
             color: direction === 'Bullish' ? '#22c55e' : '#ef4444',
@@ -149,6 +149,12 @@ export default function Home() {
           }}>
             {direction === 'Bullish' ? '▲' : '▼'} {direction} • H: ₹{prediction.predictedHigh.toFixed(1)} • L: ₹{prediction.predictedLow.toFixed(1)} • C: ₹{prediction.predictedClose.toFixed(1)}
           </span>
+          {prediction.updatedAt && (
+            <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-secondary)' }}>
+              Updated {moment(prediction.updatedAt, 'YYYY-MM-DD HH:mm:ss').fromNow()}
+              {prediction.windowSize ? ` • ${prediction.windowSize}min window` : ''}
+            </span>
+          )}
         </div>
       )}
 
