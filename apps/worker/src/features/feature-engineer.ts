@@ -79,13 +79,17 @@ export default class FeatureEngineer {
       volumeSpike: this.volumeSpike(volumes),
       volumeTrend: this.linearSlope(volumes),
 
-      // Historical context features (last 3 days high and close)
+      // Historical context features (last 3 trading days high, low and close)
+      // Fallback chain: prevXyz3 → prevXyz2 → prevXyz1 → firstOpen
       prevClose1: prevDay?.close ?? firstOpen,
       prevHigh1: prevDay?.high ?? firstOpen,
+      prevLow1: prevDay?.low ?? firstOpen,
       prevClose2: prevDay?.close2 ?? prevDay?.close ?? firstOpen,
       prevHigh2: prevDay?.high2 ?? prevDay?.high ?? firstOpen,
-      prevClose3: prevDay?.close3 ?? prevDay?.close2 ?? firstOpen,
-      prevHigh3: prevDay?.high3 ?? prevDay?.high2 ?? firstOpen,
+      prevLow2: prevDay?.low2 ?? prevDay?.low ?? firstOpen,
+      prevClose3: prevDay?.close3 ?? prevDay?.close2 ?? prevDay?.close ?? firstOpen,
+      prevHigh3: prevDay?.high3 ?? prevDay?.high2 ?? prevDay?.high ?? firstOpen,
+      prevLow3: prevDay?.low3 ?? prevDay?.low2 ?? prevDay?.low ?? firstOpen,
 
       // Time features
       weekday: new Date(date).getDay() === 0 ? 6 : new Date(date).getDay() - 1, // 0=Mon, 4=Fri
@@ -121,10 +125,13 @@ export default class FeatureEngineer {
       features.volumeTrend,
       features.prevClose1,
       features.prevHigh1,
+      features.prevLow1,
       features.prevClose2,
       features.prevHigh2,
+      features.prevLow2,
       features.prevClose3,
       features.prevHigh3,
+      features.prevLow3,
       features.weekday,
       features.month,
       features.isExpiryDay ? 1 : 0,
@@ -157,10 +164,13 @@ export default class FeatureEngineer {
       "volumeTrend",
       "prevClose1",
       "prevHigh1",
+      "prevLow1",
       "prevClose2",
       "prevHigh2",
+      "prevLow2",
       "prevClose3",
       "prevHigh3",
+      "prevLow3",
       "weekday",
       "month",
       "isExpiryDay",

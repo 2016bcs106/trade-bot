@@ -149,7 +149,7 @@ export default function Home() {
             background: direction === 'Bullish' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
             padding: '0.25rem 0.75rem', borderRadius: '12px',
           }}>
-            {direction === 'Bullish' ? '▲' : '▼'} {direction} • H: ₹{prediction.predictedHigh.toFixed(1)} • L: ₹{prediction.predictedLow.toFixed(1)}
+            {direction === 'Bullish' ? '▲' : '▼'} {direction} • H: ₹{prediction.predictedHigh.toFixed(1)} • L: ₹{prediction.predictedLow.toFixed(1)} • C: ₹{prediction.predictedClose.toFixed(1)}
           </span>
         </div>
       )}
@@ -161,6 +161,7 @@ export default function Home() {
         signals={signals}
         predictedHigh={prediction?.predictedHigh || null}
         predictedLow={prediction?.predictedLow || null}
+        predictedClose={prediction?.predictedClose || null}
       />
 
       <TradeList signals={signals} />

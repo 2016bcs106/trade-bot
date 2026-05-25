@@ -80,17 +80,26 @@ export interface FeatureVector {
   /** Previous day (D-1) daily high */
   prevHigh1: number;
 
+  /** Previous day (D-1) daily low */
+  prevLow1: number;
+
   /** D-2 closing price */
   prevClose2: number;
 
   /** D-2 daily high */
   prevHigh2: number;
 
+  /** D-2 daily low */
+  prevLow2: number;
+
   /** D-3 closing price */
   prevClose3: number;
 
   /** D-3 daily high */
   prevHigh3: number;
+
+  /** D-3 daily low */
+  prevLow3: number;
 
   // ─── Time Features ─────────────────────────────────────────────────
 
@@ -122,6 +131,9 @@ export interface PreviousDayContext {
   /** Previous day high price */
   high: number;
 
+  /** Previous day low price */
+  low: number;
+
   /** Average minute volume from previous day (for relative volume comparison) */
   averageMinVolume: number;
 
@@ -131,9 +143,15 @@ export interface PreviousDayContext {
   /** D-2 high price (null if unavailable) */
   high2: number | null;
 
+  /** D-2 low price (null if unavailable) */
+  low2: number | null;
+
   /** D-3 close price (null if unavailable) */
   close3: number | null;
 
   /** D-3 high price (null if unavailable) */
   high3: number | null;
+
+  /** D-3 low price (null if unavailable) */
+  low3: number | null;
 }

@@ -33,11 +33,11 @@ Current system predicts daily **High** and **Low** values using the first 45 min
 - [x] In `evaluation-engine.ts`, compute close error: `|predictedClose - actualClose|`
 - [x] Add `closeError` to `EvaluationResult`
 
-### Step 1.4 — Frontend
+### Step 1.4 — Frontend ✅
 
-- [ ] Show predicted close in the direction badge (Home page)
-- [ ] Add a third horizontal dotted line (blue) for predicted close on the chart
-- [ ] Update Dashboard/Audit pages if they show prediction details
+- [x] Show predicted close in the direction badge (Home page)
+- [x] Add a third horizontal dotted line (blue) for predicted close on the chart
+- [x] Update Dashboard/Audit pages if they show prediction details
 
 ### Commit: `44dece8` — "feat: add close price prediction (Phase 1)"
 

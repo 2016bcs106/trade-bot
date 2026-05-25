@@ -236,13 +236,6 @@ export default function Dashboard() {
               {/* Table for predicted stocks */}
               {row.status === 'predicted' && (
                 <div style={{ background: 'var(--pm-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--pm-border)' }}>
-                  {/* Close row - shown above table when available */}
-                  {row.actualClose != null && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
-                      <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}>Close</span>
-                      <span style={{ fontSize: '0.7rem', fontWeight: '700', color: row.actualClose >= (refPrice || 0) ? '#22c55e' : '#ef4444' }}>₹{row.actualClose.toFixed(2)}</span>
-                    </div>
-                  )}
                   {/* Column headers */}
                   <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.25rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
                     <span style={{ fontSize: '0.5rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}></span>
@@ -258,11 +251,18 @@ export default function Dashboard() {
                     {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((row.predictedHigh - row.actualHigh) / row.actualHigh) * 100).toFixed(1)}%</span>}
                   </div>
                   {/* Low row */}
-                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)' }}>
                     <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: '600' }}>Low</span>
                     <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.predictedLow?.toFixed(2)}</span>
                     {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.actualLow?.toFixed(2)}</span>}
                     {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((row.predictedLow - row.actualLow) / row.actualLow) * 100).toFixed(1)}%</span>}
+                  </div>
+                  {/* Close row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: '600' }}>Close</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.predictedClose?.toFixed(2)}</span>
+                    {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{row.actualClose?.toFixed(2)}</span>}
+                    {hasActual && row.actualClose && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((row.predictedClose - row.actualClose) / row.actualClose) * 100).toFixed(1)}%</span>}
                   </div>
                 </div>
               )}
@@ -406,15 +406,8 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Table: rows=High/Low/Return, cols=Predicted/Actual/Error */}
+                    {/* Table: rows=High/Low/Close, cols=Predicted/Actual/Error */}
                     <div style={{ background: 'var(--pm-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--pm-border)' }}>
-                      {/* Close row */}
-                      {pred.actualClose != null && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
-                          <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}>Close</span>
-                          <span style={{ fontSize: '0.7rem', fontWeight: '700', color: pred.actualClose >= (refP || 0) ? '#22c55e' : '#ef4444' }}>₹{pred.actualClose.toFixed(2)}</span>
-                        </div>
-                      )}
                       {/* Column headers */}
                       <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.3rem 0.5rem', borderBottom: '1px solid var(--pm-border)', background: 'rgba(255,255,255,0.03)' }}>
                         <span style={{ fontSize: '0.55rem', color: 'var(--pm-text-muted)', fontWeight: '600' }}></span>
@@ -430,11 +423,18 @@ export default function Dashboard() {
                         {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((pred.predictedHigh - pred.actualHigh) / pred.actualHigh) * 100).toFixed(1)}%</span>}
                       </div>
                       {/* Low row */}
-                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.35rem 0.5rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.35rem 0.5rem', borderBottom: '1px solid var(--pm-border)' }}>
                         <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: '600' }}>Low</span>
                         <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.predictedLow?.toFixed(2)}</span>
                         {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.actualLow?.toFixed(2)}</span>}
                         {hasActual && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((pred.predictedLow - pred.actualLow) / pred.actualLow) * 100).toFixed(1)}%</span>}
+                      </div>
+                      {/* Close row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: hasActual ? '1fr 1.2fr 1.2fr 1fr' : '1fr 1.2fr', padding: '0.35rem 0.5rem' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: '600' }}>Close</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.predictedClose?.toFixed(2)}</span>
+                        {hasActual && <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', textAlign: 'center' }}>₹{pred.actualClose?.toFixed(2)}</span>}
+                        {hasActual && pred.actualClose && <span style={{ fontSize: '0.6rem', color: 'var(--pm-text-muted)', textAlign: 'center' }}>{Math.abs(((pred.predictedClose - pred.actualClose) / pred.actualClose) * 100).toFixed(1)}%</span>}
                       </div>
                     </div>
                   </div>

@@ -120,7 +120,7 @@ function generateMarketLabels() {
   return labels
 }
 
-export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ticks = [], signals = [], predictedHigh = null, predictedLow = null }) {
+export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ticks = [], signals = [], predictedHigh = null, predictedLow = null, predictedClose = null }) {
   const [visible, setVisible] = useState({ close: true, fastSma: false, slowSma: false })
   const chartRef = useRef(null)
 
@@ -191,7 +191,7 @@ export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ti
   }
 
   // If no ticks but we have predictions, generate placeholder time labels (market hours)
-  const hasPrediction = predictedHigh !== null || predictedLow !== null
+  const hasPrediction = predictedHigh !== null || predictedLow !== null || predictedClose !== null
   const effectiveLabels = timeLabels.length > 0
     ? timeLabels
     : (hasPrediction ? generateMarketLabels() : [])
@@ -217,6 +217,20 @@ export default function PortfolioChart({ name = 'Select Stock', ticker = '?', ti
       label: 'Pred Low',
       data: effectiveLabels.map(() => predictedLow),
       borderColor: 'rgba(239, 68, 68, 0.6)',
+      borderWidth: 1.5,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+      spanGaps: true,
+      hidden: false,
+    })
+  }
+  if (predictedClose !== null && effectiveLabels.length > 0) {
+    predictionDatasets.push({
+      label: 'Pred Close',
+      data: effectiveLabels.map(() => predictedClose),
+      borderColor: 'rgba(59, 130, 246, 0.6)',
       borderWidth: 1.5,
       borderDash: [6, 4],
       pointRadius: 0,

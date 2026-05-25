@@ -252,17 +252,21 @@ export default class ModelTrainer {
   private buildPrevDayContext(candles: OHLCV[], prevContext: PreviousDayContext | null): PreviousDayContext {
     const close = candles.length > 0 ? candles[candles.length - 1].close : 0;
     const high = candles.length > 0 ? Math.max(...candles.map((c) => c.high)) : 0;
+    const low = candles.length > 0 ? Math.min(...candles.map((c) => c.low)) : 0;
     const first105 = candles.slice(0, 105);
     const averageMinVolume = first105.reduce((s, c) => s + c.volume, 0);
     return {
       close,
       high,
+      low,
       averageMinVolume,
       // Shift previous days down: D-1 becomes D-2, D-2 becomes D-3
       close2: prevContext?.close ?? null,
       high2: prevContext?.high ?? null,
+      low2: prevContext?.low ?? null,
       close3: prevContext?.close2 ?? null,
       high3: prevContext?.high2 ?? null,
+      low3: prevContext?.low2 ?? null,
     };
   }
 

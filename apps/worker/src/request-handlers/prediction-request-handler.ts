@@ -65,16 +65,44 @@ export class PredictionRequestHandler implements RequestHandler {
           continue;
         }
 
-        // Fetch previous day candles for context
-        const prevDate = parseDate(date).subtract(1, "day").format("YYYY-MM-DD");
-        const prevCandles = await client.fetchOHLCV(pmlId, prevDate, prevDate);
+        // Fetch previous 7 calendar days to get last 3 trading days for context
+        const prev7Start = parseDate(date).subtract(7, "day").format("YYYY-MM-DD");
+        const prevDateEnd = parseDate(date).subtract(1, "day").format("YYYY-MM-DD");
+        const prevCandles = await client.fetchOHLCV(pmlId, prev7Start, prevDateEnd);
 
-        const prevDay: PreviousDayContext | null = prevCandles.length > 0
+        // Group by date and take last 3 trading days
+        const byDate = new Map<string, typeof prevCandles>();
+        for (const c of prevCandles) {
+          const d = c.timestamp.split(" ")[0];
+          const existing = byDate.get(d) || [];
+          existing.push(c);
+          byDate.set(d, existing);
+        }
+        const tradingDays = [...byDate.keys()].sort().reverse(); // most recent first
+
+        const buildDayStats = (dayCandles: typeof prevCandles) => ({
+          close: dayCandles[dayCandles.length - 1].close,
+          high: Math.max(...dayCandles.map((c) => c.high)),
+          low: Math.min(...dayCandles.map((c) => c.low)),
+          avgVol: dayCandles.slice(0, 105).reduce((s, c) => s + c.volume, 0),
+        });
+
+        const d1 = tradingDays[0] ? buildDayStats(byDate.get(tradingDays[0])!) : null;
+        const d2 = tradingDays[1] ? buildDayStats(byDate.get(tradingDays[1])!) : null;
+        const d3 = tradingDays[2] ? buildDayStats(byDate.get(tradingDays[2])!) : null;
+
+        const prevDay: PreviousDayContext | null = d1
           ? {
-              close: prevCandles[prevCandles.length - 1].close,
-              high: Math.max(...prevCandles.map((c) => c.high)),
-              averageMinVolume: prevCandles.slice(0, 105).reduce((s, c) => s + c.volume, 0),
-              close2: null, high2: null, close3: null, high3: null,
+              close: d1.close,
+              high: d1.high,
+              low: d1.low,
+              averageMinVolume: d1.avgVol,
+              close2: d2?.close ?? null,
+              high2: d2?.high ?? null,
+              low2: d2?.low ?? null,
+              close3: d3?.close ?? null,
+              high3: d3?.high ?? null,
+              low3: d3?.low ?? null,
             }
           : null;
 
