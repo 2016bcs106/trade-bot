@@ -60,6 +60,7 @@ const styles = {
   title: { margin: 0, marginBottom: '0.5rem' },
   status: { marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--pm-text-muted)' },
   chartCard: {
+    position: 'relative',
     background: 'var(--pm-card-bg)',
     border: '1px solid var(--pm-border)',
     borderRadius: '8px',
@@ -99,14 +100,83 @@ const quantityChartOptions = {
   },
 }
 
+function CircularMinuteProgress() {
+  const [seconds, setSeconds] = useState(new Date().getSeconds())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds(new Date().getSeconds())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const size = 40
+  const strokeWidth = 4
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const progress = seconds / 60
+  const dashOffset = circumference * (1 - progress)
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '4px',
+      right: '4px',
+      zIndex: 10,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="rgba(0,0,0,0.4)"
+          stroke="rgba(255,255,255,0.15)"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#a855f7"
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span style={{
+        position: 'absolute',
+        fontSize: '11px',
+        fontWeight: 600,
+        color: '#e2e8f0',
+        userSelect: 'none',
+      }}>
+        {seconds}
+      </span>
+    </div>
+  )
+}
+
 export default function LiveTicks() {
   const [status, setStatus] = useState('connecting')
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [rowsByMinute, setRowsByMinute] = useState({})
+  const [secondsElapsed, setSecondsElapsed] = useState(new Date().getSeconds())
   const wsRef = useRef(null)
   const priceChartRef = useRef(null)
   const qtyChartRef = useRef(null)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsElapsed(new Date().getSeconds())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     const ws = new WebSocket(WS_URL)
@@ -196,28 +266,65 @@ export default function LiveTicks() {
     ],
   }), [labels, rows])
 
-  const qtyChartData = useMemo(() => ({
-    labels,
-    datasets: [
-      {
-        label: 'Buy Qty Sum',
-        data: rows.map((r) => r.buyQtySum),
-        borderColor: '#22c55e',
-      },
-      {
-        label: 'Sell Qty Sum',
-        data: rows.map((r) => r.sellQtySum),
-        borderColor: '#ef4444',
-      },
-      {
-        label: 'Buy/Sell Ratio',
-        data: rows.map((r) => r.buySellRatio),
-        borderColor: '#a855f7',
-        yAxisID: 'ratioAxis',
-        hidden: true,
-      },
-    ],
-  }), [labels, rows])
+  const qtyChartData = useMemo(() => {
+    const clampedSeconds = Math.max(secondsElapsed, 5)
+    const scaleFactor = 60 / clampedSeconds
+
+    // Extrapolated data: null for all points except the last two (to draw a connecting line)
+    const extraBuyData = rows.map((r, i) => {
+      if (i === rows.length - 1) return Math.round(r.buyQtySum * scaleFactor)
+      if (i === rows.length - 2) return r.buyQtySum // anchor from previous actual point
+      return null
+    })
+    const extraSellData = rows.map((r, i) => {
+      if (i === rows.length - 1) return Math.round(r.sellQtySum * scaleFactor)
+      if (i === rows.length - 2) return r.sellQtySum // anchor from previous actual point
+      return null
+    })
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Buy Qty Sum',
+          data: rows.map((r) => r.buyQtySum),
+          borderColor: '#22c55e',
+        },
+        {
+          label: 'Sell Qty Sum',
+          data: rows.map((r) => r.sellQtySum),
+          borderColor: '#ef4444',
+        },
+        {
+          label: 'Buy Qty (Projected)',
+          data: extraBuyData,
+          borderColor: '#22c55e',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          pointRadius: 3,
+          pointStyle: 'circle',
+          spanGaps: false,
+        },
+        {
+          label: 'Sell Qty (Projected)',
+          data: extraSellData,
+          borderColor: '#ef4444',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          pointRadius: 3,
+          pointStyle: 'circle',
+          spanGaps: false,
+        },
+        {
+          label: 'Buy/Sell Ratio',
+          data: rows.map((r) => r.buySellRatio),
+          borderColor: '#a855f7',
+          yAxisID: 'ratioAxis',
+          hidden: true,
+        },
+      ],
+    }
+  }, [labels, rows, secondsElapsed])
 
   const latestPrice = rows.length > 0 ? rows[rows.length - 1].close : null
 
@@ -294,6 +401,7 @@ export default function LiveTicks() {
       </div>
 
       <div style={styles.chartCard}>
+        <CircularMinuteProgress />
         <h3 style={styles.chartTitle}>Aggregated Buy vs Sell Quantities</h3>
         <div style={styles.chartViewport}>
           <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(quantityChartOptions)} plugins={[syncCrosshairPlugin]} />
