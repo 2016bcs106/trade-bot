@@ -1,8 +1,8 @@
 import "../config/env.ts";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { mkdirSync, appendFileSync, statSync, readdirSync, unlinkSync } from "fs";
-import { createServer } from "http";
+import { mkdirSync, appendFileSync, statSync, readdirSync, unlinkSync, readFileSync } from "fs";
+import { createServer } from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import moment from "moment";
 import BaseScript from "./base-script.ts";
@@ -57,7 +57,10 @@ class LiveStreamScript extends BaseScript {
   private startTime = nowMs();
   private currentToken: string | null = null;
   private streamer: PaytmMoneyWebSocket | null = null;
-  private wsHttpServer = createServer();
+  private wsHttpServer = createServer({
+    cert: readFileSync(resolve(__dirname, "..", "..", "..", "..", "certificate.crt")),
+    key: readFileSync(resolve(__dirname, "..", "..", "..", "..", "private.key")),
+  });
   private wsServer = new WebSocketServer({ noServer: true });
   private wsPort = 8081;
   private wsPath = "/live-ticks";
@@ -229,7 +232,7 @@ class LiveStreamScript extends BaseScript {
     });
 
     this.wsHttpServer.listen(this.wsPort, () => {
-      this.log.info(`Local broadcast websocket listening on ws://localhost:${this.wsPort}${this.wsPath}`);
+      this.log.info(`Local broadcast websocket listening on wss://0.0.0.0:${this.wsPort}${this.wsPath}`);
     });
   }
 

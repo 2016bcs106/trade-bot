@@ -11,7 +11,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 
-const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'ws://ec2-13-235-76-118.ap-south-1.compute.amazonaws.com:8081/live-ticks'
+const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://ec2-13-235-76-118.ap-south-1.compute.amazonaws.com:8081/live-ticks'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
