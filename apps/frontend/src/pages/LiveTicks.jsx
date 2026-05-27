@@ -10,8 +10,10 @@ import {
   Legend,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faPlugCircleXmark } from '@fortawesome/free-solid-svg-icons'
 
-const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://ec2-13-235-76-118.ap-south-1.compute.amazonaws.com:8081/live-ticks'
+const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
@@ -74,6 +76,34 @@ const styles = {
     minHeight: '180px',
   },
   chartTitle: { margin: '0 0 0.5rem 0', fontSize: '0.95rem' },
+  errorCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'var(--pm-card-bg)',
+    border: '1px solid var(--pm-border)',
+    borderRadius: '8px',
+    padding: '2.5rem 1.5rem',
+    textAlign: 'center',
+    marginTop: '1rem',
+  },
+  errorIcon: {
+    fontSize: '2.5rem',
+    color: 'var(--pm-danger)',
+    marginBottom: '0.75rem',
+  },
+  errorTitle: {
+    fontSize: '1.1rem',
+    fontWeight: 600,
+    color: 'var(--pm-text)',
+    margin: '0 0 0.4rem 0',
+  },
+  errorSubtext: {
+    fontSize: '0.85rem',
+    color: 'var(--pm-text-secondary)',
+    margin: 0,
+  },
 }
 
 const baseChartOptions = {
@@ -270,15 +300,14 @@ export default function LiveTicks() {
     const clampedSeconds = Math.max(secondsElapsed, 5)
     const scaleFactor = 60 / clampedSeconds
 
-    // Extrapolated data: null for all points except the last two (to draw a connecting line)
     const extraBuyData = rows.map((r, i) => {
       if (i === rows.length - 1) return Math.round(r.buyQtySum * scaleFactor)
-      if (i === rows.length - 2) return r.buyQtySum // anchor from previous actual point
+      if (i === rows.length - 2) return r.buyQtySum
       return null
     })
     const extraSellData = rows.map((r, i) => {
       if (i === rows.length - 1) return Math.round(r.sellQtySum * scaleFactor)
-      if (i === rows.length - 2) return r.sellQtySum // anchor from previous actual point
+      if (i === rows.length - 2) return r.sellQtySum
       return null
     })
 
@@ -376,37 +405,57 @@ export default function LiveTicks() {
     },
   })
 
+  const isDisconnected = status === 'error' || status === 'disconnected'
+
   return (
     <div style={styles.wrap}>
       <h2 style={styles.title}>Live Minute Aggregates</h2>
-      <div style={styles.status}>WebSocket: <strong>{status}</strong> ({WS_URL})</div>
-      <div style={{ marginBottom: '0.75rem' }}>
-        <select value={selectedInstrumentKey} onChange={handleStockChange} style={{ padding: '0.45rem', minWidth: '260px' }}>
-          {stocks.map((stock) => (
-            <option key={stock.instrumentKey} value={stock.instrumentKey}>
-              {stock.symbol} — {stock.displayName}
-            </option>
-          ))}
-        </select>
-      </div>
 
-      <div style={styles.chartCard}>
-        <h3 style={styles.chartTitle}>
-          Live Market Price (Close)
-          {latestPrice != null ? ` — Live: ${latestPrice}` : ''}
-        </h3>
-        <div style={styles.chartViewport}>
-          <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin]} />
+      {isDisconnected && (
+        <div style={styles.errorCard}>
+          <FontAwesomeIcon icon={faPlugCircleXmark} style={styles.errorIcon} />
+          <p style={styles.errorTitle}>Unable to connect to WebSocket</p>
+          <p style={styles.errorSubtext}>
+            The live data server is not reachable. Please ensure the service is running and try again later.
+          </p>
         </div>
-      </div>
+      )}
 
-      <div style={styles.chartCard}>
-        <CircularMinuteProgress />
-        <h3 style={styles.chartTitle}>Aggregated Buy vs Sell Quantities</h3>
-        <div style={styles.chartViewport}>
-          <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(quantityChartOptions)} plugins={[syncCrosshairPlugin]} />
-        </div>
-      </div>
+      {!isDisconnected && (
+        <>
+          <div style={styles.status}>
+            WebSocket: <strong>{status}</strong>
+          </div>
+
+          <div style={{ marginBottom: '0.75rem' }}>
+            <select value={selectedInstrumentKey} onChange={handleStockChange} style={{ padding: '0.45rem', minWidth: '260px' }}>
+              {stocks.map((stock) => (
+                <option key={stock.instrumentKey} value={stock.instrumentKey}>
+                  {stock.symbol} — {stock.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.chartCard}>
+            <h3 style={styles.chartTitle}>
+              Live Market Price (Close)
+              {latestPrice != null ? ` — Live: ${latestPrice}` : ''}
+            </h3>
+            <div style={styles.chartViewport}>
+              <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin]} />
+            </div>
+          </div>
+
+          <div style={styles.chartCard}>
+            <CircularMinuteProgress />
+            <h3 style={styles.chartTitle}>Aggregated Buy vs Sell Quantities</h3>
+            <div style={styles.chartViewport}>
+              <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(quantityChartOptions)} plugins={[syncCrosshairPlugin]} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

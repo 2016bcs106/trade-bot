@@ -1,5 +1,6 @@
 import "../config/env.ts";
 import { dirname, resolve } from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { mkdirSync, appendFileSync, statSync, readdirSync, unlinkSync, readFileSync } from "fs";
 import { createServer } from "https";
@@ -58,8 +59,8 @@ class LiveStreamScript extends BaseScript {
   private currentToken: string | null = null;
   private streamer: PaytmMoneyWebSocket | null = null;
   private wsHttpServer = createServer({
-    cert: readFileSync(resolve(__dirname, "..", "..", "..", "..", "certificate.crt")),
-    key: readFileSync(resolve(__dirname, "..", "..", "..", "..", "private.key")),
+    cert: fs.readFileSync("/etc/letsencrypt/live/tradebot-ws.duckdns.org/fullchain.pem"),
+    key: fs.readFileSync("/etc/letsencrypt/live/tradebot-ws.duckdns.org/privkey.pem"),
   });
   private wsServer = new WebSocketServer({ noServer: true });
   private wsPort = 8081;
