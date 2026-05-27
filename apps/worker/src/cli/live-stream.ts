@@ -59,8 +59,8 @@ class LiveStreamScript extends BaseScript {
   private currentToken: string | null = null;
   private streamer: PaytmMoneyWebSocket | null = null;
   private wsHttpServer = createServer({
-    cert: fs.readFileSync("/etc/letsencrypt/live/tradebot-ws.duckdns.org/fullchain.pem"),
-    key: fs.readFileSync("/etc/letsencrypt/live/tradebot-ws.duckdns.org/privkey.pem"),
+    cert: fs.readFileSync("/etc/letsencrypt/live/trade-bot-ws.duckdns.org/fullchain.pem"),
+    key: fs.readFileSync("/etc/letsencrypt/live/trade-bot-ws.duckdns.org/privkey.pem"),
   });
   private wsServer = new WebSocketServer({ noServer: true });
   private wsPort = 8081;
