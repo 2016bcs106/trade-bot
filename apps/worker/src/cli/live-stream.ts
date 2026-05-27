@@ -1,7 +1,7 @@
 import "../config/env.ts";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { mkdirSync, appendFileSync, statSync } from "fs";
+import { mkdirSync, appendFileSync, statSync, readdirSync, unlinkSync } from "fs";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import moment from "moment";
@@ -9,10 +9,17 @@ import BaseScript from "./base-script.ts";
 import { nowMs, nowISO, todayDate } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.ts";
+import LIVE_TRADE_CONFIG from "../config/live-trade-config.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface MinuteAggregatePayload {
+  instrumentKey: string;
+  symbol: string;
+  displayName: string;
+  exchangeType: string;
+  scripType: string;
+  scripId: number;
   minute: string;
   dateIst: string;
   open: number;
@@ -26,10 +33,22 @@ interface MinuteAggregatePayload {
   lastUpdatedAt: string;
 }
 
+interface LiveTradeStockConfig {
+  displayName: string;
+  exchangeType: string;
+  scripId: number;
+  symbol: string;
+  scripType: string;
+}
+
+interface ClientSubscription {
+  instrumentKey: string | null;
+}
+
 class LiveStreamScript extends BaseScript {
   private config = new TradingConfig("live-stream");
   private dataDir = resolve(__dirname, "..", "..", "..", "..", "data");
-  private buffer: Record<string, unknown>[] = [];
+  private bufferByInstrument = new Map<string, Record<string, unknown>[]>();
   private totalFlushed = 0;
   private totalFlushedToday = 0;
   private lastFlushDate = this.getDateIST();
@@ -42,8 +61,12 @@ class LiveStreamScript extends BaseScript {
   private wsServer = new WebSocketServer({ noServer: true });
   private wsPort = 8081;
   private wsPath = "/live-ticks";
-  private minuteAggregates = new Map<string, MinuteAggregatePayload>();
+  private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
   private wsDayTracker = this.getDateIST();
+  private clientSubscriptions = new Map<WebSocket, ClientSubscription>();
+  private liveTradeConfig = LIVE_TRADE_CONFIG as LiveTradeStockConfig[];
+  private instrumentByKey = new Map<string, LiveTradeStockConfig>();
+  private instrumentBySecurityId = new Map<number, LiveTradeStockConfig>();
 
   get scriptName(): string {
     return "live-stream";
@@ -54,22 +77,23 @@ class LiveStreamScript extends BaseScript {
       tickCount: this.tickCount,
       totalFlushed: this.totalFlushed,
       totalFlushedToday: this.totalFlushedToday,
-      bufferSize: this.buffer.length,
+      bufferSize: Array.from(this.bufferByInstrument.values()).reduce((sum, arr) => sum + arr.length, 0),
       uptimeMinutes: Math.round((nowMs() - this.startTime) / 1000 / 60),
-      outputFile: this.getOutputFilePath(),
-      fileSizeMB: this.getFileSizeMB(this.getOutputFilePath()),
+      trackedStocks: this.liveTradeConfig.length,
       config: this.config.toJSON(),
     };
   }
 
   protected async run(): Promise<void> {
     mkdirSync(this.dataDir, { recursive: true });
+    this.initializeInstrumentMaps();
+    this.cleanupOldDataFiles();
     this.startLocalBroadcastWebSocket();
 
-    const { scripId, scripType, exchangeType, modeType, flushInterval, bufferSize, statsInterval } = this.config;
+    const { modeType, flushInterval, bufferSize, statsInterval } = this.config;
 
     this.log.info("Starting live market data recorder");
-    this.log.info(`Config — scrip=${exchangeType}:${scripId}(${scripType}) mode=${modeType} flush=${flushInterval}s buffer=${bufferSize} stats=${statsInterval}s`);
+    this.log.info(`Config — stocks=${this.liveTradeConfig.length} mode=${modeType} flush=${flushInterval}s buffer=${bufferSize} stats=${statsInterval}s`);
     this.log.info(`Output directory: ${this.dataDir}`);
 
     // Listen to token changes and connect
@@ -98,21 +122,26 @@ class LiveStreamScript extends BaseScript {
   }
 
   private createStreamer(token: string): PaytmMoneyWebSocket {
-    const { scripId, scripType, exchangeType, modeType } = this.config;
+    const { modeType } = this.config;
     const maxBufferSize = this.config.bufferSize!;
     const s = new PaytmMoneyWebSocket(token);
 
     s.on("connected", () => {
       this.log.info("WebSocket connected");
-      s.subscribe({ scripType, exchangeType, scripId, modeType: modeType! });
+      s.subscribe(this.liveTradeConfig.map((c) => ({
+        scripType: c.scripType,
+        exchangeType: c.exchangeType,
+        scripId: String(c.scripId),
+        modeType: modeType!,
+      })));
     });
 
     s.on("tick", (data: Record<string, unknown>) => {
       this.tickCount++;
       const tick = { ...data, received_at: nowISO() };
-      this.buffer.push(tick);
+      this.pushTickToInstrumentBuffer(tick);
       this.publishTickToLocalWebSocket(tick);
-      if (this.buffer.length >= maxBufferSize) this.flushBuffer();
+      if (this.getTotalBufferedTicks() >= maxBufferSize) this.flushBuffer();
     });
 
     s.on("error", (err: Error) => this.log.error("WebSocket error", err));
@@ -123,7 +152,7 @@ class LiveStreamScript extends BaseScript {
   }
 
   private flushBuffer(): void {
-    if (this.buffer.length === 0) return;
+    if (this.getTotalBufferedTicks() === 0) return;
 
     const today = this.getDateIST();
     if (today !== this.lastFlushDate) {
@@ -131,18 +160,25 @@ class LiveStreamScript extends BaseScript {
       this.totalFlushedToday = 0;
       this.lastFlushDate = today;
       this.resetMinuteAggregatesForNewDay(today);
+      this.cleanupOldDataFiles();
     }
 
-    const filePath = this.getOutputFilePath();
-    const lines = this.buffer.map((tick) => JSON.stringify(tick)).join("\n") + "\n";
-
     try {
-      const flushedCount = this.buffer.length;
-      appendFileSync(filePath, lines);
+      let flushedCount = 0;
+      for (const [instrumentKey, ticks] of this.bufferByInstrument.entries()) {
+        if (ticks.length === 0) continue;
+        const stock = this.instrumentByKey.get(instrumentKey);
+        if (!stock) continue;
+        const filePath = this.getOutputFilePath(stock);
+        const lines = ticks.map((tick) => JSON.stringify(tick)).join("\n") + "\n";
+        appendFileSync(filePath, lines);
+        flushedCount += ticks.length;
+      }
+
       this.totalFlushed += flushedCount;
       this.totalFlushedToday += flushedCount;
-      this.buffer = [];
-      this.log.info(`Flushed ${flushedCount} ticks — file=${this.getFileSizeMB(filePath)}MB total=${this.totalFlushed}`);
+      this.bufferByInstrument.clear();
+      this.log.info(`Flushed ${flushedCount} ticks — total=${this.totalFlushed}`);
     } catch (err) {
       this.log.error("Flush error", err);
     }
@@ -156,7 +192,7 @@ class LiveStreamScript extends BaseScript {
 
     this.log.info(
       `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${this.totalFlushedToday} ` +
-      `rate=${ticksPerSec}/s buffer=${this.buffer.length} file=${this.getFileSizeMB(this.getOutputFilePath())}MB mem=${memUsageMB}MB`,
+      `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()} tracked=${this.minuteAggregatesByInstrument.size} mem=${memUsageMB}MB`,
     );
 
     this.tickCountAtLastStats = this.tickCount;
@@ -180,7 +216,16 @@ class LiveStreamScript extends BaseScript {
     });
 
     this.wsServer.on("connection", (client) => {
-      this.sendMinuteSnapshot(client);
+      this.clientSubscriptions.set(client, { instrumentKey: null });
+      this.sendStockList(client);
+
+      client.on("message", (raw) => {
+        this.handleClientMessage(client, raw.toString());
+      });
+
+      client.on("close", () => {
+        this.clientSubscriptions.delete(client);
+      });
     });
 
     this.wsHttpServer.listen(this.wsPort, () => {
@@ -194,9 +239,10 @@ class LiveStreamScript extends BaseScript {
     const aggregate = this.upsertMinuteAggregate(tick);
     if (!aggregate) return;
 
-    this.broadcastToAllClients({
+    this.broadcastToSubscribedClients(aggregate.instrumentKey, {
       type: "minute_update",
       data: aggregate,
+      meta: { instrumentKey: aggregate.instrumentKey },
     });
   }
 
@@ -208,7 +254,7 @@ class LiveStreamScript extends BaseScript {
   }
 
   private resetMinuteAggregatesForNewDay(dateIst: string): void {
-    this.minuteAggregates.clear();
+    this.minuteAggregatesByInstrument.clear();
     this.broadcastToAllClients({
       type: "day_reset",
       data: {
@@ -222,6 +268,11 @@ class LiveStreamScript extends BaseScript {
     const price = Number(tick.last_price);
     if (!Number.isFinite(price)) return null;
 
+    const stock = this.resolveStockFromTick(tick);
+    if (!stock) return null;
+
+    const instrumentKey = this.getInstrumentKey(stock);
+
     const receivedAt = String(tick.received_at ?? nowISO());
     const minuteKey = moment(receivedAt).utcOffset("+05:30").format("YYYY-MM-DDTHH:mm");
     const dateIst = minuteKey.slice(0, 10);
@@ -231,9 +282,21 @@ class LiveStreamScript extends BaseScript {
     const buyQty = Number.isFinite(buyQtyRaw) ? buyQtyRaw : 0;
     const sellQty = Number.isFinite(sellQtyRaw) ? sellQtyRaw : 0;
 
-    const existing = this.minuteAggregates.get(minuteKey);
+    let perInstrument = this.minuteAggregatesByInstrument.get(instrumentKey);
+    if (!perInstrument) {
+      perInstrument = new Map<string, MinuteAggregatePayload>();
+      this.minuteAggregatesByInstrument.set(instrumentKey, perInstrument);
+    }
+
+    const existing = perInstrument.get(minuteKey);
     if (!existing) {
       const first: MinuteAggregatePayload = {
+        instrumentKey,
+        symbol: stock.symbol,
+        displayName: stock.displayName,
+        exchangeType: stock.exchangeType,
+        scripType: stock.scripType,
+        scripId: stock.scripId,
         minute: minuteKey,
         dateIst,
         open: price,
@@ -246,7 +309,7 @@ class LiveStreamScript extends BaseScript {
         buySellRatio: sellQty > 0 ? Number((buyQty / sellQty).toFixed(6)) : null,
         lastUpdatedAt: receivedAt,
       };
-      this.minuteAggregates.set(minuteKey, first);
+      perInstrument.set(minuteKey, first);
       return first;
     }
 
@@ -262,17 +325,19 @@ class LiveStreamScript extends BaseScript {
     return existing;
   }
 
-  private getMinuteSnapshotData(): MinuteAggregatePayload[] {
-    return Array.from(this.minuteAggregates.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+  private getMinuteSnapshotData(instrumentKey: string): MinuteAggregatePayload[] {
+    const map = this.minuteAggregatesByInstrument.get(instrumentKey);
+    if (!map) return [];
+    return Array.from(map.values()).sort((a, b) => a.minute.localeCompare(b.minute));
   }
 
-  private sendMinuteSnapshot(client: WebSocket): void {
+  private sendMinuteSnapshot(client: WebSocket, instrumentKey: string): void {
     if (client.readyState !== WebSocket.OPEN) return;
-    const snapshot = this.getMinuteSnapshotData();
+    const snapshot = this.getMinuteSnapshotData(instrumentKey);
     client.send(JSON.stringify({
       type: "snapshot",
       data: snapshot,
-      meta: { count: snapshot.length, asOf: nowISO() },
+      meta: { count: snapshot.length, asOf: nowISO(), instrumentKey },
     }));
   }
 
@@ -285,8 +350,102 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
-  private getOutputFilePath(): string {
-    return resolve(this.dataDir, `${this.config.exchangeType}_${this.config.scripId}_${this.getDateIST()}.ndjson`);
+  private broadcastToSubscribedClients(instrumentKey: string, payload: Record<string, unknown>): void {
+    const message = JSON.stringify(payload);
+    for (const [client, sub] of this.clientSubscriptions.entries()) {
+      if (client.readyState !== WebSocket.OPEN) continue;
+      if (sub.instrumentKey !== instrumentKey) continue;
+      client.send(message);
+    }
+  }
+
+  private sendStockList(client: WebSocket): void {
+    if (client.readyState !== WebSocket.OPEN) return;
+    client.send(JSON.stringify({
+      type: "stock_list",
+      data: this.liveTradeConfig.map((stock) => ({
+        instrumentKey: this.getInstrumentKey(stock),
+        symbol: stock.symbol,
+        displayName: stock.displayName,
+        exchangeType: stock.exchangeType,
+        scripType: stock.scripType,
+        scripId: stock.scripId,
+      })),
+    }));
+  }
+
+  private handleClientMessage(client: WebSocket, raw: string): void {
+    try {
+      const msg = JSON.parse(raw) as { type?: string; data?: { instrumentKey?: string } };
+      if (msg.type !== "subscribe") return;
+      const instrumentKey = msg.data?.instrumentKey;
+      if (!instrumentKey || !this.instrumentByKey.has(instrumentKey)) return;
+
+      this.clientSubscriptions.set(client, { instrumentKey });
+      this.sendMinuteSnapshot(client, instrumentKey);
+    } catch {
+      // ignore invalid client payload
+    }
+  }
+
+  private getInstrumentKey(stock: LiveTradeStockConfig): string {
+    return `${stock.exchangeType}:${stock.scripType}:${stock.scripId}`;
+  }
+
+  private initializeInstrumentMaps(): void {
+    this.instrumentByKey.clear();
+    this.instrumentBySecurityId.clear();
+    for (const stock of this.liveTradeConfig) {
+      const key = this.getInstrumentKey(stock);
+      this.instrumentByKey.set(key, stock);
+      this.instrumentBySecurityId.set(Number(stock.scripId), stock);
+    }
+  }
+
+  private resolveStockFromTick(tick: Record<string, unknown>): LiveTradeStockConfig | null {
+    const securityId = Number(tick.security_id);
+    if (!Number.isFinite(securityId)) return null;
+    return this.instrumentBySecurityId.get(securityId) ?? null;
+  }
+
+  private pushTickToInstrumentBuffer(tick: Record<string, unknown>): void {
+    const stock = this.resolveStockFromTick(tick);
+    if (!stock) return;
+    const key = this.getInstrumentKey(stock);
+    const list = this.bufferByInstrument.get(key) ?? [];
+    list.push(tick);
+    this.bufferByInstrument.set(key, list);
+  }
+
+  private getTotalBufferedTicks(): number {
+    let total = 0;
+    for (const arr of this.bufferByInstrument.values()) total += arr.length;
+    return total;
+  }
+
+  private getOutputFilePath(stock: LiveTradeStockConfig): string {
+    return resolve(this.dataDir, `${stock.exchangeType}_${stock.scripId}_${this.getDateIST()}.ndjson`);
+  }
+
+  private cleanupOldDataFiles(): void {
+    const keepDates = new Set([
+      moment().utcOffset("+05:30").format("YYYY-MM-DD"),
+      moment().utcOffset("+05:30").subtract(1, "day").format("YYYY-MM-DD"),
+      moment().utcOffset("+05:30").subtract(2, "day").format("YYYY-MM-DD"),
+    ]);
+
+    for (const fileName of readdirSync(this.dataDir)) {
+      if (!fileName.endsWith(".ndjson")) continue;
+      const match = fileName.match(/_(\d{4}-\d{2}-\d{2})\.ndjson$/);
+      if (!match) continue;
+      const fileDate = match[1];
+      if (keepDates.has(fileDate)) continue;
+      try {
+        unlinkSync(resolve(this.dataDir, fileName));
+      } catch {
+        // ignore cleanup failures for individual files
+      }
+    }
   }
 
   private getFileSizeMB(filePath: string): string {

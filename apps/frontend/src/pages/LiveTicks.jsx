@@ -101,6 +101,8 @@ const quantityChartOptions = {
 
 export default function LiveTicks() {
   const [status, setStatus] = useState('connecting')
+  const [stocks, setStocks] = useState([])
+  const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [rowsByMinute, setRowsByMinute] = useState({})
   const wsRef = useRef(null)
   const priceChartRef = useRef(null)
@@ -117,6 +119,21 @@ export default function LiveTicks() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
+
+        if (msg.type === 'stock_list' && Array.isArray(msg.data)) {
+          const stockList = msg.data
+          setStocks(stockList)
+
+          if (stockList.length > 0) {
+            const firstKey = stockList[0].instrumentKey
+            setSelectedInstrumentKey(firstKey)
+            ws.send(JSON.stringify({
+              type: 'subscribe',
+              data: { instrumentKey: firstKey },
+            }))
+          }
+          return
+        }
 
         if (msg.type === 'snapshot' && Array.isArray(msg.data)) {
           const next = {}
@@ -145,6 +162,18 @@ export default function LiveTicks() {
       if (wsRef.current) wsRef.current.close()
     }
   }, [])
+
+  const handleStockChange = (event) => {
+    const instrumentKey = event.target.value
+    setSelectedInstrumentKey(instrumentKey)
+    setRowsByMinute({})
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
+    wsRef.current.send(JSON.stringify({
+      type: 'subscribe',
+      data: { instrumentKey },
+    }))
+  }
 
   const rows = useMemo(
     () => Object.values(rowsByMinute).sort((a, b) => String(a.minute).localeCompare(String(b.minute))),
@@ -244,6 +273,15 @@ export default function LiveTicks() {
     <div style={styles.wrap}>
       <h2 style={styles.title}>Live Minute Aggregates</h2>
       <div style={styles.status}>WebSocket: <strong>{status}</strong> ({WS_URL})</div>
+      <div style={{ marginBottom: '0.75rem' }}>
+        <select value={selectedInstrumentKey} onChange={handleStockChange} style={{ padding: '0.45rem', minWidth: '260px' }}>
+          {stocks.map((stock) => (
+            <option key={stock.instrumentKey} value={stock.instrumentKey}>
+              {stock.symbol} — {stock.displayName}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div style={styles.chartCard}>
         <h3 style={styles.chartTitle}>
