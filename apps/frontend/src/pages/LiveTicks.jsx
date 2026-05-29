@@ -5,6 +5,7 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  Filler,
   Title,
   Tooltip,
   Legend,
@@ -15,7 +16,7 @@ import { faPlugCircleXmark } from '@fortawesome/free-solid-svg-icons'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
 
 function getTodayIstDate() {
   const now = new Date()
@@ -29,6 +30,44 @@ function getTodayIstDate() {
 function isCurrentIstDayMinute(minute) {
   if (!minute) return false
   return String(minute).slice(0, 10) === getTodayIstDate()
+}
+
+const pulsingDotPlugin = {
+  id: 'pulsingDot',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart
+    const time = Date.now() / 1000
+    const scale = 1 + 0.4 * Math.sin(time * 6)
+    const alpha = 0.6 + 0.4 * Math.sin(time * 6)
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      if (dataset.skipPulsingDot) return
+      const meta = chart.getDatasetMeta(datasetIndex)
+      if (!meta.visible) return
+      // Find last non-null point
+      let lastPoint = null
+      for (let i = meta.data.length - 1; i >= 0; i--) {
+        if (dataset.data[i] != null) {
+          lastPoint = meta.data[i]
+          break
+        }
+      }
+      if (!lastPoint) return
+
+      const color = dataset.segment?.borderColor
+        ? dataset.borderColor
+        : (dataset.borderColor || '#3b82f6')
+      const resolvedColor = typeof color === 'function' ? '#3b82f6' : color
+
+      ctx.save()
+      ctx.globalAlpha = alpha
+      ctx.beginPath()
+      ctx.arc(lastPoint.x, lastPoint.y, 2.5 * scale, 0, Math.PI * 2)
+      ctx.fillStyle = resolvedColor
+      ctx.fill()
+      ctx.restore()
+    })
+  },
 }
 
 const syncCrosshairPlugin = {
@@ -58,16 +97,23 @@ const syncCrosshairPlugin = {
 }
 
 const styles = {
-  wrap: { padding: '1rem', paddingBottom: '5rem' },
-  title: { margin: 0, marginBottom: '0.5rem' },
+  wrap: {
+    padding: '1rem 0',
+    paddingBottom: '5rem',
+    background: 'var(--pm-bg, #f7f8fa)',
+    minHeight: '100vh',
+  },
+  title: { margin: 0, marginBottom: '0.5rem', color: 'var(--pm-text, #1a1a2e)' },
   status: { marginBottom: '1rem', fontSize: '0.9rem', color: 'var(--pm-text-muted)' },
   chartCard: {
     position: 'relative',
-    background: 'var(--pm-card-bg)',
-    border: '1px solid var(--pm-border)',
-    borderRadius: '8px',
-    padding: '0.75rem',
-    marginBottom: '1rem',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: '0',
+    padding: '0.75rem 0',
+    marginBottom: '0.5rem',
+    marginLeft: 0,
+    marginRight: 0,
   },
   chartViewport: {
     position: 'relative',
@@ -75,7 +121,16 @@ const styles = {
     maxHeight: '280px',
     minHeight: '180px',
   },
-  chartTitle: { margin: '0 0 0.5rem 0', fontSize: '0.95rem' },
+  chartTitle: {
+    margin: '0 0 0.5rem 0',
+    fontSize: '0.75rem',
+    textAlign: 'center',
+    fontWeight: 500,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    color: 'var(--pm-text-muted, #94a3b8)',
+    opacity: 0.7,
+  },
   errorCard: {
     display: 'flex',
     flexDirection: 'column',
@@ -109,28 +164,101 @@ const styles = {
 const baseChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
+  animation: false,
   interaction: { mode: 'index', intersect: false },
-  plugins: { legend: { display: true } },
+  plugins: { legend: { display: false } },
   elements: { point: { radius: 0 }, line: { borderWidth: 1.5 } },
   scales: {
     x: {
-      ticks: { autoSkip: true, maxTicksLimit: 10 },
+      ticks: {
+        autoSkip: false,
+        callback: function (value, index) {
+          const label = this.getLabelForValue(index)
+          if (!label) return null
+          const [h, m] = label.split(':').map(Number)
+          const totalMin = h * 60 + m
+          return totalMin % 30 === 0 ? label : null
+        },
+        maxRotation: 0,
+        color: 'var(--pm-text-muted, #9ca3af)',
+      },
+      grid: { display: false },
+      border: { display: false },
+    },
+    y: {
+      display: false,
     },
   },
 }
 
 const quantityChartOptions = {
   ...baseChartOptions,
+}
+
+const zeroLinePlugin = {
+  id: 'zeroLine',
+  afterDatasetsDraw(chart) {
+    const { ctx, chartArea: { left, right }, scales: { y } } = chart
+    if (!y) return
+    const yPos = y.getPixelForValue(0)
+    ctx.save()
+    ctx.beginPath()
+    ctx.setLineDash([4, 4])
+    ctx.lineWidth = 1
+    ctx.strokeStyle = 'rgba(150, 150, 150, 0.6)'
+    ctx.moveTo(left, yPos)
+    ctx.lineTo(right, yPos)
+    ctx.stroke()
+    ctx.restore()
+  },
+}
+
+const pressureChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => {
+          const dataset = ctx.chart?.data?.datasets?.[ctx.datasetIndex]
+          const raw = dataset?.rawDiffs?.[ctx.dataIndex]
+          if (raw != null) return `Sell−Buy: ${raw}`
+          return `${ctx.parsed.y?.toFixed(3)}`
+        },
+      },
+    },
+  },
+  elements: { point: { radius: 0 }, line: { borderWidth: 1.5 } },
   scales: {
-    ...baseChartOptions.scales,
-    ratioAxis: {
-      position: 'right',
-      grid: { drawOnChartArea: false },
+    x: {
+      ticks: {
+        autoSkip: false,
+        callback: function (value, index) {
+          const label = this.getLabelForValue(index)
+          if (!label) return null
+          const [h, m] = label.split(':').map(Number)
+          const totalMin = h * 60 + m
+          return totalMin % 30 === 0 ? label : null
+        },
+        maxRotation: 0,
+        color: 'var(--pm-text-muted, #9ca3af)',
+      },
+      grid: { display: false },
+      border: { display: false },
+    },
+    y: {
+      display: false,
+      min: -1,
+      max: 1,
+      beginAtZero: true,
     },
   },
 }
 
-function CircularMinuteProgress() {
+function MinuteProgressBar() {
   const [seconds, setSeconds] = useState(new Date().getSeconds())
 
   useEffect(() => {
@@ -140,53 +268,41 @@ function CircularMinuteProgress() {
     return () => clearInterval(interval)
   }, [])
 
-  const size = 40
-  const strokeWidth = 4
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-  const progress = seconds / 60
-  const dashOffset = circumference * (1 - progress)
+  const progress = (seconds / 60) * 100
 
   return (
     <div style={{
-      position: 'absolute',
-      top: '4px',
-      right: '4px',
-      zIndex: 10,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      position: 'fixed',
+      bottom: '64px',
+      left: 0,
+      right: 0,
+      height: '3px',
+      background: 'var(--pm-border, #e5e7eb)',
+      zIndex: 1001,
+      overflow: 'visible',
     }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="rgba(0,0,0,0.4)"
-          stroke="rgba(255,255,255,0.15)"
-          strokeWidth={strokeWidth}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#a855f7"
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span style={{
-        position: 'absolute',
-        fontSize: '11px',
-        fontWeight: 600,
-        color: '#e2e8f0',
-        userSelect: 'none',
+      <div style={{
+        position: 'relative',
+        height: '100%',
+        width: `${progress}%`,
+        background: '#3b82f6',
+        transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        borderRadius: '0 2px 2px 0',
+        overflow: 'visible',
       }}>
-        {seconds}
-      </span>
+        <span style={{
+          position: 'absolute',
+          right: '-4px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: '8px',
+          height: '8px',
+          borderRadius: '50%',
+          background: '#3b82f6',
+          animation: 'pulse-bar 1s ease-in-out infinite',
+          boxShadow: '0 0 6px #3b82f6',
+        }} />
+      </div>
     </div>
   )
 }
@@ -199,6 +315,7 @@ export default function LiveTicks() {
   const [secondsElapsed, setSecondsElapsed] = useState(new Date().getSeconds())
   const wsRef = useRef(null)
   const priceChartRef = useRef(null)
+  const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
 
   useEffect(() => {
@@ -209,56 +326,73 @@ export default function LiveTicks() {
   }, [])
 
   useEffect(() => {
-    const ws = new WebSocket(WS_URL)
-    wsRef.current = ws
+    let retryTimer = null
+    let intentionalClose = false
 
-    ws.onopen = () => setStatus('connected')
-    ws.onclose = () => setStatus('disconnected')
-    ws.onerror = () => setStatus('error')
+    function connect() {
+      const ws = new WebSocket(WS_URL)
+      wsRef.current = ws
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data)
+      ws.onopen = () => setStatus('connected')
 
-        if (msg.type === 'stock_list' && Array.isArray(msg.data)) {
-          const stockList = msg.data
-          setStocks(stockList)
+      ws.onclose = () => {
+        if (intentionalClose) return
+        setStatus('reconnecting')
+        retryTimer = setTimeout(connect, 3000)
+      }
 
-          if (stockList.length > 0) {
-            const firstKey = stockList[0].instrumentKey
-            setSelectedInstrumentKey(firstKey)
-            ws.send(JSON.stringify({
-              type: 'subscribe',
-              data: { instrumentKey: firstKey },
-            }))
+      ws.onerror = () => {
+        // onclose will fire after this, triggering reconnect
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data)
+
+          if (msg.type === 'stock_list' && Array.isArray(msg.data)) {
+            const stockList = msg.data
+            setStocks(stockList)
+
+            if (stockList.length > 0) {
+              const firstKey = stockList[0].instrumentKey
+              setSelectedInstrumentKey(firstKey)
+              ws.send(JSON.stringify({
+                type: 'subscribe',
+                data: { instrumentKey: firstKey },
+              }))
+            }
+            return
           }
-          return
-        }
 
-        if (msg.type === 'snapshot' && Array.isArray(msg.data)) {
-          const next = {}
-          for (const item of msg.data) {
-            if (item?.minute && isCurrentIstDayMinute(item.minute)) next[item.minute] = item
+          if (msg.type === 'snapshot' && Array.isArray(msg.data)) {
+            const next = {}
+            for (const item of msg.data) {
+              if (item?.minute && isCurrentIstDayMinute(item.minute)) next[item.minute] = item
+            }
+            setRowsByMinute(next)
+            return
           }
-          setRowsByMinute(next)
-          return
-        }
 
-        if (msg.type === 'minute_update' && msg.data?.minute) {
-          if (!isCurrentIstDayMinute(msg.data.minute)) return
-          setRowsByMinute((prev) => ({ ...prev, [msg.data.minute]: msg.data }))
-          return
-        }
+          if (msg.type === 'minute_update' && msg.data?.minute) {
+            if (!isCurrentIstDayMinute(msg.data.minute)) return
+            setRowsByMinute((prev) => ({ ...prev, [msg.data.minute]: msg.data }))
+            return
+          }
 
-        if (msg.type === 'day_reset') {
-          setRowsByMinute({})
+          if (msg.type === 'day_reset') {
+            setRowsByMinute({})
+          }
+        } catch {
+          // ignore malformed payloads
         }
-      } catch {
-        // ignore malformed payloads
       }
     }
 
+    connect()
+
     return () => {
+      intentionalClose = true
+      if (retryTimer) clearTimeout(retryTimer)
       if (wsRef.current) wsRef.current.close()
     }
   }, [])
@@ -280,85 +414,211 @@ export default function LiveTicks() {
     [rowsByMinute],
   )
 
-  const labels = useMemo(
-    () => rows.map((r) => String(r.minute).split('T')[1]?.slice(0, 5) || String(r.minute)),
-    [rows],
-  )
 
-  const priceChartData = useMemo(() => ({
-    labels,
-    datasets: [
-      {
-        label: 'Close Price',
-        data: rows.map((r) => r.close),
-        borderColor: '#3b82f6',
-      },
-    ],
-  }), [labels, rows])
+  const PRE_PAD = 5
+  const POST_PAD = 10
 
-  const qtyChartData = useMemo(() => {
-    const clampedSeconds = Math.max(secondsElapsed, 5)
-    const scaleFactor = 60 / clampedSeconds
+  const labels = useMemo(() => {
+    const dataLabels = rows.map((r) => String(r.minute).split('T')[1]?.slice(0, 5) || String(r.minute))
+    if (dataLabels.length === 0) return dataLabels
 
-    const extraBuyData = rows.map((r, i) => {
-      if (i === rows.length - 1) return Math.round(r.buyQtySum * scaleFactor)
-      if (i === rows.length - 2) return r.buyQtySum
-      return null
-    })
-    const extraSellData = rows.map((r, i) => {
-      if (i === rows.length - 1) return Math.round(r.sellQtySum * scaleFactor)
-      if (i === rows.length - 2) return r.sellQtySum
-      return null
-    })
+    // Always start from 08:55 (09:00 - 5 min pre-padding)
+    const preLabels = []
+    const startMin = 9 * 60 - PRE_PAD // 08:55
+    for (let i = 0; i < PRE_PAD; i++) {
+      const totalMin = startMin + i
+      const h = String(Math.floor(totalMin / 60)).padStart(2, '0')
+      const m = String(totalMin % 60).padStart(2, '0')
+      preLabels.push(`${h}:${m}`)
+    }
+
+    // Append 10 minutes after last data point
+    const lastLabel = dataLabels[dataLabels.length - 1]
+    const [lh, lm] = lastLabel.split(':').map(Number)
+    const postLabels = []
+    for (let i = 1; i <= POST_PAD; i++) {
+      const totalMin = lh * 60 + lm + i
+      const h = String(Math.floor(totalMin / 60) % 24).padStart(2, '0')
+      const m = String(totalMin % 60).padStart(2, '0')
+      postLabels.push(`${h}:${m}`)
+    }
+
+    return [...preLabels, ...dataLabels, ...postLabels]
+  }, [rows])
+
+  const latestPrice = rows.length > 0 ? rows[rows.length - 1].close : null
+
+  // Find opening price: first row at or after 09:00
+  const openPrice = useMemo(() => {
+    for (const r of rows) {
+      const time = String(r.minute).split('T')[1]?.slice(0, 5) || ''
+      if (time >= '09:00') return r.close
+    }
+    return rows.length > 0 ? rows[0].close : null
+  }, [rows])
+
+  const priceChartData = useMemo(() => {
+    const isPositive = openPrice != null && latestPrice != null && latestPrice >= openPrice
+    const lineColor = openPrice == null ? '#3b82f6' : (isPositive ? '#22c55e' : '#ef4444')
+    const fillRgb = isPositive ? '34, 197, 94' : '239, 68, 68'
+    const firstClose = rows.length > 0 ? rows[0].close : null
+    const prePad = Array(PRE_PAD).fill(firstClose)
 
     return {
       labels,
       datasets: [
         {
-          label: 'Buy Qty Sum',
-          data: rows.map((r) => r.buyQtySum),
+          label: 'Close Price',
+          data: [...prePad, ...rows.map((r) => r.close)],
+          borderColor: lineColor,
+          backgroundColor: (ctx) => {
+            if (!ctx.chart) return 'transparent'
+            const { top, bottom } = ctx.chart.chartArea || { top: 0, bottom: ctx.chart.height }
+            const gradient = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
+            gradient.addColorStop(0, `rgba(${fillRgb}, 0.35)`)
+            gradient.addColorStop(1, `rgba(${fillRgb}, 0)`)
+            return gradient
+          },
+          fill: true,
+        },
+      ],
+    }
+  }, [labels, rows, openPrice, latestPrice])
+
+  const qtyChartData = useMemo(() => {
+    const clampedSeconds = Math.max(secondsElapsed, 10)
+    const scaleFactor = 60 / clampedSeconds
+    const lastIdx = rows.length - 1
+    const paddedLastIdx = PRE_PAD + lastIdx
+
+    const firstBuy = rows.length > 0 ? rows[0].buyQtySum : null
+    const firstSell = rows.length > 0 ? rows[0].sellQtySum : null
+    const buyPad = Array(PRE_PAD).fill(firstBuy)
+    const sellPad = Array(PRE_PAD).fill(firstSell)
+
+    // Completed minutes: all except the last (current) minute
+    const buyCompleted = [...buyPad, ...rows.map((r, i) => i < lastIdx ? r.buyQtySum : null)]
+    const sellCompleted = [...sellPad, ...rows.map((r, i) => i < lastIdx ? r.sellQtySum : null)]
+
+    // Projected: bridge from last completed to projected current
+    const prevBuy = lastIdx >= 1 ? rows[lastIdx - 1].buyQtySum : 0
+    const prevSell = lastIdx >= 1 ? rows[lastIdx - 1].sellQtySum : 0
+
+    const buyProjected = [...Array(PRE_PAD).fill(null), ...rows.map((r, i) => {
+      if (i === lastIdx) {
+        if (secondsElapsed < 3) return prevBuy
+        return Math.round(r.buyQtySum * scaleFactor)
+      }
+      if (i === lastIdx - 1) return r.buyQtySum
+      return null
+    })]
+    const sellProjected = [...Array(PRE_PAD).fill(null), ...rows.map((r, i) => {
+      if (i === lastIdx) {
+        if (secondsElapsed < 3) return prevSell
+        return Math.round(r.sellQtySum * scaleFactor)
+      }
+      if (i === lastIdx - 1) return r.sellQtySum
+      return null
+    })]
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Buy Qty',
+          data: buyCompleted,
           borderColor: '#22c55e',
+          backgroundColor: (ctx) => {
+            if (!ctx.chart?.chartArea) return 'rgba(34, 197, 94, 0.1)'
+            const { top, bottom } = ctx.chart.chartArea
+            const gradient = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
+            gradient.addColorStop(0, 'rgba(34, 197, 94, 0.3)')
+            gradient.addColorStop(1, 'rgba(34, 197, 94, 0)')
+            return gradient
+          },
+          fill: true,
+          spanGaps: false,
+          skipPulsingDot: true,
         },
         {
-          label: 'Sell Qty Sum',
-          data: rows.map((r) => r.sellQtySum),
+          label: 'Sell Qty',
+          data: sellCompleted,
           borderColor: '#ef4444',
+          backgroundColor: (ctx) => {
+            if (!ctx.chart?.chartArea) return 'rgba(239, 68, 68, 0.1)'
+            const { top, bottom } = ctx.chart.chartArea
+            const gradient = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
+            gradient.addColorStop(0, 'rgba(239, 68, 68, 0.3)')
+            gradient.addColorStop(1, 'rgba(239, 68, 68, 0)')
+            return gradient
+          },
+          fill: true,
+          spanGaps: false,
+          skipPulsingDot: true,
         },
         {
-          label: 'Buy Qty (Projected)',
-          data: extraBuyData,
+          label: 'Buy (Projected)',
+          data: buyProjected,
           borderColor: '#22c55e',
-          borderDash: [5, 5],
-          borderWidth: 2,
-          pointRadius: 3,
-          pointStyle: 'circle',
+          borderWidth: 1.5,
+          pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0,
           spanGaps: false,
         },
         {
-          label: 'Sell Qty (Projected)',
-          data: extraSellData,
+          label: 'Sell (Projected)',
+          data: sellProjected,
           borderColor: '#ef4444',
-          borderDash: [5, 5],
-          borderWidth: 2,
-          pointRadius: 3,
-          pointStyle: 'circle',
+          borderWidth: 1.5,
+          pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0,
           spanGaps: false,
-        },
-        {
-          label: 'Buy/Sell Ratio',
-          data: rows.map((r) => r.buySellRatio),
-          borderColor: '#a855f7',
-          yAxisID: 'ratioAxis',
-          hidden: true,
         },
       ],
     }
   }, [labels, rows, secondsElapsed])
 
-  const latestPrice = rows.length > 0 ? rows[rows.length - 1].close : null
+  const pressureChartData = useMemo(() => {
+    const diffs = rows.map((r) => (r.sellQtySum || 0) - (r.buyQtySum || 0))
+    const maxAbs = Math.max(1, ...diffs.map(Math.abs))
+    const tanhValues = diffs.map((d) => Math.tanh(d / (maxAbs * 0.05)))
+    const firstTanh = tanhValues.length > 0 ? tanhValues[0] : 0
+    const firstDiff = diffs.length > 0 ? diffs[0] : 0
+    const data = [...Array(PRE_PAD).fill(firstTanh), ...tanhValues]
+    const rawDiffs = [...Array(PRE_PAD).fill(firstDiff), ...diffs]
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'tanh(S−B)',
+          data,
+          rawDiffs,
+          segment: {
+            borderColor: (ctx) => ctx.p0.parsed.y >= 0 ? '#ef4444' : '#22c55e',
+          },
+          borderColor: '#ef4444',
+          backgroundColor: (context) => {
+            const chart = context.chart
+            if (!chart.chartArea || !chart.scales?.y) return 'rgba(239, 68, 68, 0.15)'
+            const { top, bottom } = chart.chartArea
+            const zeroY = chart.scales.y.getPixelForValue(0)
+            const ratio = Math.max(0, Math.min(1, (zeroY - top) / (bottom - top)))
+            const gradient = chart.ctx.createLinearGradient(0, top, 0, bottom)
+            gradient.addColorStop(0, 'rgba(239, 68, 68, 0.35)')
+            gradient.addColorStop(ratio, 'rgba(239, 68, 68, 0)')
+            gradient.addColorStop(ratio, 'rgba(34, 197, 94, 0)')
+            gradient.addColorStop(1, 'rgba(34, 197, 94, 0.35)')
+            return gradient
+          },
+          fill: true,
+          borderWidth: 1.5,
+          pointRadius: 0,
+        },
+      ],
+    }
+  }, [labels, rows])
 
   const syncChartsAtIndex = (sourceChart, index) => {
-    const charts = [priceChartRef.current, qtyChartRef.current].filter(Boolean)
+    const charts = [priceChartRef.current, pressureChartRef.current, qtyChartRef.current].filter(Boolean)
     const sourceLabel = sourceChart?.data?.labels?.[index]
 
     charts.forEach((target) => {
@@ -383,7 +643,7 @@ export default function LiveTicks() {
   }
 
   const clearSyncedHover = () => {
-    ;[priceChartRef.current, qtyChartRef.current].filter(Boolean).forEach((chart) => {
+    ;[priceChartRef.current, pressureChartRef.current, qtyChartRef.current].filter(Boolean).forEach((chart) => {
       chart.setActiveElements([])
       chart.tooltip?.setActiveElements([], { x: 0, y: 0 })
       chart.update('none')
@@ -405,11 +665,32 @@ export default function LiveTicks() {
     },
   })
 
-  const isDisconnected = status === 'error' || status === 'disconnected'
+  const isDisconnected = status === 'disconnected'
 
   return (
     <div style={styles.wrap}>
-      <h2 style={styles.title}>Live Minute Aggregates</h2>
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.85); }
+        }
+        @keyframes pulse-bar {
+          0%, 100% { opacity: 1; transform: translateY(-50%) scale(1); }
+          50% { opacity: 0.4; transform: translateY(-50%) scale(0.6); }
+        }
+      `}</style>
+      <h2 style={{ ...styles.title, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+        {status === 'connected' && (
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', flexShrink: 0, animation: 'pulse-dot 2s ease-in-out infinite' }} />
+        )}
+        {status === 'reconnecting' && (
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0, animation: 'pulse-dot 1s ease-in-out infinite' }} />
+        )}
+        {status === 'connecting' && (
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#94a3b8', display: 'inline-block', flexShrink: 0, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+        )}
+        {stocks.find((s) => s.instrumentKey === selectedInstrumentKey)?.displayName || 'Live Ticks'}
+      </h2>
 
       {isDisconnected && (
         <div style={styles.errorCard}>
@@ -421,13 +702,10 @@ export default function LiveTicks() {
         </div>
       )}
 
+      <MinuteProgressBar />
       {!isDisconnected && (
         <>
-          <div style={styles.status}>
-            WebSocket: <strong>{status}</strong>
-          </div>
-
-          <div style={{ marginBottom: '0.75rem' }}>
+          <div style={{ marginBottom: '0.75rem', textAlign: 'center' }}>
             <select value={selectedInstrumentKey} onChange={handleStockChange} style={{ padding: '0.45rem', minWidth: '260px' }}>
               {stocks.map((stock) => (
                 <option key={stock.instrumentKey} value={stock.instrumentKey}>
@@ -438,20 +716,35 @@ export default function LiveTicks() {
           </div>
 
           <div style={styles.chartCard}>
-            <h3 style={styles.chartTitle}>
-              Live Market Price (Close)
-              {latestPrice != null ? ` — Live: ${latestPrice}` : ''}
-            </h3>
+            <h3 style={styles.chartTitle}>Live Price</h3>
+            {latestPrice != null && (
+              <div style={{ textAlign: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ color: openPrice != null && latestPrice >= openPrice ? '#22c55e' : '#ef4444', fontWeight: 700, fontSize: '1.1rem' }}>
+                  {latestPrice.toFixed(2)}
+                  {openPrice != null && (
+                    <span style={{ fontSize: '0.8rem', marginLeft: '0.3rem', fontWeight: 600 }}>
+                      ({latestPrice >= openPrice ? '+' : ''}{(latestPrice - openPrice).toFixed(2)})
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
             <div style={styles.chartViewport}>
-              <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin]} />
+              <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
             </div>
           </div>
 
           <div style={styles.chartCard}>
-            <CircularMinuteProgress />
-            <h3 style={styles.chartTitle}>Aggregated Buy vs Sell Quantities</h3>
+            <h3 style={styles.chartTitle}>Sell Pressure</h3>
+            <div style={{ ...styles.chartViewport, height: '20vh', maxHeight: '180px', minHeight: '120px' }}>
+              <Line ref={pressureChartRef} data={pressureChartData} options={buildOptions(pressureChartOptions)} plugins={[syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin]} />
+            </div>
+          </div>
+
+          <div style={styles.chartCard}>
+            <h3 style={styles.chartTitle}>Buy vs Sell</h3>
             <div style={styles.chartViewport}>
-              <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(quantityChartOptions)} plugins={[syncCrosshairPlugin]} />
+              <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(quantityChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
             </div>
           </div>
         </>
