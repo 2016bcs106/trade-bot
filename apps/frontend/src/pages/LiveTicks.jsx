@@ -12,7 +12,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faRepeat } from '@fortawesome/free-solid-svg-icons'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
 
@@ -258,6 +258,67 @@ const pressureChartOptions = {
   },
 }
 
+function StockBottomSheet({ stocks, selectedInstrumentKey, onSelect, isOpen, onClose }) {
+  if (!isOpen) return null
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.4)',
+          zIndex: 2000,
+          transition: 'opacity 0.2s',
+        }}
+      />
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        maxHeight: '60vh',
+        background: 'var(--pm-card-bg, #fff)',
+        borderRadius: '16px 16px 0 0',
+        zIndex: 2001,
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
+        animation: 'slideUp 0.25s ease-out',
+      }}>
+        <div style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '1px solid var(--pm-border, #e5e7eb)' }}>
+          <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--pm-text-muted, #9ca3af)', margin: '0 auto 0.5rem' }} />
+          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--pm-text, #1a1a2e)' }}>Select Stock</span>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {stocks.map((stock) => (
+            <button
+              key={stock.instrumentKey}
+              onClick={() => { onSelect(stock.instrumentKey); onClose() }}
+              style={{
+                width: '100%',
+                padding: '0.85rem 1rem',
+                border: 'none',
+                borderBottom: '1px solid var(--pm-border, #e5e7eb)',
+                background: stock.instrumentKey === selectedInstrumentKey ? 'var(--pm-primary-light, #e8f0fe)' : 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span style={{ fontSize: '0.85rem', color: 'var(--pm-text, #1a1a2e)' }}>{stock.displayName}</span>
+              <span style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--pm-text-muted, #9ca3af)' }}>{stock.symbol}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 function MinuteProgressBar() {
   const [seconds, setSeconds] = useState(new Date().getSeconds())
 
@@ -313,6 +374,7 @@ export default function LiveTicks() {
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [rowsByMinute, setRowsByMinute] = useState({})
   const [secondsElapsed, setSecondsElapsed] = useState(new Date().getSeconds())
+  const [sheetOpen, setSheetOpen] = useState(false)
   const wsRef = useRef(null)
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
@@ -397,8 +459,7 @@ export default function LiveTicks() {
     }
   }, [])
 
-  const handleStockChange = (event) => {
-    const instrumentKey = event.target.value
+  const handleStockSelect = (instrumentKey) => {
     setSelectedInstrumentKey(instrumentKey)
     setRowsByMinute({})
 
@@ -678,6 +739,10 @@ export default function LiveTicks() {
           0%, 100% { opacity: 1; transform: translateY(-50%) scale(1); }
           50% { opacity: 0.4; transform: translateY(-50%) scale(0.6); }
         }
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
       `}</style>
       <h2 style={{ ...styles.title, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
         {status === 'connected' && (
@@ -689,7 +754,19 @@ export default function LiveTicks() {
         {status === 'connecting' && (
           <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#94a3b8', display: 'inline-block', flexShrink: 0, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
         )}
-        {stocks.find((s) => s.instrumentKey === selectedInstrumentKey)?.displayName || 'Live Ticks'}
+        {(() => {
+          const stock = stocks.find((s) => s.instrumentKey === selectedInstrumentKey)
+          if (!stock) return 'Live Ticks'
+          return <>
+            {stock.displayName}
+            <span style={{ fontSize: '0.7rem', color: 'var(--pm-text-muted, #9ca3af)', fontWeight: 400 }}> ({stock.symbol})</span>
+          </>
+        })()}
+        <FontAwesomeIcon
+          icon={faRepeat}
+          onClick={() => setSheetOpen(true)}
+          style={{ fontSize: '0.75rem', color: 'var(--pm-primary, #1a56db)', cursor: 'pointer', marginLeft: '0.25rem' }}
+        />
       </h2>
 
       {isDisconnected && (
@@ -705,15 +782,13 @@ export default function LiveTicks() {
       <MinuteProgressBar />
       {!isDisconnected && (
         <>
-          <div style={{ marginBottom: '0.75rem', textAlign: 'center' }}>
-            <select value={selectedInstrumentKey} onChange={handleStockChange} style={{ padding: '0.45rem', minWidth: '260px' }}>
-              {stocks.map((stock) => (
-                <option key={stock.instrumentKey} value={stock.instrumentKey}>
-                  {stock.symbol} — {stock.displayName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <StockBottomSheet
+            stocks={stocks}
+            selectedInstrumentKey={selectedInstrumentKey}
+            onSelect={handleStockSelect}
+            isOpen={sheetOpen}
+            onClose={() => setSheetOpen(false)}
+          />
 
           <div style={styles.chartCard}>
             <h3 style={styles.chartTitle}>Live Price</h3>
