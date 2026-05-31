@@ -71,13 +71,6 @@ export default class FirebaseClient {
     await this._setValue(`scripts/${scriptName}`, status);
   }
 
-  // ─── Config ───────────────────────────────────────────────────────
-
-  onEnabledChange(callback: (enabled: boolean | null) => void): Unsubscribe {
-    return this._onChange("config/enabled", (value) => {
-      callback(value as boolean | null);
-    });
-  }
 
   // ─── Ticks & Signals ──────────────────────────────────────────────
 

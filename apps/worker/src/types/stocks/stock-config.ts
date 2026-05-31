@@ -9,7 +9,6 @@ export interface StockConfig {
   tickSize?: number;
   lotSize?: number;
   exchange: "NSE" | "BSE";
-  enabled: boolean;
   addedAt: string;
   updatedAt: string;
   status?: "pending_sync" | "sync_failed" | "synced" | "ready";

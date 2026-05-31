@@ -97,11 +97,11 @@ class LiveStreamScript extends BaseScript {
 
     // Load stocks from Firebase and listen for changes
     this.firebase.onStocksChange((stocks) => {
-      const enabled = stocks
-        ? Object.values(stocks).filter((s) => s.enabled && s.securityId)
+      const active = stocks
+        ? Object.values(stocks).filter((s) => s.securityId)
         : [];
 
-      this.trackedStocks = enabled.map((s) => this.toTrackedStock(s));
+      this.trackedStocks = active.map((s) => this.toTrackedStock(s));
       this.initializeInstrumentMaps();
 
       this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);

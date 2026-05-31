@@ -10,15 +10,13 @@ import EmptyState from '../components/EmptyState'
 import Loader from '../components/Loader'
 import BottomSheet from '../components/BottomSheet'
 import DetailRow from '../components/DetailRow'
-import Toggle from '../components/Toggle'
 import SectionHeader from '../components/SectionHeader'
 import { useLiveTicks } from '../context/LiveTicksContext'
 
 function getStatusBadge(stock) {
   if (stock.status === 'pending_sync') return { label: 'Syncing', color: 'var(--color-warning)' }
   if (stock.status === 'sync_failed') return { label: 'Failed', color: 'var(--color-danger)' }
-  if (stock.enabled) return { label: 'Active', color: 'var(--color-success)' }
-  return { label: 'Off', color: 'var(--color-text-muted)' }
+  return null
 }
 
 export default function Stocks() {
@@ -59,11 +57,6 @@ export default function Stocks() {
       type: 'stock_sync', payload: { symbol }, status: 'pending', createdAt: now,
     })
     setSymbolInput('')
-  }
-
-  const handleToggleEnabled = async (stock) => {
-    await set(ref(db, `stocks/${stock._key}/enabled`), !stock.enabled)
-    await set(ref(db, `stocks/${stock._key}/updatedAt`), moment().utcOffset('+05:30').toISOString())
   }
 
   const handleRemove = async (stock) => {
@@ -112,7 +105,7 @@ export default function Stocks() {
                     </span>
                   </div>
                 )}
-                <Badge label={badge.label} color={badge.color} />
+                {badge && <Badge label={badge.label} color={badge.color} />}
               </div>
             )
           })}
@@ -157,9 +150,6 @@ export default function Stocks() {
                 <DetailRow label="Market Cap" value={selectedStock.mcap ? `${selectedStock.mcap.toLocaleString('en-IN')} Cr` : undefined} />
                 <DetailRow label="Added" value={selectedStock.addedAt ? moment(selectedStock.addedAt).format('D MMM YYYY') : undefined} />
 
-                <div style={{ marginTop: 'var(--space-xl)' }}>
-                  <Toggle label="Enabled" enabled={!!selectedStock.enabled} onToggle={() => handleToggleEnabled(selectedStock)} />
-                </div>
               </>
             )}
 
