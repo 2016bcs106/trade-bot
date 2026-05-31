@@ -59,8 +59,6 @@ export class StockSyncRequestHandler implements RequestHandler {
           pmlId: "",
           exchange: "NSE",
           enabled: false,
-          autoOptimize: false,
-          currentProductionVersion: null,
           addedAt: nowISO(),
           updatedAt: nowISO(),
           status: "sync_failed",
@@ -70,7 +68,6 @@ export class StockSyncRequestHandler implements RequestHandler {
     }
 
     if (isResync) {
-      // Re-sync: update metadata but preserve user config (enabled, autoOptimize, currentProductionVersion)
       await firebase.updateStock(symbol, {
         name: result.name,
         securityId: result.security_id,
@@ -85,7 +82,6 @@ export class StockSyncRequestHandler implements RequestHandler {
         status: "ready",
       });
     } else {
-      // First sync: create full record
       const config: StockConfig = {
         symbol: result.symbol,
         name: result.name,
@@ -98,8 +94,6 @@ export class StockSyncRequestHandler implements RequestHandler {
         lotSize: result.lot_size,
         exchange: "NSE",
         enabled: true,
-        autoOptimize: true,
-        currentProductionVersion: null,
         addedAt: nowISO(),
         updatedAt: nowISO(),
         status: "synced",

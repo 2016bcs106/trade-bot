@@ -2,7 +2,7 @@ import "../config/env.ts";
 import { dirname, resolve } from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { mkdirSync, appendFileSync, statSync, readdirSync, unlinkSync, readFileSync } from "fs";
+import { mkdirSync, appendFileSync, readdirSync, unlinkSync } from "fs";
 import { createServer } from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import moment from "moment";
@@ -452,10 +452,6 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
-  private getFileSizeMB(filePath: string): string {
-    try { return (statSync(filePath).size / (1024 * 1024)).toFixed(2); }
-    catch { return "0.00"; }
-  }
 }
 
 new LiveStreamScript().start();

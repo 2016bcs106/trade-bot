@@ -7,7 +7,6 @@ import { TickData } from "../types/market-data/tick-data.ts";
 import { SignalData } from "../types/market-data/signal-data.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
-import { AuditEvent } from "../types/audit/index.ts";
 
 const app = initializeApp({
   databaseURL: process.env.FIREBASE_DATABASE_URL,
@@ -129,16 +128,6 @@ export default class FirebaseClient {
     return this._onChange("stocks", (value) => {
       callback(value as Record<string, StockConfig> | null);
     });
-  }
-
-
-  // ─── Audit ─────────────────────────────────────────────────────────
-
-  async pushAuditEvent(event: Omit<AuditEvent, "id">): Promise<string> {
-    const auditRef = push(ref(this.db, "audit"));
-    const id = auditRef.key!;
-    await set(auditRef, { ...event, id });
-    return id;
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────
