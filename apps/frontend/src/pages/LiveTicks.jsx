@@ -141,22 +141,6 @@ const pressureChartOptions = {
 
 // ─── Sub-components ──────────────────────────────────────────────
 
-function MinuteProgressBar() {
-  const [seconds, setSeconds] = useState(moment().seconds())
-
-  useEffect(() => {
-    const interval = setInterval(() => setSeconds(moment().seconds()), 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const progress = (seconds / 60) * 100
-
-  return (
-    <div style={styles.progressTrack}>
-      <div style={{ ...styles.progressFill, width: `${progress}%` }} />
-    </div>
-  )
-}
 
 // ─── Main Component ──────────────────────────────────────────────
 
@@ -382,8 +366,6 @@ export default function LiveTicks() {
         </div>
       )}
 
-      <MinuteProgressBar />
-
       {!isDisconnected && (
         <>
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
@@ -535,21 +517,6 @@ const styles = {
     height: '28vh',
     maxHeight: '240px',
     minHeight: '140px',
-  },
-  progressTrack: {
-    position: 'fixed',
-    bottom: '49px',
-    left: 0,
-    right: 0,
-    height: '2px',
-    background: 'var(--color-border)',
-    zIndex: 1001,
-  },
-  progressFill: {
-    height: '100%',
-    background: 'var(--color-primary)',
-    transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    borderRadius: '0 1px 1px 0',
   },
   sheetItem: {
     width: '100%',

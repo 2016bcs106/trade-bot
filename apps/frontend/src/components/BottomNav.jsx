@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChartLine, faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
+import moment from 'moment'
 
 const navItems = [
   { path: '/', label: 'Live', icon: faChartLine },
@@ -11,6 +13,23 @@ const navItems = [
 
 const hiddenPaths = ['/login', '/paytm-money-callback']
 
+function MinuteProgressBar() {
+  const [seconds, setSeconds] = useState(moment().seconds())
+
+  useEffect(() => {
+    const interval = setInterval(() => setSeconds(moment().seconds()), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const progress = (seconds / 60) * 100
+
+  return (
+    <div style={styles.progressTrack}>
+      <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+    </div>
+  )
+}
+
 export default function BottomNav() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -19,6 +38,7 @@ export default function BottomNav() {
 
   return (
     <nav style={styles.nav}>
+      <MinuteProgressBar />
       {navItems.map((item) => {
         const isActive = location.pathname === item.path
         const color = isActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
@@ -64,5 +84,19 @@ const styles = {
   label: {
     fontSize: '10px',
     fontWeight: 500,
+  },
+  progressTrack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '2px',
+    background: 'var(--color-border)',
+  },
+  progressFill: {
+    height: '100%',
+    background: 'var(--color-primary)',
+    transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    borderRadius: '0 1px 1px 0',
   },
 }
