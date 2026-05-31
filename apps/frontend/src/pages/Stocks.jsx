@@ -10,11 +10,7 @@ import {
   faToggleOff,
   faPlus,
   faSync,
-  faBrain,
   faInfoCircle,
-  faTrophy,
-  faClock,
-  faLayerGroup,
 } from '@fortawesome/free-solid-svg-icons'
 
 const styles = {
@@ -41,29 +37,10 @@ const styles = {
     fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0.04em',
     padding: '0.15rem 0.4rem', borderRadius: '4px', textAlign: 'center', flexShrink: 0,
   },
-  modelRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    marginTop: '0.4rem',
-    paddingTop: '0.4rem',
-    borderTop: `1px solid ${colors.light}`,
-    fontSize: '0.7rem',
-    color: colors.muted,
-  },
-  modelChip: {
-    fontSize: '0.6rem',
-    fontWeight: '600',
-    padding: '0.1rem 0.35rem',
-    borderRadius: '4px',
-    background: 'rgba(59, 130, 246, 0.1)',
-    color: '#3b82f6',
-  },
   iconBtn: {
     background: 'none', border: 'none', cursor: 'pointer',
     padding: '0.3rem', fontSize: '0.9rem', color: 'var(--pm-text-muted)',
   },
-  // Modals
   overlay: {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
     background: 'rgba(0,0,0,0.6)', zIndex: 1000,
@@ -87,26 +64,6 @@ const styles = {
   sectionHeader: { fontSize: '0.6rem', fontWeight: '700', textTransform: 'uppercase', color: colors.muted, letterSpacing: '0.05em', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: `1px solid ${colors.light}` },
   actionRow: { display: 'flex', gap: '0.75rem', marginTop: '0.25rem', paddingTop: '0.6rem', borderTop: `1px solid ${colors.light}`, flexWrap: 'wrap' },
   actionBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0' },
-  // Model version card inside models modal
-  versionCard: {
-    padding: '0.6rem 0',
-    borderBottom: `1px solid ${colors.light}`,
-  },
-  versionHeader: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  },
-  versionTag: {
-    fontSize: '0.7rem', fontWeight: '700', color: colors.dark,
-  },
-  prodBadge: {
-    fontSize: '0.55rem', fontWeight: '700', padding: '0.1rem 0.3rem',
-    borderRadius: '3px', background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e',
-  },
-  metricRow: {
-    display: 'flex', gap: '0.75rem', marginTop: '0.2rem', flexWrap: 'wrap',
-  },
-  metric: { fontSize: '0.65rem', color: colors.muted },
-  metricVal: { fontWeight: '600', color: colors.dark },
   emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', gap: '0.75rem' },
   addBar: {
     position: 'fixed', bottom: '4.5rem', left: 0, right: 0, padding: '0.6rem 1rem',
@@ -127,9 +84,7 @@ const styles = {
 
 function getStatusStyle(stock) {
   if (stock.status === 'pending_sync') return { background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', text: 'SYNCING' }
-  if (stock.status === 'pending_training') return { background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', text: 'TRAINING' }
   if (stock.status === 'sync_failed') return { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', text: 'SYNC FAILED' }
-  if (stock.status === 'training_failed') return { background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', text: 'TRAIN FAILED' }
   if (stock.enabled) return { background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', text: 'ACTIVE' }
   return { background: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', text: 'OFF' }
 }
@@ -155,8 +110,7 @@ function ToggleRow({ label, enabled, onToggle }) {
   )
 }
 
-// ─── Stock Detail Modal ────────────────────────────────────────────────
-function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimize, onRemove, onSync }) {
+function StockDetailModal({ stock, onClose, onToggleEnabled, onRemove, onSync }) {
   const isPending = stock.status === 'pending_sync'
   const isFailed = stock.status === 'sync_failed'
 
@@ -207,28 +161,7 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
               <DetailRow label="Updated" value={stock.updatedAt ? new Date(stock.updatedAt).toLocaleDateString('en-IN') : undefined} />
 
               <div style={styles.sectionHeader}>Configuration</div>
-              <ToggleRow label="Predictions Enabled" enabled={!!stock.enabled} onToggle={onToggleEnabled} />
-              <ToggleRow label="Auto Model Selection" enabled={!!stock.autoOptimize} onToggle={onToggleAutoOptimize} />
-              <DetailRow label="Active Model" value={stock.currentProductionVersion || '—'} />
-
-              {stock.optimalEntry && stock.optimalExit && (
-                <>
-                  <div style={styles.sectionHeader}>Optimal Trade Window</div>
-                  <DetailRow label="Entry Time" value={stock.optimalEntry} />
-                  <DetailRow label="Exit Time" value={stock.optimalExit} />
-                  {stock.optimalStats && (
-                    <>
-                      <DetailRow label="Win Rate" value={`${stock.optimalStats.winRate.toFixed(1)}%`} />
-                      <DetailRow label="Avg PnL" value={`${stock.optimalStats.avgPnL >= 0 ? '+' : ''}${stock.optimalStats.avgPnL.toFixed(2)}%`} />
-                      <DetailRow label="Sharpe Ratio" value={stock.optimalStats.sharpe.toFixed(2)} />
-                      <DetailRow label="Consistency" value={`${stock.optimalStats.consistency.toFixed(0)}%`} />
-                      <DetailRow label="Max Drawdown" value={`${stock.optimalStats.maxDrawdown.toFixed(2)}%`} />
-                      <DetailRow label="Days Backtested" value={stock.optimalStats.daysBacktested} />
-                      <DetailRow label="Backtest Date" value={stock.optimalStats.backtestDate} />
-                    </>
-                  )}
-                </>
-              )}
+              <ToggleRow label="Enabled" enabled={!!stock.enabled} onToggle={onToggleEnabled} />
             </>
           )}
           <div style={{ ...styles.actionRow, justifyContent: 'flex-end' }}>
@@ -242,97 +175,15 @@ function StockDetailModal({ stock, onClose, onToggleEnabled, onToggleAutoOptimiz
   )
 }
 
-// ─── Models Modal ──────────────────────────────────────────────────────
-function ModelsModal({ symbol, models, productionVersion, onClose, onPromote, onDelete, onRetrain }) {
-  const versions = models
-    ? Object.entries(models)
-        .map(([v, meta]) => ({ version: v, ...meta }))
-        .sort((a, b) => (b.trainedAt || '').localeCompare(a.trainedAt || ''))
-    : []
-
-  return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <span style={styles.modalTitle}>{symbol} — Models</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <button
-              style={{ ...styles.actionBtn, color: '#3b82f6', fontSize: '0.75rem', margin: 0 }}
-              onClick={onRetrain}
-              title="Retrain model"
-            >
-              <FontAwesomeIcon icon={faSync} /> Retrain
-            </button>
-            <button style={styles.modalClose} onClick={onClose}>×</button>
-          </div>
-        </div>
-        <div style={styles.modalBody}>
-          {versions.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: colors.muted, fontSize: '0.8rem' }}>
-              No models trained yet
-            </div>
-          ) : (
-            versions.map((m) => (
-              <div key={m.version} style={styles.versionCard}>
-                <div style={styles.versionHeader}>
-                  <span style={styles.versionTag}>{m.version}</span>
-                  {m.version === productionVersion && (
-                    <span style={styles.prodBadge}>
-                      <FontAwesomeIcon icon={faTrophy} /> PROD
-                    </span>
-                  )}
-                </div>
-                <div style={styles.metricRow}>
-                  {m.modelType && <span style={styles.metric}>Type: <span style={styles.metricVal}>{m.modelType}</span></span>}
-                  {m.metrics?.mae != null && <span style={styles.metric}>MAE: <span style={styles.metricVal}>{m.metrics.mae.toFixed(2)}</span></span>}
-                  {m.metrics?.rmse != null && <span style={styles.metric}>RMSE: <span style={styles.metricVal}>{m.metrics.rmse.toFixed(2)}</span></span>}
-                  {m.metrics?.r2 != null && <span style={styles.metric}>R²: <span style={styles.metricVal}>{m.metrics.r2.toFixed(3)}</span></span>}
-                </div>
-                <div style={styles.metricRow}>
-                  {m.trainedAt && <span style={styles.metric}><FontAwesomeIcon icon={faClock} /> {new Date(m.trainedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</span>}
-                  {m.trainingDays && <span style={styles.metric}>{m.trainingDays}d data</span>}
-                  {m.featureCount && <span style={styles.metric}>{m.featureCount} features</span>}
-                </div>
-                {/* Action buttons */}
-                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem' }}>
-                  {m.version !== productionVersion && (
-                    <button
-                      style={{ ...styles.actionBtn, color: '#22c55e', fontSize: '0.65rem' }}
-                      onClick={() => onPromote(m.version)}
-                    >
-                      <FontAwesomeIcon icon={faTrophy} /> Promote
-                    </button>
-                  )}
-                  <button
-                    style={{ ...styles.actionBtn, color: '#ef4444', fontSize: '0.65rem' }}
-                    onClick={() => onDelete(m.version)}
-                  >
-                    <FontAwesomeIcon icon={faTrash} /> Delete
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Main Page ─────────────────────────────────────────────────────────
 export default function Stocks() {
   const [stocks, setStocks] = useState(undefined)
-  const [models, setModels] = useState({})
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
-  const [modelsSymbol, setModelsSymbol] = useState(null)
 
   useEffect(() => {
     const stocksRef = ref(db, 'stocks')
-    const modelsRef = ref(db, 'models')
-    const unsub1 = onValue(stocksRef, (snap) => setStocks(snap.val() || {}))
-    const unsub2 = onValue(modelsRef, (snap) => setModels(snap.val() || {}))
-    return () => { unsub1(); unsub2() }
+    const unsub = onValue(stocksRef, (snap) => setStocks(snap.val() || {}))
+    return () => unsub()
   }, [])
 
   const stockList = stocks
@@ -347,14 +198,11 @@ export default function Stocks() {
   const handleAdd = async () => {
     const symbol = symbolInput.trim().toUpperCase()
     if (!symbol || existingSymbols.includes(symbol)) { setSymbolInput(''); return }
-    // Immediately show pending_sync status
     await set(ref(db, `stocks/${symbol}`), {
       symbol,
       name: symbol,
       status: 'pending_sync',
       enabled: true,
-      autoOptimize: true,
-      currentProductionVersion: null,
       addedAt: moment().utcOffset('+05:30').toISOString(),
       updatedAt: moment().utcOffset('+05:30').toISOString(),
     })
@@ -372,14 +220,8 @@ export default function Stocks() {
     await set(ref(db, `stocks/${stock._key}/updatedAt`), Date.now())
   }
 
-  const handleToggleAutoOptimize = async (stock) => {
-    await set(ref(db, `stocks/${stock._key}/autoOptimize`), !stock.autoOptimize)
-    await set(ref(db, `stocks/${stock._key}/updatedAt`), Date.now())
-  }
-
   const handleRemove = async (stock) => {
     setDetailSymbol(null)
-    // Route through request queue so worker also cleans local model files
     await push(ref(db, 'request_queue'), {
       type: 'stock_sync',
       payload: { symbol: stock._key, action: 'remove' },
@@ -388,60 +230,13 @@ export default function Stocks() {
     })
   }
 
-  const handlePromoteModel = async (symbol, version) => {
-    const prevProdVersion = stocks[symbol]?.currentProductionVersion
-
-    // Update stock's production version pointer
-    await set(ref(db, `stocks/${symbol}/currentProductionVersion`), version)
-    await set(ref(db, `stocks/${symbol}/updatedAt`), Date.now())
-
-    // Update model metadata state: new version → production
-    if (models[symbol]?.[version]) {
-      await set(ref(db, `models/${symbol}/${version}/state`), 'production')
-      await set(ref(db, `models/${symbol}/${version}/promotedAt`), moment().utcOffset('+05:30').format('YYYY-MM-DD HH:mm:ss'))
-    }
-
-    // Retire previous production model
-    if (prevProdVersion && prevProdVersion !== version && models[symbol]?.[prevProdVersion]) {
-      await set(ref(db, `models/${symbol}/${prevProdVersion}/state`), 'retired')
-      await set(ref(db, `models/${symbol}/${prevProdVersion}/retiredAt`), moment().utcOffset('+05:30').format('YYYY-MM-DD HH:mm:ss'))
-    }
-  }
-
-  const handleDeleteModel = async (symbol, version) => {
-    // If deleting the production version, clear it
-    if (stocks[symbol]?.currentProductionVersion === version) {
-      await set(ref(db, `stocks/${symbol}/currentProductionVersion`), null)
-    }
-    await remove(ref(db, `models/${symbol}/${version}`))
-  }
-
-  const handleRetrain = async (symbol) => {
-    // Immediately show pending_training status
-    await set(ref(db, `stocks/${symbol}/status`), 'pending_training')
+  const handleSync = async (symbol) => {
     await push(ref(db, 'request_queue'), {
-      type: 'train',
+      type: 'stock_sync',
       payload: { symbol },
       status: 'pending',
       createdAt: moment().utcOffset('+05:30').toISOString(),
     })
-  }
-
-  const handleSync = async (symbol) => {
-    await push(ref(db, 'request_queue'), {
-      type: 'stock_sync',
-      payload: { symbol, shouldSkipTraining: true, shouldSkipPredicting: true },
-      status: 'pending',
-      createdAt: moment().utcOffset('+05:30').toISOString(),
-    })
-  }
-
-  // Get production model metadata for a stock
-  const getProductionModel = (symbol) => {
-    const stock = stocks?.[symbol]
-    const prodVersion = stock?.currentProductionVersion
-    if (!prodVersion || !models[symbol]?.[prodVersion]) return null
-    return { version: prodVersion, ...models[symbol][prodVersion] }
   }
 
   if (stocks === undefined) {
@@ -460,10 +255,8 @@ export default function Stocks() {
         ) : (
           stockList.map((stock) => {
             const status = getStatusStyle(stock)
-            const prodModel = getProductionModel(stock.symbol)
             return (
               <div key={stock._key} style={styles.card}>
-                {/* Top row: symbol + status + action icons */}
                 <div style={styles.cardTop}>
                   <div style={styles.symbolCol}>
                     <span style={styles.symbol}>{stock.symbol}</span>
@@ -472,70 +265,16 @@ export default function Stocks() {
                   <span style={{ ...styles.statusBadge, background: status.background, color: status.color }}>
                     {status.text}
                   </span>
-                  {stock.status !== 'pending_sync' && stock.status !== 'pending_training' && (
-                    <button style={{ ...styles.iconBtn, color: '#3b82f6', fontSize: '0.65rem', fontWeight: '600' }} title="Retrain" onClick={() => handleRetrain(stock.symbol)}>
-                      <FontAwesomeIcon icon={faSync} /> Retrain
-                    </button>
-                  )}
-                  <button style={styles.iconBtn} title="View models" onClick={() => setModelsSymbol(stock.symbol)}>
-                    <FontAwesomeIcon icon={faLayerGroup} />
-                  </button>
                   <button style={styles.iconBtn} title="Stock details" onClick={() => setDetailSymbol(stock.symbol)}>
                     <FontAwesomeIcon icon={faInfoCircle} />
                   </button>
                 </div>
-
-                {/* Production model summary row */}
-                {prodModel && (
-                  <div style={styles.modelRow}>
-                    <FontAwesomeIcon icon={faBrain} style={{ color: '#3b82f6', fontSize: '0.7rem' }} />
-                    <span style={styles.modelChip}>{prodModel.modelType || 'model'}</span>
-                    <span>v{prodModel.version}</span>
-                    {prodModel.metrics?.mae != null && <span>MAE: <b>{prodModel.metrics.mae.toFixed(2)}</b></span>}
-                    {prodModel.trainedAt && (
-                      <span style={{ marginLeft: 'auto', fontSize: '0.6rem', color: colors.muted }}>
-                        {new Date(prodModel.trainedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {/* Optimal trade window row */}
-                {stock.optimalEntry && stock.optimalExit && (
-                  <div style={styles.modelRow}>
-                    <FontAwesomeIcon icon={faClock} style={{ color: '#22c55e', fontSize: '0.7rem' }} />
-                    <span style={{ fontWeight: '600', color: colors.dark }}>
-                      {stock.optimalEntry} → {stock.optimalExit}
-                    </span>
-                    {stock.optimalStats?.winRate != null && (
-                      <span style={{ color: '#22c55e', fontWeight: '600' }}>
-                        {stock.optimalStats.winRate.toFixed(0)}% win
-                      </span>
-                    )}
-                    {stock.optimalStats?.avgPnL != null && (
-                      <span style={{ color: stock.optimalStats.avgPnL >= 0 ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
-                        {stock.optimalStats.avgPnL >= 0 ? '+' : ''}{stock.optimalStats.avgPnL.toFixed(2)}%
-                      </span>
-                    )}
-                    {stock.optimalStats?.sharpe != null && (
-                      <span style={{ marginLeft: 'auto', fontSize: '0.6rem', color: colors.muted }}>
-                        SR: {stock.optimalStats.sharpe.toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {!prodModel && stock.enabled && !stock.status && (
-                  <div style={styles.modelRow}>
-                    <FontAwesomeIcon icon={faBrain} style={{ color: colors.muted, fontSize: '0.7rem' }} />
-                    <span style={{ fontStyle: 'italic' }}>No model trained yet</span>
-                  </div>
-                )}
               </div>
             )
           })
         )}
       </div>
 
-      {/* Add stock bar */}
       <div style={styles.addBar}>
         <input
           style={styles.addInput}
@@ -549,28 +288,13 @@ export default function Stocks() {
         </button>
       </div>
 
-      {/* Stock detail modal */}
       {selectedStock && (
         <StockDetailModal
           stock={selectedStock}
           onClose={() => setDetailSymbol(null)}
           onToggleEnabled={() => handleToggleEnabled(selectedStock)}
-          onToggleAutoOptimize={() => handleToggleAutoOptimize(selectedStock)}
           onRemove={() => handleRemove(selectedStock)}
           onSync={() => handleSync(selectedStock.symbol)}
-        />
-      )}
-
-      {/* Models modal */}
-      {modelsSymbol && (
-        <ModelsModal
-          symbol={modelsSymbol}
-          models={models[modelsSymbol] || {}}
-          productionVersion={stocks[modelsSymbol]?.currentProductionVersion}
-          onClose={() => setModelsSymbol(null)}
-          onPromote={(version) => handlePromoteModel(modelsSymbol, version)}
-          onDelete={(version) => handleDeleteModel(modelsSymbol, version)}
-          onRetrain={() => handleRetrain(modelsSymbol)}
         />
       )}
     </div>
