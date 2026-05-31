@@ -13,16 +13,16 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 'var(--space-xs) 0',
+    padding: '11px 0',
+    minHeight: '44px',
+    borderBottom: '1px solid var(--color-border)',
   },
   label: {
-    fontSize: 'var(--font-md)',
-    color: 'var(--color-text-muted)',
-    fontWeight: 500,
+    fontSize: 'var(--font-body)',
+    color: 'var(--color-text)',
   },
   value: {
-    fontSize: 'var(--font-md)',
-    color: 'var(--color-text)',
-    fontWeight: 600,
+    fontSize: 'var(--font-body)',
+    color: 'var(--color-text-muted)',
   },
 }

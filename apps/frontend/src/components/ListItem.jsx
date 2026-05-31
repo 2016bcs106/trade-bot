@@ -1,11 +1,12 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 
-export default function ListItem({ icon, iconBg, title, subtitle, right, isLast, onClick }) {
+export default function ListItem({ icon, iconColor, title, subtitle, right, isLast, onClick, showChevron }) {
   return (
     <div style={{ ...styles.item, ...(isLast ? {} : styles.bordered) }} onClick={onClick}>
       {icon && (
-        <div style={{ ...styles.iconCircle, background: iconBg || 'var(--color-info)' }}>
-          <FontAwesomeIcon icon={icon} style={{ color: '#fff' }} />
+        <div style={{ ...styles.iconCircle, background: iconColor || 'var(--color-primary)' }}>
+          <FontAwesomeIcon icon={icon} style={{ color: '#fff', fontSize: '0.8rem' }} />
         </div>
       )}
       <div style={styles.content}>
@@ -13,6 +14,7 @@ export default function ListItem({ icon, iconBg, title, subtitle, right, isLast,
         {subtitle && <div style={styles.subtitle}>{subtitle}</div>}
       </div>
       {right && <div style={styles.right}>{right}</div>}
+      {showChevron && <FontAwesomeIcon icon={faChevronRight} style={styles.chevron} />}
     </div>
   )
 }
@@ -22,20 +24,20 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-md)',
-    padding: 'var(--space-md) var(--space-lg)',
+    padding: '14px var(--space-lg)',
     cursor: 'pointer',
+    minHeight: '44px',
   },
   bordered: {
     borderBottom: '1px solid var(--color-border)',
   },
   iconCircle: {
-    width: '2rem',
-    height: '2rem',
-    borderRadius: '8px',
+    width: '30px',
+    height: '30px',
+    borderRadius: '7px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 'var(--font-base)',
     flexShrink: 0,
   },
   content: {
@@ -43,16 +45,23 @@ const styles = {
     minWidth: 0,
   },
   title: {
-    fontSize: 'var(--font-md)',
-    fontWeight: 600,
+    fontSize: 'var(--font-body)',
+    fontWeight: 400,
     color: 'var(--color-text)',
   },
   subtitle: {
-    fontSize: 'var(--font-sm)',
+    fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
     marginTop: '2px',
   },
   right: {
     flexShrink: 0,
+    fontSize: 'var(--font-subhead)',
+    color: 'var(--color-text-muted)',
+  },
+  chevron: {
+    fontSize: '0.7rem',
+    color: 'var(--color-text-tertiary)',
+    marginLeft: 'var(--space-sm)',
   },
 }

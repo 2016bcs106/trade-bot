@@ -18,14 +18,12 @@ const styles = {
   card: {
     background: 'var(--color-card)',
     borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--color-border)',
-    padding: 'var(--space-md) var(--space-lg)',
+    padding: 'var(--space-lg)',
     marginBottom: 'var(--space-sm)',
   },
   list: {
     background: 'var(--color-card)',
     borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--color-border)',
     overflow: 'hidden',
   },
 }

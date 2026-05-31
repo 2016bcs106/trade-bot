@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faRotate, faServer, faCog, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { faArrowRotateRight, faServer, faCheck } from '@fortawesome/free-solid-svg-icons'
 import { db, ref, push } from '../utils/firebase'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
@@ -25,27 +25,27 @@ export default function Settings() {
 
   return (
     <Page>
-      <PageHeader icon={faCog} title="Settings" />
+      <PageHeader title="Settings" />
 
-      <SectionHeader>App</SectionHeader>
+      <SectionHeader>General</SectionHeader>
       <CardList>
         <ListItem
-          icon={faRotate}
-          iconBg="var(--color-info)"
+          icon={faArrowRotateRight}
+          iconColor="var(--color-primary)"
           title="Force Reload"
-          subtitle="Clear cache and reload the page"
+          subtitle="Clear cache and reload"
           onClick={() => window.location.reload(true)}
           isLast
         />
       </CardList>
 
-      <SectionHeader style={{ marginTop: 'var(--space-xl)' }}>Deploy</SectionHeader>
+      <SectionHeader>System</SectionHeader>
       <CardList>
         <ListItem
           icon={updateQueued ? faCheck : faServer}
-          iconBg={updateQueued ? 'var(--color-success)' : '#8b5cf6'}
+          iconColor={updateQueued ? 'var(--color-success)' : '#8e8e93'}
           title="System Update"
-          subtitle={updateQueued ? 'Update queued! Worker will pull, deploy & restart.' : 'Pull latest code, deploy frontend, restart backend'}
+          subtitle={updateQueued ? 'Queued — worker will pull & restart' : 'Pull latest code, deploy, restart'}
           onClick={!updateQueued ? handleSystemUpdate : undefined}
           isLast
         />

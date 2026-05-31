@@ -1,10 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faChartBar, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
 
 const navItems = [
-  { path: '/', label: 'Home', icon: faChartLine },
-  { path: '/stocks', label: 'Stocks', icon: faChartBar },
+  { path: '/', label: 'Live', icon: faChartLine },
+  { path: '/stocks', label: 'Stocks', icon: faListUl },
   { path: '/monitor', label: 'Monitor', icon: faHeartPulse },
   { path: '/settings', label: 'Settings', icon: faGear },
 ]
@@ -21,10 +21,11 @@ export default function BottomNav() {
     <nav style={styles.nav}>
       {navItems.map((item) => {
         const isActive = location.pathname === item.path
+        const color = isActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
         return (
-          <button key={item.path} onClick={() => navigate(item.path)} style={{ ...styles.item, ...(isActive ? styles.itemActive : {}) }}>
-            <FontAwesomeIcon icon={item.icon} style={{ ...styles.icon, ...(isActive ? styles.iconActive : {}) }} />
-            <span style={{ ...styles.label, ...(isActive ? styles.labelActive : {}) }}>{item.label}</span>
+          <button key={item.path} onClick={() => navigate(item.path)} style={styles.item}>
+            <FontAwesomeIcon icon={item.icon} style={{ fontSize: '1.25rem', color }} />
+            <span style={{ ...styles.label, color }}>{item.label}</span>
           </button>
         )
       })}
@@ -41,40 +42,27 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-around',
     alignItems: 'center',
-    background: 'var(--color-card)',
-    borderTop: '1px solid var(--color-border)',
-    boxShadow: 'var(--shadow-sm)',
-    padding: '0.6rem 0',
+    background: 'rgba(249, 249, 249, 0.94)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderTop: '0.5px solid var(--color-separator)',
+    paddingTop: '8px',
+    paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
     zIndex: 1000,
   },
   item: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 'var(--space-xs)',
-    padding: '0.4rem 1.5rem',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
+    gap: '3px',
+    padding: '0',
     border: 'none',
     background: 'transparent',
-    transition: 'background 0.2s',
-  },
-  itemActive: {
-    background: 'var(--color-primary-light)',
-  },
-  icon: {
-    fontSize: 'var(--font-xl)',
-    color: 'var(--color-text-muted)',
-  },
-  iconActive: {
-    color: 'var(--color-primary)',
+    cursor: 'pointer',
+    minWidth: '64px',
   },
   label: {
-    fontSize: 'var(--font-xs)',
-    fontWeight: 600,
-    color: 'var(--color-text-muted)',
-  },
-  labelActive: {
-    color: 'var(--color-primary)',
+    fontSize: '10px',
+    fontWeight: 500,
   },
 }

@@ -16,19 +16,21 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '4rem var(--space-lg)',
-    gap: 'var(--space-md)',
+    padding: '60px var(--space-lg)',
+    gap: 'var(--space-sm)',
   },
   icon: {
-    fontSize: '2rem',
-    color: 'var(--color-text-muted)',
+    fontSize: '2.5rem',
+    color: 'var(--color-text-tertiary)',
+    marginBottom: 'var(--space-sm)',
   },
   title: {
-    fontSize: 'var(--font-md)',
+    fontSize: 'var(--font-body)',
     color: 'var(--color-text-muted)',
+    fontWeight: 500,
   },
   subtitle: {
-    fontSize: 'var(--font-sm)',
-    color: 'var(--color-text-muted)',
+    fontSize: 'var(--font-footnote)',
+    color: 'var(--color-text-tertiary)',
   },
 }

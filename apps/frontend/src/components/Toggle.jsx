@@ -1,16 +1,10 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faToggleOn, faToggleOff } from '@fortawesome/free-solid-svg-icons'
-
 export default function Toggle({ label, enabled, onToggle }) {
   return (
     <div style={styles.row}>
       <span style={styles.label}>{label}</span>
-      <button onClick={onToggle} style={styles.button}>
-        <FontAwesomeIcon
-          icon={enabled ? faToggleOn : faToggleOff}
-          style={{ color: enabled ? 'var(--color-success)' : 'var(--color-text-muted)' }}
-        />
-      </button>
+      <div onClick={onToggle} style={{ ...styles.track, background: enabled ? 'var(--color-success)' : 'var(--color-text-tertiary)' }}>
+        <div style={{ ...styles.thumb, transform: enabled ? 'translateX(20px)' : 'translateX(0)' }} />
+      </div>
     </div>
   )
 }
@@ -20,18 +14,27 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 'var(--space-sm) 0',
+    padding: '12px 0',
+    minHeight: '44px',
   },
   label: {
-    fontSize: 'var(--font-md)',
-    fontWeight: 500,
+    fontSize: 'var(--font-body)',
     color: 'var(--color-text)',
   },
-  button: {
-    background: 'none',
-    border: 'none',
+  track: {
+    width: '51px',
+    height: '31px',
+    borderRadius: '16px',
+    padding: '2px',
     cursor: 'pointer',
-    fontSize: '1.3rem',
-    padding: 0,
+    transition: 'background 0.25s ease',
+  },
+  thumb: {
+    width: '27px',
+    height: '27px',
+    borderRadius: '14px',
+    background: '#fff',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+    transition: 'transform 0.25s ease',
   },
 }

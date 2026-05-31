@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- iOS icon background with continuous corner radius -->
+  <rect width="120" height="120" rx="26" fill="#f2f2f7"/>
+  <!-- Green candle -->
+  <line x1="35" y1="28" x2="35" y2="92" stroke="#30d158" stroke-width="4" stroke-linecap="round"/>
+  <rect x="28" y="42" width="14" height="30" rx="3" fill="#30d158"/>
+  <!-- Red candle -->
+  <line x1="60" y1="35" x2="60" y2="95" stroke="#ff453a" stroke-width="4" stroke-linecap="round"/>
+  <rect x="53" y="52" width="14" height="25" rx="3" fill="#ff453a"/>
+  <!-- Green candle -->
+  <line x1="85" y1="22" x2="85" y2="82" stroke="#30d158" stroke-width="4" stroke-linecap="round"/>
+  <rect x="78" y="34" width="14" height="28" rx="3" fill="#30d158"/>
+</svg>

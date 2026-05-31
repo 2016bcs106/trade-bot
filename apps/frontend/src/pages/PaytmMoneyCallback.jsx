@@ -30,7 +30,7 @@ export default function PaytmMoneyCallback() {
           createdAt: moment().utcOffset('+05:30').toISOString(),
         })
 
-        setStatus('Waiting for access token...')
+        setStatus('Waiting for token...')
 
         const updatedOnRef = ref(db, 'auth/updatedOn')
         unsubscribe = onValue(updatedOnRef, (snapshot) => {
@@ -43,11 +43,11 @@ export default function PaytmMoneyCallback() {
 
         timeoutId = setTimeout(() => {
           cleanup()
-          setStatus('Timed out. Please try again.')
+          setStatus('Timed out. Redirecting...')
           setTimeout(() => navigate('/login', { replace: true }), 2000)
         }, TIMEOUT_MS)
       } catch {
-        setStatus('Authentication failed. Please try again.')
+        setStatus('Failed. Redirecting...')
         setTimeout(() => navigate('/login', { replace: true }), 2000)
       }
     }
@@ -63,10 +63,8 @@ export default function PaytmMoneyCallback() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.card}>
-        <FontAwesomeIcon icon={faSpinner} spin style={styles.icon} />
-        <p style={styles.text}>{status}</p>
-      </div>
+      <FontAwesomeIcon icon={faSpinner} spin style={styles.icon} />
+      <p style={styles.text}>{status}</p>
     </div>
   )
 }
@@ -75,24 +73,18 @@ const styles = {
   page: {
     minHeight: '100vh',
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     background: 'var(--color-bg)',
-  },
-  card: {
-    background: 'var(--color-card)',
-    borderRadius: 'var(--radius-lg)',
-    border: '1px solid var(--color-border)',
-    padding: '2rem 3rem',
-    textAlign: 'center',
+    gap: 'var(--space-lg)',
   },
   icon: {
-    fontSize: '1.5rem',
-    color: 'var(--color-primary)',
-    marginBottom: 'var(--space-lg)',
+    fontSize: '1.25rem',
+    color: 'var(--color-text-muted)',
   },
   text: {
-    fontSize: 'var(--font-md)',
+    fontSize: 'var(--font-body)',
     color: 'var(--color-text-muted)',
   },
 }

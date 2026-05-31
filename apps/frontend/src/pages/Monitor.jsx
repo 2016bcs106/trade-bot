@@ -3,13 +3,14 @@ import moment from 'moment'
 import { ref, onValue, remove } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircle, faChevronDown, faChevronRight, faTrash, faHeartPulse } from '@fortawesome/free-solid-svg-icons'
-import Loader from '../components/Loader'
+import { faCircle } from '@fortawesome/free-solid-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
 import Card from '../components/Card'
 import Badge from '../components/Badge'
+import Loader from '../components/Loader'
+import BottomSheet from '../components/BottomSheet'
 
 const STATUS_COLORS = {
   running: 'var(--color-success)',
@@ -17,68 +18,47 @@ const STATUS_COLORS = {
   errored: 'var(--color-danger)',
 }
 
-const REQUEST_STATUS = {
-  pending: { color: 'var(--color-warning)' },
-  processing: { color: 'var(--color-info)' },
-  completed: { color: 'var(--color-success)' },
-  failed: { color: 'var(--color-danger)' },
+const REQUEST_COLORS = {
+  pending: 'var(--color-warning)',
+  processing: 'var(--color-primary)',
+  completed: 'var(--color-success)',
+  failed: 'var(--color-danger)',
 }
 
-function CollapsibleJson({ label, data }) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <div>
-      <button onClick={() => setExpanded(!expanded)} style={styles.collapsibleBtn}>
-        <FontAwesomeIcon icon={expanded ? faChevronDown : faChevronRight} style={{ fontSize: '0.55rem' }} />
-        {label}
-      </button>
-      {expanded && (
-        <pre style={styles.jsonBlock}>{JSON.stringify(data, null, 2)}</pre>
-      )}
-    </div>
-  )
-}
-
-function ScriptCard({ name, data }) {
+function ScriptCard({ name, data, onTap }) {
   const status = data.status || 'stopped'
   const color = STATUS_COLORS[status] || STATUS_COLORS.stopped
 
   return (
-    <Card>
+    <Card style={{ cursor: 'pointer' }} onClick={onTap}>
       <div style={styles.row}>
-        <span style={styles.name}>{name}</span>
+        <div style={{ flex: 1 }}>
+          <div style={styles.name}>{name}</div>
+          <div style={styles.meta}>{data.lastHeartbeat ? moment(data.lastHeartbeat).fromNow() : '—'}</div>
+        </div>
         <Badge label={status} color={color} />
       </div>
-      <div style={styles.meta}>
-        Heartbeat: {data.lastHeartbeat ? moment(data.lastHeartbeat).fromNow() : '—'}
-      </div>
-      {data.metadata && <CollapsibleJson label="Details" data={data.metadata} />}
-      {data.error && <div style={styles.error}>⚠ {data.error}</div>}
+      {data.error && <div style={styles.error}>{data.error}</div>}
     </Card>
   )
 }
 
-function RequestCard({ req, onDelete }) {
-  const statusStyle = REQUEST_STATUS[req.status] || REQUEST_STATUS.pending
-
+function RequestCard({ req, onTap }) {
   return (
-    <Card>
+    <Card style={{ cursor: 'pointer' }} onClick={onTap}>
       <div style={styles.row}>
-        <span style={styles.name}>{req.type}</span>
-        <Badge label={req.status} color={statusStyle.color} />
+        <div style={{ flex: 1 }}>
+          <div style={styles.name}>{req.type}</div>
+          <div style={styles.meta}>
+            {req.createdAt ? moment(req.createdAt).fromNow() : '—'}
+            {req.payload && Object.keys(req.payload).length > 0 && (
+              <span> · {Object.entries(req.payload).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
+            )}
+          </div>
+        </div>
+        <Badge label={req.status} color={REQUEST_COLORS[req.status] || REQUEST_COLORS.pending} />
       </div>
-      <div style={styles.meta}>
-        {req.createdAt ? moment(req.createdAt).fromNow() : '—'}
-        {req.payload && Object.keys(req.payload).length > 0 && (
-          <span> · {Object.entries(req.payload).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
-        )}
-      </div>
-      {req.error && <div style={styles.error}>⚠ {req.error}</div>}
-      {req._source === 'failed' && (
-        <button onClick={() => onDelete(req._key)} style={styles.deleteBtn}>
-          <FontAwesomeIcon icon={faTrash} /> Delete
-        </button>
-      )}
+      {req.error && <div style={styles.error}>{req.error}</div>}
     </Card>
   )
 }
@@ -87,6 +67,7 @@ export default function Monitor() {
   const [scripts, setScripts] = useState(undefined)
   const [requests, setRequests] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
+  const [sheetData, setSheetData] = useState(null)
 
   useEffect(() => {
     const unsubScripts = onValue(ref(db, 'scripts'), (snap) => setScripts(snap.val()))
@@ -98,44 +79,58 @@ export default function Monitor() {
       const data = snap.val()
       setFailedRequests(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
     })
-
     return () => { unsubScripts(); unsubQueue(); unsubFailed() }
   }, [])
+
+  if (scripts === undefined) {
+    return <Page><Loader /></Page>
+  }
 
   const allRequests = [
     ...requests.map(r => ({ ...r, _source: 'queue' })),
     ...failedRequests.map(r => ({ ...r, _source: 'failed' })),
   ].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 
-  if (scripts === undefined) {
-    return <Page><Loader /></Page>
+  const handleDeleteFailed = async (key) => {
+    await remove(ref(db, `failed_requests/${key}`))
+    setSheetData(null)
   }
 
   return (
     <Page>
-      <PageHeader icon={faHeartPulse} title="Monitor" />
+      <PageHeader title="Monitor" />
 
       <SectionHeader>Scripts</SectionHeader>
       {!scripts || Object.keys(scripts).length === 0 ? (
         <Card><div style={styles.empty}>No scripts reporting</div></Card>
       ) : (
         Object.entries(scripts).map(([name, data]) => (
-          <ScriptCard key={name} name={name} data={data} />
+          <ScriptCard key={name} name={name} data={data} onTap={() => setSheetData({ title: name, data, type: 'script' })} />
         ))
       )}
 
-      <SectionHeader style={{ marginTop: 'var(--space-xl)' }}>Requests</SectionHeader>
+      <SectionHeader>Requests</SectionHeader>
       {allRequests.length === 0 ? (
-        <Card><div style={styles.empty}>No requests in queue</div></Card>
+        <Card><div style={styles.empty}>No requests</div></Card>
       ) : (
         allRequests.map((req) => (
-          <RequestCard
-            key={req._key}
-            req={req}
-            onDelete={(key) => remove(ref(db, `failed_requests/${key}`))}
-          />
+          <RequestCard key={req._key} req={req} onTap={() => setSheetData({ title: req.type, data: req, type: 'request' })} />
         ))
       )}
+
+      {/* Detail bottom sheet */}
+      <BottomSheet title={sheetData?.title} isOpen={!!sheetData} onClose={() => setSheetData(null)}>
+        {sheetData && (
+          <div style={styles.sheetBody}>
+            <pre style={styles.jsonBlock}>{JSON.stringify(sheetData.data, null, 2)}</pre>
+            {sheetData.type === 'request' && sheetData.data._source === 'failed' && (
+              <button style={styles.deleteBtn} onClick={() => handleDeleteFailed(sheetData.data._key)}>
+                Delete Failed Request
+              </button>
+            )}
+          </div>
+        )}
+      </BottomSheet>
     </Page>
   )
 }
@@ -143,66 +138,58 @@ export default function Monitor() {
 const styles = {
   row: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 'var(--space-md)',
   },
   name: {
-    fontSize: 'var(--font-base)',
-    fontWeight: 600,
+    fontSize: 'var(--font-body)',
+    fontWeight: 500,
     color: 'var(--color-text)',
   },
   meta: {
-    fontSize: 'var(--font-sm)',
+    fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
-    marginTop: 'var(--space-xs)',
+    marginTop: '2px',
   },
   error: {
-    fontSize: 'var(--font-sm)',
+    fontSize: 'var(--font-footnote)',
     color: 'var(--color-danger)',
-    marginTop: 'var(--space-xs)',
+    marginTop: 'var(--space-sm)',
   },
   empty: {
     textAlign: 'center',
-    padding: 'var(--space-lg)',
+    padding: 'var(--space-xl)',
     color: 'var(--color-text-muted)',
-    fontSize: 'var(--font-base)',
+    fontSize: 'var(--font-subhead)',
   },
-  collapsibleBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-sm)',
-    padding: 'var(--space-xs) 0',
-    cursor: 'pointer',
-    border: 'none',
-    background: 'none',
-    width: '100%',
-    textAlign: 'left',
-    fontSize: 'var(--font-sm)',
-    color: 'var(--color-text-muted)',
-    fontWeight: 500,
+  sheetBody: {
+    padding: 'var(--space-lg) var(--space-xl)',
   },
   jsonBlock: {
-    fontSize: 'var(--font-sm)',
-    fontFamily: 'monospace',
+    fontSize: 'var(--font-caption)',
+    fontFamily: 'SF Mono, Menlo, monospace',
     background: 'var(--color-bg)',
-    border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-sm)',
-    padding: 'var(--space-sm) var(--space-md)',
-    marginTop: 'var(--space-xs)',
+    padding: 'var(--space-lg)',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
-    color: 'var(--color-text)',
+    color: 'var(--color-text-secondary)',
     overflowX: 'auto',
+    maxHeight: '40vh',
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
   },
   deleteBtn: {
-    background: 'none',
+    width: '100%',
+    padding: '14px',
+    marginTop: 'var(--space-xl)',
+    background: 'var(--color-bg)',
     border: 'none',
+    borderRadius: 'var(--radius-sm)',
     cursor: 'pointer',
-    fontSize: 'var(--font-sm)',
+    fontSize: 'var(--font-body)',
+    fontWeight: 500,
     color: 'var(--color-danger)',
-    marginTop: 'var(--space-sm)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-xs)',
+    textAlign: 'center',
   },
 }

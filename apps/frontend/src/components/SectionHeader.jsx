@@ -8,12 +8,12 @@ export default function SectionHeader({ children, style }) {
 
 const styles = {
   header: {
-    fontSize: 'var(--font-base)',
-    fontWeight: 700,
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 400,
     color: 'var(--color-text-muted)',
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: 'var(--space-sm)',
-    marginTop: 'var(--space-md)',
+    paddingLeft: 'var(--space-lg)',
+    marginBottom: '6px',
+    marginTop: 'var(--space-xl)',
   },
 }

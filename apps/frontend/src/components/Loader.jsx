@@ -14,10 +14,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '60vh',
+    minHeight: '50vh',
   },
   icon: {
-    fontSize: '1.5rem',
-    color: 'var(--color-primary)',
+    fontSize: '1.25rem',
+    color: 'var(--color-text-muted)',
   },
 }

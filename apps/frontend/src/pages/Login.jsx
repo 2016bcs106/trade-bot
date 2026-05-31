@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faRightToBracket } from '@fortawesome/free-solid-svg-icons'
+import { faArrowRightToBracket } from '@fortawesome/free-solid-svg-icons'
 import { db, ref, onValue } from '../utils/firebase'
 
 const loginUrl = `${import.meta.env.VITE_PAYTM_MONEY_LOGIN_BASE_URL}?apiKey=${import.meta.env.VITE_PAYTM_MONEY_API_KEY}&state=${import.meta.env.VITE_PAYTM_MONEY_API_SECRET}`
@@ -27,12 +27,12 @@ export default function Login() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.card}>
-        <div style={styles.logo}>Trade Bot</div>
-        <p style={styles.subtitle}>Sign in to manage your stocks and live data</p>
+      <div style={styles.content}>
+        <h1 style={styles.title}>Trade Bot</h1>
+        <p style={styles.subtitle}>Sign in to continue</p>
         <button style={styles.button} onClick={() => { window.location.href = loginUrl }}>
-          <FontAwesomeIcon icon={faRightToBracket} />
-          Login with Paytm Money
+          <FontAwesomeIcon icon={faArrowRightToBracket} />
+          <span>Sign in with Paytm Money</span>
         </button>
       </div>
     </div>
@@ -45,29 +45,25 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 'var(--space-xl)',
     background: 'var(--color-bg)',
+    padding: 'var(--space-xl)',
   },
-  card: {
-    background: 'var(--color-card)',
-    borderRadius: 'var(--radius-lg)',
-    border: '1px solid var(--color-border)',
-    boxShadow: 'var(--shadow-md)',
-    padding: '3rem 2.5rem',
-    maxWidth: '380px',
-    width: '100%',
+  content: {
     textAlign: 'center',
+    width: '100%',
+    maxWidth: '320px',
   },
-  logo: {
-    fontSize: 'var(--font-2xl)',
+  title: {
+    fontSize: 'var(--font-largetitle)',
     fontWeight: 700,
-    color: 'var(--color-primary)',
+    color: 'var(--color-text)',
+    letterSpacing: '-0.5px',
     marginBottom: 'var(--space-sm)',
   },
   subtitle: {
-    fontSize: 'var(--font-md)',
+    fontSize: 'var(--font-body)',
     color: 'var(--color-text-muted)',
-    marginBottom: 'var(--space-xl)',
+    marginBottom: 'var(--space-2xl)',
   },
   button: {
     display: 'flex',
@@ -75,12 +71,12 @@ const styles = {
     justifyContent: 'center',
     gap: 'var(--space-sm)',
     width: '100%',
-    padding: '0.875rem',
+    padding: '16px',
     background: 'var(--color-primary)',
     color: '#ffffff',
     border: 'none',
     borderRadius: 'var(--radius-md)',
-    fontSize: 'var(--font-md)',
+    fontSize: 'var(--font-body)',
     fontWeight: 600,
     cursor: 'pointer',
   },

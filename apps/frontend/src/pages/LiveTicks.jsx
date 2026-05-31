@@ -12,7 +12,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faRepeat } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronDown } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Loader from '../components/Loader'
@@ -51,7 +51,7 @@ const pulsingDotPlugin = {
       }
       if (!lastPoint) return
 
-      const color = typeof dataset.borderColor === 'function' ? '#3b82f6' : (dataset.borderColor || '#3b82f6')
+      const color = typeof dataset.borderColor === 'function' ? '#007aff' : (dataset.borderColor || '#007aff')
       ctx.save()
       ctx.globalAlpha = alpha
       ctx.fillStyle = color
@@ -72,9 +72,9 @@ const syncCrosshairPlugin = {
     const { x, y } = active[0].element
     ctx.save()
     ctx.beginPath()
-    ctx.lineWidth = 1
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)'
-    ctx.setLineDash([4, 4])
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = 'rgba(60, 60, 67, 0.3)'
+    ctx.setLineDash([4, 3])
     ctx.moveTo(x, top); ctx.lineTo(x, bottom)
     ctx.moveTo(left, y); ctx.lineTo(right, y)
     ctx.stroke()
@@ -90,9 +90,9 @@ const zeroLinePlugin = {
     const yPos = y.getPixelForValue(0)
     ctx.save()
     ctx.beginPath()
-    ctx.setLineDash([4, 4])
-    ctx.lineWidth = 1
-    ctx.strokeStyle = 'rgba(150, 150, 150, 0.6)'
+    ctx.setLineDash([4, 3])
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = 'rgba(60, 60, 67, 0.2)'
     ctx.moveTo(left, yPos); ctx.lineTo(right, yPos)
     ctx.stroke()
     ctx.restore()
@@ -106,8 +106,8 @@ const baseChartOptions = {
   maintainAspectRatio: false,
   animation: false,
   interaction: { mode: 'index', intersect: false },
-  plugins: { legend: { display: false } },
-  elements: { point: { radius: 0 }, line: { borderWidth: 1.5 } },
+  plugins: { legend: { display: false }, tooltip: { enabled: true, backgroundColor: 'rgba(0,0,0,0.72)', titleFont: { size: 11 }, bodyFont: { size: 11 }, padding: 8, cornerRadius: 8 } },
+  elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0.15 } },
   scales: {
     x: {
       ticks: {
@@ -119,7 +119,8 @@ const baseChartOptions = {
           return (h * 60 + m) % 30 === 0 ? label : null
         },
         maxRotation: 0,
-        color: 'var(--color-text-muted)',
+        font: { size: 10 },
+        color: 'rgba(60, 60, 67, 0.4)',
       },
       grid: { display: false },
       border: { display: false },
@@ -131,8 +132,9 @@ const baseChartOptions = {
 const pressureChartOptions = {
   ...baseChartOptions,
   plugins: {
-    legend: { display: false },
+    ...baseChartOptions.plugins,
     tooltip: {
+      ...baseChartOptions.plugins.tooltip,
       callbacks: {
         label: (ctx) => {
           const raw = ctx.chart?.data?.datasets?.[ctx.datasetIndex]?.rawDiffs?.[ctx.dataIndex]
@@ -276,8 +278,8 @@ export default function LiveTicks() {
 
   const priceChartData = useMemo(() => {
     const isPositive = openPrice != null && latestPrice != null && latestPrice >= openPrice
-    const lineColor = openPrice == null ? 'var(--color-info)' : (isPositive ? 'var(--color-success)' : 'var(--color-danger)')
-    const fillRgb = isPositive ? '34, 197, 94' : '239, 68, 68'
+    const lineColor = openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
+    const fillRgb = isPositive ? '52, 199, 89' : '255, 59, 48'
     const firstClose = rows.length > 0 ? rows[0].close : null
 
     return {
@@ -290,7 +292,7 @@ export default function LiveTicks() {
           if (!ctx.chart) return 'transparent'
           const { top, bottom } = ctx.chart.chartArea || { top: 0, bottom: ctx.chart.height }
           const gradient = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
-          gradient.addColorStop(0, `rgba(${fillRgb}, 0.35)`)
+          gradient.addColorStop(0, `rgba(${fillRgb}, 0.2)`)
           gradient.addColorStop(1, `rgba(${fillRgb}, 0)`)
           return gradient
         },
@@ -322,20 +324,20 @@ export default function LiveTicks() {
     })]
 
     const mkGradient = (rgb) => (ctx) => {
-      if (!ctx.chart?.chartArea) return `rgba(${rgb}, 0.1)`
+      if (!ctx.chart?.chartArea) return `rgba(${rgb}, 0.05)`
       const { top, bottom } = ctx.chart.chartArea
       const g = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
-      g.addColorStop(0, `rgba(${rgb}, 0.3)`); g.addColorStop(1, `rgba(${rgb}, 0)`)
+      g.addColorStop(0, `rgba(${rgb}, 0.15)`); g.addColorStop(1, `rgba(${rgb}, 0)`)
       return g
     }
 
     return {
       labels,
       datasets: [
-        { label: 'Buy Qty', data: buyCompleted, borderColor: 'var(--color-success)', backgroundColor: mkGradient('34, 197, 94'), fill: true, spanGaps: false, skipPulsingDot: true },
-        { label: 'Sell Qty', data: sellCompleted, borderColor: 'var(--color-danger)', backgroundColor: mkGradient('239, 68, 68'), fill: true, spanGaps: false, skipPulsingDot: true },
-        { label: 'Buy (Projected)', data: buyProjected, borderColor: 'var(--color-success)', borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, spanGaps: false },
-        { label: 'Sell (Projected)', data: sellProjected, borderColor: 'var(--color-danger)', borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, spanGaps: false },
+        { label: 'Buy Qty', data: buyCompleted, borderColor: '#34c759', backgroundColor: mkGradient('52, 199, 89'), fill: true, spanGaps: false, skipPulsingDot: true },
+        { label: 'Sell Qty', data: sellCompleted, borderColor: '#ff3b30', backgroundColor: mkGradient('255, 59, 48'), fill: true, spanGaps: false, skipPulsingDot: true },
+        { label: 'Buy (Projected)', data: buyProjected, borderColor: '#34c759', borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, spanGaps: false },
+        { label: 'Sell (Projected)', data: sellProjected, borderColor: '#ff3b30', borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, spanGaps: false },
       ],
     }
   }, [labels, rows, secondsElapsed])
@@ -353,17 +355,17 @@ export default function LiveTicks() {
         label: 'tanh(S−B)',
         data: [...Array(PRE_PAD).fill(firstTanh), ...tanhValues],
         rawDiffs: [...Array(PRE_PAD).fill(firstDiff), ...diffs],
-        segment: { borderColor: (ctx) => ctx.p0.parsed.y >= 0 ? 'var(--color-danger)' : 'var(--color-success)' },
-        borderColor: 'var(--color-danger)',
+        segment: { borderColor: (ctx) => ctx.p0.parsed.y >= 0 ? '#ff3b30' : '#34c759' },
+        borderColor: '#ff3b30',
         backgroundColor: (context) => {
           const chart = context.chart
-          if (!chart.chartArea || !chart.scales?.y) return 'rgba(239, 68, 68, 0.15)'
+          if (!chart.chartArea || !chart.scales?.y) return 'rgba(255, 59, 48, 0.08)'
           const { top, bottom } = chart.chartArea
           const zeroY = chart.scales.y.getPixelForValue(0)
           const ratio = Math.max(0, Math.min(1, (zeroY - top) / (bottom - top)))
           const g = chart.ctx.createLinearGradient(0, top, 0, bottom)
-          g.addColorStop(0, 'rgba(239, 68, 68, 0.35)'); g.addColorStop(ratio, 'rgba(239, 68, 68, 0)')
-          g.addColorStop(ratio, 'rgba(34, 197, 94, 0)'); g.addColorStop(1, 'rgba(34, 197, 94, 0.35)')
+          g.addColorStop(0, 'rgba(255, 59, 48, 0.15)'); g.addColorStop(ratio, 'rgba(255, 59, 48, 0)')
+          g.addColorStop(ratio, 'rgba(52, 199, 89, 0)'); g.addColorStop(1, 'rgba(52, 199, 89, 0.15)')
           return g
         },
         fill: true,
@@ -407,22 +409,40 @@ export default function LiveTicks() {
     return <div style={styles.wrap}><Loader /></div>
   }
 
+  const priceChange = openPrice != null && latestPrice != null ? latestPrice - openPrice : null
+  const isPositive = priceChange != null && priceChange >= 0
+
   return (
     <div style={styles.wrap}>
       {/* Header */}
-      <h2 style={styles.header}>
-        {status === 'connected' && <span style={{ ...styles.dot, background: 'var(--color-success)' }} />}
-        {status === 'reconnecting' && <span style={{ ...styles.dot, background: 'var(--color-warning)', animationDuration: '1s' }} />}
-        {selectedStock.displayName}
-        <span style={styles.symbolTag}>{selectedStock.symbol}</span>
-        <FontAwesomeIcon icon={faRepeat} onClick={() => setSheetOpen(true)} style={styles.switchBtn} />
-      </h2>
+      <div style={styles.header}>
+        <button style={styles.stockSelector} onClick={() => setSheetOpen(true)}>
+          <span style={styles.stockName}>{selectedStock.displayName}</span>
+          <FontAwesomeIcon icon={faChevronDown} style={styles.chevron} />
+        </button>
+        <div style={styles.statusRow}>
+          <span style={{ ...styles.dot, background: status === 'connected' ? 'var(--color-success)' : status === 'reconnecting' ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+          <span style={styles.symbolText}>{selectedStock.symbol}</span>
+        </div>
+      </div>
+
+      {/* Price display */}
+      {latestPrice != null && (
+        <div style={styles.priceSection}>
+          <span style={styles.price}>{latestPrice.toFixed(2)}</span>
+          {priceChange != null && (
+            <span style={{ ...styles.priceChange, color: isPositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
+              {isPositive ? '+' : ''}{priceChange.toFixed(2)}
+            </span>
+          )}
+        </div>
+      )}
 
       {isDisconnected && (
         <div style={styles.errorCard}>
-          <FontAwesomeIcon icon={faPlugCircleXmark} style={styles.errorIcon} />
-          <p style={styles.errorTitle}>Unable to connect</p>
-          <p style={styles.errorSubtext}>The live data server is not reachable.</p>
+          <FontAwesomeIcon icon={faPlugCircleXmark} style={{ fontSize: '2rem', color: 'var(--color-danger)', marginBottom: '12px' }} />
+          <p style={{ fontSize: 'var(--font-body)', fontWeight: 600, color: 'var(--color-text)' }}>Unable to connect</p>
+          <p style={{ fontSize: 'var(--font-footnote)', color: 'var(--color-text-muted)', marginTop: '4px' }}>Live data server is not reachable</p>
         </div>
       )}
 
@@ -430,54 +450,38 @@ export default function LiveTicks() {
 
       {!isDisconnected && (
         <>
-          {/* Stock selector */}
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
             {stocks.map((stock) => (
               <button
                 key={stock.instrumentKey}
                 onClick={() => { handleStockSelect(stock.instrumentKey); setSheetOpen(false) }}
-                style={{
-                  ...styles.sheetItem,
-                  background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent',
-                }}
+                style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
               >
-                <span style={{ fontSize: 'var(--font-md)', color: 'var(--color-text)' }}>{stock.displayName}</span>
-                <span style={{ fontWeight: 600, fontSize: 'var(--font-sm)', color: 'var(--color-text-muted)' }}>{stock.symbol}</span>
+                <span style={{ fontSize: 'var(--font-body)', color: 'var(--color-text)' }}>{stock.displayName}</span>
+                <span style={{ fontSize: 'var(--font-footnote)', color: 'var(--color-text-muted)' }}>{stock.symbol}</span>
               </button>
             ))}
           </BottomSheet>
 
           {/* Price chart */}
-          <div style={styles.chartCard}>
-            <h3 style={styles.chartTitle}>Live Price</h3>
-            {latestPrice != null && (
-              <div style={styles.priceRow}>
-                <span style={{ color: openPrice != null && latestPrice >= openPrice ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700, fontSize: 'var(--font-xl)' }}>
-                  {latestPrice.toFixed(2)}
-                  {openPrice != null && (
-                    <span style={{ fontSize: 'var(--font-base)', marginLeft: '0.3rem', fontWeight: 600 }}>
-                      ({latestPrice >= openPrice ? '+' : ''}{(latestPrice - openPrice).toFixed(2)})
-                    </span>
-                  )}
-                </span>
-              </div>
-            )}
+          <div style={styles.chartSection}>
+            <div style={styles.chartLabel}>Live</div>
             <div style={styles.chartViewport}>
               <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
             </div>
           </div>
 
           {/* Pressure chart */}
-          <div style={styles.chartCard}>
-            <h3 style={styles.chartTitle}>Sell Pressure</h3>
-            <div style={{ ...styles.chartViewport, height: '20vh', maxHeight: '180px', minHeight: '120px' }}>
+          <div style={styles.chartSection}>
+            <div style={styles.chartLabel}>Sell Pressure</div>
+            <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
               <Line ref={pressureChartRef} data={pressureChartData} options={buildOptions(pressureChartOptions)} plugins={[syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin]} />
             </div>
           </div>
 
           {/* Qty chart */}
-          <div style={styles.chartCard}>
-            <h3 style={styles.chartTitle}>Buy vs Sell</h3>
+          <div style={styles.chartSection}>
+            <div style={styles.chartLabel}>Buy vs Sell Volume</div>
             <div style={styles.chartViewport}>
               <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
             </div>
@@ -490,100 +494,115 @@ export default function LiveTicks() {
 
 const styles = {
   wrap: {
-    padding: 'var(--space-lg) 0',
-    paddingBottom: '5rem',
+    paddingTop: 'var(--space-lg)',
+    paddingBottom: '80px',
     background: 'var(--color-bg)',
     minHeight: '100vh',
   },
   header: {
-    margin: 0,
+    padding: '0 var(--space-xl)',
     marginBottom: 'var(--space-sm)',
-    color: 'var(--color-text)',
+  },
+  stockSelector: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 'var(--space-sm)',
-    fontSize: 'var(--font-lg)',
-    fontWeight: 600,
+    gap: '6px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+  },
+  stockName: {
+    fontSize: 'var(--font-title2)',
+    fontWeight: 700,
+    color: 'var(--color-text)',
+    letterSpacing: '-0.3px',
+  },
+  chevron: {
+    fontSize: '0.75rem',
+    color: 'var(--color-text-muted)',
+    marginTop: '2px',
+  },
+  statusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginTop: '4px',
   },
   dot: {
-    width: '8px',
-    height: '8px',
-    minWidth: '8px',
-    minHeight: '8px',
+    width: '7px',
+    height: '7px',
     borderRadius: '50%',
-    display: 'block',
-    flexShrink: 0,
     animation: 'pulse-dot 2s ease-in-out infinite',
   },
-  symbolTag: {
-    fontSize: 'var(--font-sm)',
+  symbolText: {
+    fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
-    fontWeight: 400,
   },
-  switchBtn: {
-    fontSize: 'var(--font-sm)',
-    color: 'var(--color-primary)',
-    cursor: 'pointer',
-    marginLeft: 'var(--space-xs)',
+  priceSection: {
+    padding: '0 var(--space-xl)',
+    marginBottom: 'var(--space-lg)',
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 'var(--space-sm)',
+  },
+  price: {
+    fontSize: 'var(--font-title1)',
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    letterSpacing: '-0.5px',
+  },
+  priceChange: {
+    fontSize: 'var(--font-subhead)',
+    fontWeight: 600,
   },
   errorCard: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: '40px var(--space-xl)',
+    textAlign: 'center',
+  },
+  chartSection: {
+    marginBottom: 'var(--space-lg)',
     background: 'var(--color-card)',
-    border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
-    padding: '2.5rem var(--space-xl)',
-    textAlign: 'center',
-    marginTop: 'var(--space-lg)',
+    marginLeft: 'var(--space-lg)',
+    marginRight: 'var(--space-lg)',
+    padding: 'var(--space-lg) var(--space-md)',
   },
-  errorIcon: { fontSize: '2.5rem', color: 'var(--color-danger)', marginBottom: 'var(--space-md)' },
-  errorTitle: { fontSize: 'var(--font-xl)', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 0.4rem 0' },
-  errorSubtext: { fontSize: 'var(--font-md)', color: 'var(--color-text-secondary)', margin: 0 },
-  chartCard: {
-    position: 'relative',
-    background: 'transparent',
-    border: 'none',
-    padding: 'var(--space-md) 0',
-    marginBottom: 'var(--space-sm)',
-  },
-  chartTitle: {
-    margin: '0 0 var(--space-sm) 0',
-    fontSize: 'var(--font-sm)',
-    textAlign: 'center',
-    fontWeight: 500,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
+  chartLabel: {
+    fontSize: 'var(--font-caption)',
+    fontWeight: 600,
     color: 'var(--color-text-muted)',
-    opacity: 0.7,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: 'var(--space-sm)',
   },
   chartViewport: {
     position: 'relative',
-    height: '32vh',
-    maxHeight: '280px',
-    minHeight: '180px',
+    height: '28vh',
+    maxHeight: '240px',
+    minHeight: '140px',
   },
-  priceRow: { textAlign: 'center', marginBottom: 'var(--space-sm)' },
   progressTrack: {
     position: 'fixed',
-    bottom: '56px',
+    bottom: '49px',
     left: 0,
     right: 0,
-    height: '3px',
+    height: '2px',
     background: 'var(--color-border)',
     zIndex: 1001,
   },
   progressFill: {
     height: '100%',
-    background: 'var(--color-info)',
+    background: 'var(--color-primary)',
     transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    borderRadius: '0 2px 2px 0',
+    borderRadius: '0 1px 1px 0',
   },
   sheetItem: {
     width: '100%',
-    padding: 'var(--space-md) var(--space-lg)',
+    padding: '14px var(--space-xl)',
     border: 'none',
     borderBottom: '1px solid var(--color-border)',
     textAlign: 'left',
