@@ -1,17 +1,7 @@
 import { nowMs } from "../utils/time.ts";
-import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
 
-const logger = createLogger("handler:access-token");
-
-/**
- * Handles "access_token" requests — exchanges a Paytm Money requestToken
- * for access/public/read tokens and saves them to Firebase.
- *
- * Expected payload:
- * - requestToken: string (OAuth request_token from Paytm Money callback)
- */
 export class AccessTokenRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
     const { requestToken } = request.payload as { requestToken: string };
@@ -27,7 +17,7 @@ export class AccessTokenRequestHandler implements RequestHandler {
       throw new Error("Missing PAYTM_MONEY_API_KEY or PAYTM_MONEY_API_SECRET in .env");
     }
 
-    logger.info("Exchanging requestToken for access tokens...");
+    ctx.log.info("Exchanging requestToken for access tokens...");
 
     const result = await ctx.paytm.exchangeRequestToken(apiKey, apiSecret, requestToken);
 
@@ -44,6 +34,6 @@ export class AccessTokenRequestHandler implements RequestHandler {
       updatedOn,
     });
 
-    logger.info("✓ Access tokens saved to Firebase");
+    ctx.log.info("✓ Access tokens saved to Firebase");
   }
 }

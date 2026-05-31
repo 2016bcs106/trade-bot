@@ -3,11 +3,9 @@ import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { now } from "../utils/time.ts";
-import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
+import { Logger } from "../types/logger.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
-
-const logger = createLogger("handler:system-update");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..", "..", "..", "..");
@@ -42,41 +40,44 @@ interface CronEntry {
  * No payload required.
  */
 export class SystemUpdateRequestHandler implements RequestHandler {
+  private log!: Logger;
+
   async handle(_request: QueuedRequest, _ctx: ServiceContext): Promise<void> {
-    logger.info("=== SYSTEM UPDATE STARTED ===");
+    this.log = _ctx.log;
+    this.log.info("=== SYSTEM UPDATE STARTED ===");
 
     // ─── Step 1: Git stash ───────────────────────────────────────────
-    logger.info("Step 1: Stashing local changes...");
+    this.log.info("Step 1: Stashing local changes...");
     this.exec("git add -A", PROJECT_ROOT);
     this.exec("git stash", PROJECT_ROOT);
 
     // ─── Step 2: Git pull --rebase ───────────────────────────────────
-    logger.info("Step 2: Pulling latest code...");
+    this.log.info("Step 2: Pulling latest code...");
     this.exec("git pull --rebase origin master", PROJECT_ROOT);
 
     // ─── Step 3: Deploy frontend ─────────────────────────────────────
-    logger.info("Step 3: Deploying frontend...");
+    this.log.info("Step 3: Deploying frontend...");
     try {
       const frontendDir = resolve(PROJECT_ROOT, "apps", "frontend");
       this.exec("pnpm --filter frontend build", PROJECT_ROOT);
       this.exec("firebase deploy --only hosting", frontendDir);
-      logger.info("  ✓ Frontend deployed");
+      this.log.info("  ✓ Frontend deployed");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
+      this.log.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
     }
 
     // ─── Step 5: Remove all trade-bot crons ──────────────────────────
-    logger.info("Step 5: Removing existing trade-bot crons...");
+    this.log.info("Step 5: Removing existing trade-bot crons...");
     this.removeTradeBotCrons();
 
     // ─── Step 6: Install new crons from config ───────────────────────
-    logger.info("Step 6: Installing new crons from cron-config.json...");
+    this.log.info("Step 6: Installing new crons from cron-config.json...");
     this.installCronsFromConfig();
 
     // ─── Step 7: Remove this request from Firebase before killing ────
     if (_request._key) {
-      logger.info("Step 7: Removing request from queue...");
+      this.log.info("Step 7: Removing request from queue...");
       await _ctx.firebase.removeRequest(_request._key);
     }
 
@@ -84,8 +85,8 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     // Cron fires at :00, so killing at :55 gives ~5 seconds of downtime
     await this.waitUntilSecond55();
 
-    logger.info("Step 8: Killing all running trade-bot processes...");
-    logger.info("=== SYSTEM UPDATE COMPLETE — restarting via cron ===");
+    this.log.info("Step 8: Killing all running trade-bot processes...");
+    this.log.info("=== SYSTEM UPDATE COMPLETE — restarting via cron ===");
 
     // Small delay to ensure logs flush
     await new Promise((r) => setTimeout(r, 500));
@@ -113,17 +114,17 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     const currentSecond = now().second();
 
     if (currentSecond >= 55) {
-      logger.info(`  Current second: ${currentSecond} — proceeding immediately`);
+      this.log.info(`  Current second: ${currentSecond} — proceeding immediately`);
       return;
     }
 
     const waitMs = (55 - currentSecond) * 1000;
-    logger.info(`  Current second: ${currentSecond} — waiting ${55 - currentSecond}s until :55...`);
+    this.log.info(`  Current second: ${currentSecond} — waiting ${55 - currentSecond}s until :55...`);
     await new Promise((r) => setTimeout(r, waitMs));
   }
 
   private exec(command: string, cwd: string): string {
-    logger.info(`  $ ${command}`);
+    this.log.info(`  $ ${command}`);
     const nodeDir = this.detectNodeDir();
     const output = execSync(command, {
       cwd,
@@ -132,7 +133,7 @@ export class SystemUpdateRequestHandler implements RequestHandler {
       env: { ...process.env, PATH: `${nodeDir}:${process.env.PATH}` },
     });
     if (output.trim()) {
-      logger.info(`  → ${output.trim().split("\n").slice(0, 5).join("\n    ")}`);
+      this.log.info(`  → ${output.trim().split("\n").slice(0, 5).join("\n    ")}`);
     }
     return output;
   }
@@ -145,16 +146,16 @@ export class SystemUpdateRequestHandler implements RequestHandler {
       const newCrontab = filtered.join("\n").trim() + "\n";
       execSync(`echo '${newCrontab.replace(/'/g, "'\\''")}' | crontab -`, { encoding: "utf-8" });
       const removed = lines.length - filtered.length;
-      logger.info(`  ✓ Removed ${removed} trade-bot cron entries`);
+      this.log.info(`  ✓ Removed ${removed} trade-bot cron entries`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.warn(`  ⚠ Failed to remove crons: ${msg}`);
+      this.log.warn(`  ⚠ Failed to remove crons: ${msg}`);
     }
   }
 
   private installCronsFromConfig(): void {
     if (!existsSync(CRON_CONFIG_PATH)) {
-      logger.warn(`  ⚠ cron-config.json not found at ${CRON_CONFIG_PATH} — skipping`);
+      this.log.warn(`  ⚠ cron-config.json not found at ${CRON_CONFIG_PATH} — skipping`);
       return;
     }
 
@@ -164,12 +165,12 @@ export class SystemUpdateRequestHandler implements RequestHandler {
       config = JSON.parse(raw) as CronEntry[];
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`  ✗ Failed to parse cron-config.json: ${msg}`);
+      this.log.error(`  ✗ Failed to parse cron-config.json: ${msg}`);
       return;
     }
 
     if (!Array.isArray(config) || config.length === 0) {
-      logger.warn("  ⚠ cron-config.json is empty — no crons to install");
+      this.log.warn("  ⚠ cron-config.json is empty — no crons to install");
       return;
     }
 
@@ -187,13 +188,13 @@ export class SystemUpdateRequestHandler implements RequestHandler {
         ? `${currentCrontab}\n\n${cronLines.join("\n\n")}\n`
         : `${cronLines.join("\n\n")}\n`;
       execSync(`echo '${combined.replace(/'/g, "'\\''")}' | crontab -`, { encoding: "utf-8" });
-      logger.info(`  ✓ Installed ${cronLines.length} cron entries`);
+      this.log.info(`  ✓ Installed ${cronLines.length} cron entries`);
       for (const entry of config) {
-        logger.info(`    • ${entry.name}: "${entry.schedule}" → ${entry.command}`);
+        this.log.info(`    • ${entry.name}: "${entry.schedule}" → ${entry.command}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`  ✗ Failed to install crons: ${msg}`);
+      this.log.error(`  ✗ Failed to install crons: ${msg}`);
     }
   }
 

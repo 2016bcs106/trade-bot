@@ -52,7 +52,7 @@ class RequestOrchestrationScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
-    this.ctx = createServiceContext();
+    this.ctx = createServiceContext(this.log);
     this.log.info("Request orchestration started — watching request_queue/");
 
     this.firebase.onRequestQueueChanged((data) => {

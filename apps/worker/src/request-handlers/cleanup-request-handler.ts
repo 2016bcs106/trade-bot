@@ -3,11 +3,8 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { nowFilenameSafe } from "../utils/time.ts";
-import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
-
-const logger = createLogger("handler:cleanup");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BACKUP_DIR = resolve(__dirname, "..", "..", "..", "..", "data", "backups");
@@ -20,30 +17,22 @@ const ALL_PATHS = [
   "audit",
 ];
 
-/**
- * Handles "cleanup" requests — wipes ALL Firebase data + local models.
- * Takes a JSON snapshot backup before deletion.
- *
- * No payload required.
- */
 export class CleanupRequestHandler implements RequestHandler {
-  async handle(_request: QueuedRequest, _ctx: ServiceContext): Promise<void> {
-    logger.info("Wiping ALL Firebase data...");
+  async handle(_request: QueuedRequest, ctx: ServiceContext): Promise<void> {
+    ctx.log.info("Wiping ALL Firebase data...");
 
-    // Snapshot before deletion
-    await this.snapshot();
+    await this.snapshot(ctx);
 
-    // Clear all Firebase paths
     const db = getDatabase();
     for (const path of ALL_PATHS) {
       await remove(ref(db, path));
-      logger.info(`  🗑️  Cleared ${path}/`);
+      ctx.log.info(`  🗑️  Cleared ${path}/`);
     }
 
-    logger.info("✓ All data cleared");
+    ctx.log.info("✓ All data cleared");
   }
 
-  private async snapshot(): Promise<string> {
+  private async snapshot(ctx: ServiceContext): Promise<string> {
     const db = getDatabase();
     const data: Record<string, unknown> = {};
 
@@ -61,7 +50,7 @@ export class CleanupRequestHandler implements RequestHandler {
     const filename = `backup-${ts}.json`;
     const filepath = resolve(BACKUP_DIR, filename);
     writeFileSync(filepath, JSON.stringify(data, null, 2));
-    logger.info(`📸 Snapshot saved: ${filepath}`);
+    ctx.log.info(`📸 Snapshot saved: ${filepath}`);
     return filepath;
   }
 }

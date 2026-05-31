@@ -1,10 +1,7 @@
 import { nowISO } from "../utils/time.ts";
-import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
-
-const logger = createLogger("handler:stock-sync");
 
 /**
  * Handles "stock_sync" requests — resolves a stock symbol via Paytm Money API,
@@ -40,7 +37,7 @@ export class StockSyncRequestHandler implements RequestHandler {
 
     // ─── Step 1: Sync stock metadata ──────────────────────────────────
 
-    logger.info(`Syncing: ${symbol}`);
+    ctx.log.info(`Syncing: ${symbol}`);
 
     const existingStock = await firebase.getStock(symbol);
     const isResync = !!existingStock;
@@ -48,7 +45,7 @@ export class StockSyncRequestHandler implements RequestHandler {
     const result = await client.searchStock(symbol);
 
     if (!result) {
-      logger.error(`No exact NSE match for symbol: ${symbol} — marking as sync_failed`);
+      ctx.log.error(`No exact NSE match for symbol: ${symbol} — marking as sync_failed`);
       if (isResync) {
         await firebase.updateStock(symbol, { status: "sync_failed", updatedAt: nowISO() });
       } else {
@@ -100,17 +97,17 @@ export class StockSyncRequestHandler implements RequestHandler {
       };
       await firebase.setStock(symbol, config);
     }
-    logger.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
+    ctx.log.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
   }
 
   private async handleRemove(symbol: string, ctx: ServiceContext): Promise<void> {
     const { firebase } = ctx;
 
-    logger.info(`Removing stock: ${symbol}`);
+    ctx.log.info(`Removing stock: ${symbol}`);
 
     await firebase.removeStock(symbol);
-    logger.info(`  🗑️  Removed stocks/${symbol}`);
+    ctx.log.info(`  🗑️  Removed stocks/${symbol}`);
 
-    logger.info(`✓ Stock ${symbol} fully removed`);
+    ctx.log.info(`✓ Stock ${symbol} fully removed`);
   }
 }

@@ -2,9 +2,6 @@ import fetch from "node-fetch";
 import { TokenExchangeResponse } from "../../types/auth/token-exchange-response.ts";
 import { OHLCV } from "../../types/market-data/ohlcv.ts";
 import { LiveMarketDataResponse } from "../../types/market-data/live-market-data.ts";
-import createLogger from "../../utils/logger.ts";
-
-const logger = createLogger("paytm-client");
 
 /**
  * Paytm Money API client — handles all HTTP interactions with Paytm Money.
@@ -56,13 +53,10 @@ export default class PaytmMoneyClient {
    * @returns Array of OHLCV candles sorted chronologically
    */
   async fetchOHLCV(pmlId: string, fromDate: string, toDate: string, interval: "MINUTE" | "DAY" = "MINUTE"): Promise<OHLCV[]> {
-    logger.info(`Fetching OHLCV: pmlId=${pmlId}, ${fromDate} → ${toDate}, interval=${interval}`);
-
     const response = await fetch(this.chartsUrl, {
       method: "POST",
       headers: this.getChartHeaders(),
       body: JSON.stringify({
-        // Note: Paytm API has fromDate/toDate swapped in their payload
         fromDate: toDate,
         toDate: fromDate,
         interval,
@@ -71,19 +65,14 @@ export default class PaytmMoneyClient {
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      logger.error(`API error ${response.status}: ${text.slice(0, 200)}`);
       throw new Error(`Paytm Money API error: ${response.status} ${response.statusText}`);
     }
 
     const json = await response.json() as { data: unknown[][] };
 
     if (!json.data || !Array.isArray(json.data)) {
-      logger.error("No data array in response");
       return [];
     }
-
-    logger.info(`Received ${json.data.length} candles`);
 
     return json.data
       .map((item) => this.parseCandle(item))
