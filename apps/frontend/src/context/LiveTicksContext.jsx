@@ -88,8 +88,31 @@ export function LiveTicksProvider({ children }) {
     [dataByInstrument, selectedInstrumentKey],
   )
 
+  const getLatestPrice = (instrumentKey) => {
+    const info = getPriceInfo(instrumentKey)
+    return info ? info.price : null
+  }
+
+  const getPriceInfo = (instrumentKey) => {
+    const data = dataByInstrument[instrumentKey]
+    if (!data) return null
+    const minutes = Object.values(data)
+    if (minutes.length === 0) return null
+    const sorted = minutes.sort((a, b) => String(a.minute).localeCompare(String(b.minute)))
+    const price = sorted[sorted.length - 1].close
+    let open = null
+    for (const r of sorted) {
+      const time = String(r.minute).split('T')[1]?.slice(0, 5) || ''
+      if (time >= '09:00') { open = r.close; break }
+    }
+    if (open == null) open = sorted[0].close
+    const change = price - open
+    const changePct = open !== 0 ? (change / open) * 100 : 0
+    return { price, open, change, changePct }
+  }
+
   return (
-    <LiveTicksContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, selectStock }}>
+    <LiveTicksContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, selectStock, getLatestPrice, getPriceInfo }}>
       {children}
     </LiveTicksContext.Provider>
   )

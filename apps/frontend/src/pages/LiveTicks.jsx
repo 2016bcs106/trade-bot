@@ -164,7 +164,7 @@ const PRE_PAD = 5
 const POST_PAD = 10
 
 export default function LiveTicks() {
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock } = useLiveTicks()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo } = useLiveTicks()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)
@@ -387,16 +387,31 @@ export default function LiveTicks() {
       {!isDisconnected && (
         <>
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
-            {stocks.map((stock) => (
-              <button
-                key={stock.instrumentKey}
-                onClick={() => { selectStock(stock.instrumentKey); setSheetOpen(false) }}
-                style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
-              >
-                <span style={{ fontSize: 'var(--font-body)', color: 'var(--color-text)' }}>{stock.displayName}</span>
-                <span style={{ fontSize: 'var(--font-footnote)', color: 'var(--color-text-muted)' }}>{stock.symbol}</span>
-              </button>
-            ))}
+            {stocks.map((stock) => {
+              const info = getPriceInfo(stock.instrumentKey)
+              return (
+                <button
+                  key={stock.instrumentKey}
+                  onClick={() => { selectStock(stock.instrumentKey); setSheetOpen(false) }}
+                  style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
+                >
+                  <div>
+                    <div style={{ fontSize: 'var(--font-body)', color: 'var(--color-text)', textAlign: 'left' }}>{stock.displayName}</div>
+                    <div style={{ fontSize: 'var(--font-caption)', color: 'var(--color-text-muted)', marginTop: '2px', textAlign: 'left' }}>{stock.symbol}</div>
+                  </div>
+                  {info && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 'var(--font-body)', fontWeight: 600, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}>
+                        {info.price.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-caption)', fontWeight: 500, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontVariantNumeric: 'tabular-nums', marginTop: '1px' }}>
+                        {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
           </BottomSheet>
 
           {/* Price chart */}

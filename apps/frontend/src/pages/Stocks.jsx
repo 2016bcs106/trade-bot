@@ -12,6 +12,7 @@ import BottomSheet from '../components/BottomSheet'
 import DetailRow from '../components/DetailRow'
 import Toggle from '../components/Toggle'
 import SectionHeader from '../components/SectionHeader'
+import { useLiveTicks } from '../context/LiveTicksContext'
 
 function getStatusBadge(stock) {
   if (stock.status === 'pending_sync') return { label: 'Syncing', color: 'var(--color-warning)' }
@@ -21,9 +22,16 @@ function getStatusBadge(stock) {
 }
 
 export default function Stocks() {
+  const { stocks: liveStocks, getPriceInfo } = useLiveTicks()
   const [stocks, setStocks] = useState(undefined)
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
+
+  const getLivePriceInfo = (symbol) => {
+    const liveStock = liveStocks.find((s) => s.symbol === symbol)
+    if (!liveStock) return null
+    return getPriceInfo(liveStock.instrumentKey)
+  }
 
   useEffect(() => {
     const unsub = onValue(ref(db, 'stocks'), (snap) => setStocks(snap.val() || {}))
@@ -89,12 +97,21 @@ export default function Stocks() {
         <div style={styles.list}>
           {stockList.map((stock, i) => {
             const badge = getStatusBadge(stock)
+            const info = getLivePriceInfo(stock.symbol)
             return (
               <div key={stock._key} style={{ ...styles.stockRow, ...(i < stockList.length - 1 ? styles.bordered : {}) }} onClick={() => setDetailSymbol(stock.symbol)}>
                 <div style={styles.stockInfo}>
                   <span style={styles.symbol}>{stock.symbol}</span>
                   <span style={styles.name}>{stock.name || '—'}</span>
                 </div>
+                {info && (
+                  <div style={styles.priceCol}>
+                    <span style={{ ...styles.price, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{info.price.toFixed(2)}</span>
+                    <span style={{ ...styles.change, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                      {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <Badge label={badge.label} color={badge.color} />
               </div>
             )
@@ -126,12 +143,18 @@ export default function Stocks() {
               <div style={{ ...styles.statusMsg, color: 'var(--color-danger)' }}>Symbol not found on NSE</div>
             ) : (
               <>
+                <DetailRow label="Live Price" value={(() => {
+                  const info = getLivePriceInfo(selectedStock.symbol)
+                  if (!info) return undefined
+                  const sign = info.change >= 0 ? '+' : ''
+                  return `${info.price.toFixed(2)} (${sign}${info.change.toFixed(2)})`
+                })()} />
                 <DetailRow label="Name" value={selectedStock.name} />
                 <DetailRow label="Exchange" value={selectedStock.exchange} />
                 <DetailRow label="Security ID" value={selectedStock.securityId} />
                 <DetailRow label="ISIN" value={selectedStock.isin} />
                 <DetailRow label="Industry" value={selectedStock.industryName} />
-                <DetailRow label="Market Cap" value={selectedStock.mcap ? `₹${selectedStock.mcap.toLocaleString('en-IN')} Cr` : undefined} />
+                <DetailRow label="Market Cap" value={selectedStock.mcap ? `${selectedStock.mcap.toLocaleString('en-IN')} Cr` : undefined} />
                 <DetailRow label="Added" value={selectedStock.addedAt ? moment(selectedStock.addedAt).format('D MMM YYYY') : undefined} />
 
                 <div style={{ marginTop: 'var(--space-xl)' }}>
@@ -175,6 +198,23 @@ const styles = {
   stockInfo: {
     flex: 1,
     minWidth: 0,
+  },
+  priceCol: {
+    textAlign: 'right',
+  },
+  price: {
+    display: 'block',
+    fontSize: 'var(--font-body)',
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  change: {
+    display: 'block',
+    fontSize: 'var(--font-caption)',
+    fontWeight: 500,
+    fontVariantNumeric: 'tabular-nums',
+    marginTop: '1px',
   },
   symbol: {
     display: 'block',
