@@ -47,7 +47,7 @@ interface ClientSubscription {
 }
 
 class LiveStreamScript extends BaseScript {
-  private config = new TradingConfig("live-stream");
+  private config = new TradingConfig();
   private dataDir = resolve(__dirname, "..", "..", "..", "..", "data");
   private bufferByInstrument = new Map<string, Record<string, unknown>[]>();
   private totalFlushed = 0;
@@ -118,8 +118,8 @@ class LiveStreamScript extends BaseScript {
     });
 
     // Timers
-    setInterval(() => this.flushBuffer(), flushInterval! * 1000);
-    setInterval(() => this.logStats(), statsInterval! * 1000);
+    setInterval(() => this.flushBuffer(), flushInterval * 1000);
+    setInterval(() => this.logStats(), statsInterval * 1000);
 
     // Keep process alive
     await new Promise(() => {});
@@ -127,7 +127,7 @@ class LiveStreamScript extends BaseScript {
 
   private createStreamer(token: string): PaytmMoneyWebSocket {
     const { modeType } = this.config;
-    const maxBufferSize = this.config.bufferSize!;
+    const maxBufferSize = this.config.bufferSize;
     const s = new PaytmMoneyWebSocket(token);
 
     s.on("connected", () => {
@@ -136,7 +136,7 @@ class LiveStreamScript extends BaseScript {
         scripType: c.scripType,
         exchangeType: c.exchangeType,
         scripId: String(c.scripId),
-        modeType: modeType!,
+        modeType,
       })));
     });
 
@@ -190,7 +190,7 @@ class LiveStreamScript extends BaseScript {
 
   private logStats(): void {
     const uptimeMin = Math.round((nowMs() - this.startTime) / 1000 / 60);
-    const statsInterval = this.config.statsInterval!;
+    const statsInterval = this.config.statsInterval;
     const ticksPerSec = ((this.tickCount - this.tickCountAtLastStats) / statsInterval).toFixed(1);
     const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
 

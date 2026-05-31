@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx src/cli/trade-bot.ts",
-    "dry-run": "tsx src/cli/trade-bot.ts --dryRun",
+    "start": "tsx src/cli/live-stream.ts",
     "live-stream": "tsx src/cli/live-stream.ts",
     "request-handler": "tsx src/cli/request-orchestration-script.ts",
     "typecheck": "tsc --noEmit"
