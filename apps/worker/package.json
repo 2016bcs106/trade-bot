@@ -6,9 +6,6 @@
     "start": "tsx src/cli/trade-bot.ts",
     "dry-run": "tsx src/cli/trade-bot.ts --dryRun",
     "live-stream": "tsx src/cli/live-stream.ts",
-    "train": "tsx src/cli/ml-cli.ts train",
-    "predict": "tsx src/cli/ml-cli.ts predict",
-    "evaluate": "tsx src/cli/ml-cli.ts evaluate",
     "request-handler": "tsx src/cli/request-orchestration-script.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -19,9 +16,8 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "firebase": "^12.13.0",
-    "ml-regression-multivariate-linear": "^2.0.4",
     "moment": "^2.30.1",
-        "node-fetch": "^3.3.2",
+    "node-fetch": "^3.3.2",
     "ws": "^8.20.1"
   },
   "devDependencies": {

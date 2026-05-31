@@ -30,20 +30,5 @@ export type AuditEventType =
   | "stock.enabled"
   | "stock.disabled"
   | "stock.config_updated"
-  // Training lifecycle
-  | "training.started"
-  | "training.completed"
-  | "training.failed"
-  // Model lifecycle
-  | "model.promoted"
-  | "model.retired"
-  | "model.rollback"
-  | "model.auto_promoted"
-  // Prediction lifecycle
-  | "prediction.generated"
-  | "prediction.failed"
-  // Evaluation lifecycle
-  | "evaluation.completed"
-  | "evaluation.failed"
   // System events
   | "system.error";

@@ -1,40 +1,29 @@
-import { now, nowISO } from "../utils/time.ts";
+import { nowISO } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
-import { TrainingRequestHandler } from "./training-request-handler.ts";
-import { PredictionRequestHandler } from "./prediction-request-handler.ts";
 
 const logger = createLogger("handler:stock-sync");
 
 /**
  * Handles "stock_sync" requests — resolves a stock symbol via Paytm Money API,
- * saves the full StockConfig to Firebase, then chains training and prediction.
+ * saves the full StockConfig to Firebase.
  *
  * Also handles stock removal when action: "remove" is specified.
  *
  * Expected payload:
  * - symbol: string (stock symbol, e.g. "ADANIENT")
  * - action: "sync" | "remove" (default "sync")
- * - shouldSkipTraining: boolean (default false)
- * - shouldSkipPredicting: boolean (default false)
- *
- * Chain (sync): stock_sync → train (5yr) → predict (last 30 days)
- * If any step fails, the entire request fails (moved to failed_requests).
  */
 export class StockSyncRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
     const {
       symbol,
       action = "sync",
-      shouldSkipTraining = false,
-      shouldSkipPredicting = false,
     } = request.payload as {
       symbol: string;
       action?: "sync" | "remove";
-      shouldSkipTraining?: boolean;
-      shouldSkipPredicting?: boolean;
     };
 
     if (!symbol) {
@@ -118,57 +107,15 @@ export class StockSyncRequestHandler implements RequestHandler {
       await firebase.setStock(symbol, config);
     }
     logger.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
-
-    // ─── Step 2: Train model (5 years of data) ───────────────────────
-
-    if (!shouldSkipTraining) {
-      logger.info(`Chaining training for ${symbol}...`);
-      const trainHandler = new TrainingRequestHandler();
-      await trainHandler.handle({
-        type: "train",
-        payload: { symbol, lookbackDays: 1825 },
-        status: "processing",
-        createdAt: request.createdAt,
-      }, ctx);
-    }
-
-    // ─── Step 3: Generate predictions (last 30 days) ─────────────────
-
-    if (!shouldSkipPredicting) {
-      logger.info(`Chaining predictions for ${symbol} (last 30 days)...`);
-      const predictHandler = new PredictionRequestHandler();
-      const toDate = now().format("YYYY-MM-DD");
-      const fromDate = now().subtract(30, "days").format("YYYY-MM-DD");
-      await predictHandler.handle({
-        type: "predict",
-        payload: { symbol, fromDate, toDate },
-        status: "processing",
-        createdAt: request.createdAt,
-      }, ctx);
-    }
   }
 
-  /**
-   * Remove a stock completely — cleans Firebase AND local model files.
-   */
   private async handleRemove(symbol: string, ctx: ServiceContext): Promise<void> {
-    const { firebase, modelManager } = ctx;
+    const { firebase } = ctx;
 
     logger.info(`Removing stock: ${symbol}`);
 
-    // Remove from Firebase (stock config, models metadata, predictions)
     await firebase.removeStock(symbol);
     logger.info(`  🗑️  Removed stocks/${symbol}`);
-
-    await firebase.removeModels(symbol);
-    logger.info(`  🗑️  Removed models/${symbol}`);
-
-    await firebase.removePredictions(symbol);
-    logger.info(`  🗑️  Removed predictions/${symbol}`);
-
-    // Remove local model files from disk
-    modelManager.deleteSymbolLocal(symbol);
-    logger.info(`  🗑️  Removed local model files for ${symbol}`);
 
     logger.info(`✓ Stock ${symbol} fully removed`);
   }

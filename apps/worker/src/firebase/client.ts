@@ -1,14 +1,12 @@
 import "../config/env.ts";
 import { nowISO } from "../utils/time.ts";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, get, set, push, remove, onValue, onChildAdded, Database, Unsubscribe } from "firebase/database";
+import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
 import { TickData } from "../types/market-data/tick-data.ts";
 import { SignalData } from "../types/market-data/signal-data.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
-import { Prediction, EvaluationResult } from "../types/predictions/index.ts";
-import { ModelMetadata } from "../types/models/index.ts";
 import { AuditEvent } from "../types/audit/index.ts";
 
 const app = initializeApp({
@@ -126,13 +124,6 @@ export default class FirebaseClient {
     await this._remove(`stocks/${symbol}`);
   }
 
-  async removeModels(symbol: string): Promise<void> {
-    await this._remove(`models/${symbol}`);
-  }
-
-  async removePredictions(symbol: string): Promise<void> {
-    await this._remove(`predictions/${symbol}`);
-  }
 
   onStocksChange(callback: (stocks: Record<string, StockConfig> | null) => void): Unsubscribe {
     return this._onChange("stocks", (value) => {
@@ -140,40 +131,6 @@ export default class FirebaseClient {
     });
   }
 
-  // ─── Predictions ───────────────────────────────────────────────────
-
-  async setPrediction(symbol: string, date: string, prediction: Prediction): Promise<void> {
-    await this._setValue(`predictions/${symbol}/${date}`, prediction);
-  }
-
-  async getPrediction(symbol: string, date: string): Promise<Prediction | null> {
-    const data = await this._getValue(`predictions/${symbol}/${date}`);
-    return data as Prediction | null;
-  }
-
-  async setEvaluation(symbol: string, date: string, evaluation: EvaluationResult): Promise<void> {
-    await this._setValue(`predictions/${symbol}/${date}/evaluation`, evaluation);
-  }
-
-  // ─── Models ────────────────────────────────────────────────────────
-
-  async setModelMetadata(symbol: string, version: string, metadata: ModelMetadata): Promise<void> {
-    await this._setValue(`models/${symbol}/${version}`, metadata);
-  }
-
-  async removeModelMetadata(symbol: string, version: string): Promise<void> {
-    await this._setValue(`models/${symbol}/${version}`, null);
-  }
-
-  async getModelMetadata(symbol: string, version: string): Promise<ModelMetadata | null> {
-    const data = await this._getValue(`models/${symbol}/${version}`);
-    return data as ModelMetadata | null;
-  }
-
-  async getAllModelVersions(symbol: string): Promise<Record<string, ModelMetadata>> {
-    const data = await this._getValue(`models/${symbol}`);
-    return (data as Record<string, ModelMetadata>) || {};
-  }
 
   // ─── Audit ─────────────────────────────────────────────────────────
 
@@ -215,60 +172,6 @@ export default class FirebaseClient {
     });
   }
 
-  // ─── Pending Predictions ─────────────────────────────────────────────
-
-  /**
-   * Listen for new entries in pending_predictions/.
-   * Each entry: { symbol, date, status, createdAt }
-   * Calls callback for each newly added child.
-   */
-  onPendingPredictionAdded(callback: (key: string, entry: PendingPredictionEntry) => void): Unsubscribe {
-    return onChildAdded(ref(this.db, "pending_predictions"), (snapshot) => {
-      const key = snapshot.key;
-      const val = snapshot.val();
-      if (key && val) callback(key, val as PendingPredictionEntry);
-    });
-  }
-
-  async updatePendingPrediction(key: string, update: Partial<PendingPredictionEntry>): Promise<void> {
-    const current = await this._getValue(`pending_predictions/${key}`) as PendingPredictionEntry | null;
-    if (current) {
-      await this._setValue(`pending_predictions/${key}`, { ...current, ...update });
-    }
-  }
-
-  async removePendingPrediction(key: string): Promise<void> {
-    await this._remove(`pending_predictions/${key}`);
-  }
-
-  async getAllPendingPredictions(): Promise<Record<string, PendingPredictionEntry>> {
-    return (await this._getValue("pending_predictions") as Record<string, PendingPredictionEntry>) || {};
-  }
-
-  // ─── Pending Trainings ──────────────────────────────────────────────
-
-  onPendingTrainingAdded(callback: (key: string, entry: PendingTrainingEntry) => void): Unsubscribe {
-    return onChildAdded(ref(this.db, "pending_trainings"), (snapshot) => {
-      const key = snapshot.key;
-      const val = snapshot.val();
-      if (key && val) callback(key, val as PendingTrainingEntry);
-    });
-  }
-
-  async updatePendingTraining(key: string, update: Partial<PendingTrainingEntry>): Promise<void> {
-    const current = await this._getValue(`pending_trainings/${key}`) as PendingTrainingEntry | null;
-    if (current) {
-      await this._setValue(`pending_trainings/${key}`, { ...current, ...update });
-    }
-  }
-
-  async removePendingTraining(key: string): Promise<void> {
-    await this._remove(`pending_trainings/${key}`);
-  }
-
-  async getAllPendingTrainings(): Promise<Record<string, PendingTrainingEntry>> {
-    return (await this._getValue("pending_trainings") as Record<string, PendingTrainingEntry>) || {};
-  }
 
   // ─── Request Queue ─────────────────────────────────────────────────
 
@@ -335,23 +238,3 @@ export interface QueuedRequest {
   _key?: string;
 }
 
-export interface PendingPredictionEntry {
-  symbol: string;
-  fromDate: string;
-  toDate: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  createdAt: string;
-  processedDates?: number;
-  totalDates?: number;
-  error?: string;
-}
-
-export interface PendingTrainingEntry {
-  symbol: string;
-  modelType: string; // "auto" | "random-forest" | "linear-regression" | etc.
-  lookbackDays: number;
-  status: "pending" | "processing" | "completed" | "failed";
-  createdAt: string;
-  error?: string;
-  resultVersion?: string;
-}

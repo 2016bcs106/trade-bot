@@ -13,15 +13,5 @@
     "name": "trade-bot",
     "schedule": "* * * * *",
     "command": "src/cli/trade-bot.ts"
-  },
-  {
-    "name": "predict",
-    "schedule": "*/5 3-10 * * 1-5",
-    "command": "src/cli/ml-cli.ts predict"
-  },
-  {
-    "name": "evaluate",
-    "schedule": "30 10 * * 1-5",
-    "command": "src/cli/ml-cli.ts evaluate"
   }
 ]

@@ -14,10 +14,6 @@ const BACKUP_DIR = resolve(__dirname, "..", "..", "..", "..", "data", "backups")
 
 const ALL_PATHS = [
   "stocks",
-  "models",
-  "predictions",
-  "pending_trainings",
-  "pending_predictions",
   "request_queue",
   "failed_requests",
   "scripts",
@@ -31,7 +27,7 @@ const ALL_PATHS = [
  * No payload required.
  */
 export class CleanupRequestHandler implements RequestHandler {
-  async handle(_request: QueuedRequest, ctx: ServiceContext): Promise<void> {
+  async handle(_request: QueuedRequest, _ctx: ServiceContext): Promise<void> {
     logger.info("Wiping ALL Firebase data...");
 
     // Snapshot before deletion
@@ -42,13 +38,6 @@ export class CleanupRequestHandler implements RequestHandler {
     for (const path of ALL_PATHS) {
       await remove(ref(db, path));
       logger.info(`  🗑️  Cleared ${path}/`);
-    }
-
-    // Delete local model files
-    const localSymbols = ctx.modelManager.listSymbols();
-    if (localSymbols.length > 0) {
-      ctx.modelManager.deleteAllLocal();
-      logger.info(`  🗑️  Deleted local models for ${localSymbols.length} symbols`);
     }
 
     logger.info("✓ All data cleared");

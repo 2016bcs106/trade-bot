@@ -50,34 +50,6 @@ export default class AuditLogger {
     return this.createEvent("stock.disabled", `Stock ${symbol} disabled`, symbol, metadata);
   }
 
-  trainingStarted(symbol: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("training.started", `Training started for ${symbol}`, symbol, metadata);
-  }
-
-  trainingCompleted(symbol: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("training.completed", `Training completed for ${symbol}`, symbol, metadata);
-  }
-
-  trainingFailed(symbol: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("training.failed", `Training failed for ${symbol}`, symbol, metadata);
-  }
-
-  modelPromoted(symbol: string, version: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("model.promoted", `Model ${version} promoted to production for ${symbol}`, symbol, { version, ...metadata });
-  }
-
-  modelRolledBack(symbol: string, fromVersion: string, toVersion: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("model.rollback", `Model rolled back from ${fromVersion} to ${toVersion} for ${symbol}`, symbol, { fromVersion, toVersion, ...metadata });
-  }
-
-  predictionGenerated(symbol: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("prediction.generated", `Prediction generated for ${symbol}`, symbol, metadata);
-  }
-
-  evaluationCompleted(symbol: string, metadata: Record<string, unknown> = {}): AuditEvent {
-    return this.createEvent("evaluation.completed", `Evaluation completed for ${symbol}`, symbol, metadata);
-  }
-
   systemError(description: string, metadata: Record<string, unknown> = {}): AuditEvent {
     return this.createEvent("system.error", description, null, metadata);
   }
