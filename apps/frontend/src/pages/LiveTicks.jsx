@@ -16,9 +16,10 @@ import { faPlugCircleXmark, faChevronDown } from '@fortawesome/free-solid-svg-ic
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Loader from '../components/Loader'
-import { useLiveTicks } from '../context/LiveTicksContext'
+import { useLiveTicks, isMarketOpen } from '../context/LiveTicksContext'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
+
 
 // ─── Chart Plugins ──────────────────────────────────────────────
 
@@ -27,8 +28,9 @@ const pulsingDotPlugin = {
   afterDatasetsDraw(chart) {
     const { ctx, chartArea } = chart
     if (!chartArea) return
+    const marketOpen = isMarketOpen()
     const time = Date.now() / 1000
-    const alpha = 0.6 + 0.4 * Math.sin(time * 6)
+    const alpha = marketOpen ? (0.6 + 0.4 * Math.sin(time * 6)) : 0.5
     const radius = 3
 
     chart.data.datasets.forEach((dataset, datasetIndex) => {
@@ -41,7 +43,9 @@ const pulsingDotPlugin = {
       }
       if (!lastPoint) return
 
-      const color = typeof dataset.borderColor === 'function' ? '#007aff' : (dataset.borderColor || '#007aff')
+      const color = marketOpen
+        ? (typeof dataset.borderColor === 'function' ? '#007aff' : (dataset.borderColor || '#007aff'))
+        : '#8e8e93'
       ctx.save()
       ctx.globalAlpha = alpha
       ctx.fillStyle = color
@@ -197,9 +201,10 @@ export default function LiveTicks() {
   }, [rows])
 
   const priceChartData = useMemo(() => {
+    const marketOpen = isMarketOpen()
     const isPositive = openPrice != null && latestPrice != null && latestPrice >= openPrice
-    const lineColor = openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
-    const fillRgb = isPositive ? '52, 199, 89' : '255, 59, 48'
+    const lineColor = !marketOpen ? '#8e8e93' : openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
+    const fillRgb = !marketOpen ? '142, 142, 147' : (isPositive ? '52, 199, 89' : '255, 59, 48')
     const firstClose = rows.length > 0 ? rows[0].close : null
 
     return {
@@ -234,12 +239,13 @@ export default function LiveTicks() {
     const prevBuy = lastIdx >= 1 ? rows[lastIdx - 1].buyQtySum : 0
     const prevSell = lastIdx >= 1 ? rows[lastIdx - 1].sellQtySum : 0
 
+    const marketLive = isMarketOpen()
     const buyProjected = [...Array(PRE_PAD).fill(null), ...rows.map((r, i) => {
-      if (i === lastIdx) return secondsElapsed < 3 ? prevBuy : Math.round(r.buyQtySum * scaleFactor)
+      if (i === lastIdx) return !marketLive || secondsElapsed < 3 ? prevBuy : Math.round(r.buyQtySum * scaleFactor)
       return i === lastIdx - 1 ? r.buyQtySum : null
     })]
     const sellProjected = [...Array(PRE_PAD).fill(null), ...rows.map((r, i) => {
-      if (i === lastIdx) return secondsElapsed < 3 ? prevSell : Math.round(r.sellQtySum * scaleFactor)
+      if (i === lastIdx) return !marketLive || secondsElapsed < 3 ? prevSell : Math.round(r.sellQtySum * scaleFactor)
       return i === lastIdx - 1 ? r.sellQtySum : null
     })]
 
@@ -251,23 +257,33 @@ export default function LiveTicks() {
       return g
     }
 
+    const marketOpen = isMarketOpen()
+    const buyColor = marketOpen ? '#34c759' : '#8e8e93'
+    const sellColor = marketOpen ? '#ff3b30' : '#8e8e93'
+    const buyRgb = marketOpen ? '52, 199, 89' : '142, 142, 147'
+    const sellRgb = marketOpen ? '255, 59, 48' : '142, 142, 147'
+
     return {
       labels,
       datasets: [
-        { label: 'Buy Qty', data: buyCompleted, borderColor: '#34c759', backgroundColor: mkGradient('52, 199, 89'), fill: true, spanGaps: false, skipPulsingDot: true },
-        { label: 'Sell Qty', data: sellCompleted, borderColor: '#ff3b30', backgroundColor: mkGradient('255, 59, 48'), fill: true, spanGaps: false, skipPulsingDot: true },
-        { label: 'Buy (Projected)', data: buyProjected, borderColor: '#34c759', borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, spanGaps: false },
-        { label: 'Sell (Projected)', data: sellProjected, borderColor: '#ff3b30', borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, spanGaps: false },
+        { label: 'Buy Qty', data: buyCompleted, borderColor: buyColor, backgroundColor: mkGradient(buyRgb), fill: true, spanGaps: false, skipPulsingDot: true },
+        { label: 'Sell Qty', data: sellCompleted, borderColor: sellColor, backgroundColor: mkGradient(sellRgb), fill: true, spanGaps: false, skipPulsingDot: true },
+        { label: 'Buy (Projected)', data: buyProjected, borderColor: buyColor, borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, pointBackgroundColor: buyColor, pointBorderWidth: 0, spanGaps: true },
+        { label: 'Sell (Projected)', data: sellProjected, borderColor: sellColor, borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, pointBackgroundColor: sellColor, pointBorderWidth: 0, spanGaps: true },
       ],
     }
   }, [labels, rows, secondsElapsed])
 
   const pressureChartData = useMemo(() => {
+    const marketOpen = isMarketOpen()
     const diffs = rows.map((r) => (r.sellQtySum || 0) - (r.buyQtySum || 0))
     const maxAbs = Math.max(1, ...diffs.map(Math.abs))
     const tanhValues = diffs.map((d) => Math.tanh(d / (maxAbs * 0.05)))
     const firstTanh = tanhValues.length > 0 ? tanhValues[0] : 0
     const firstDiff = diffs.length > 0 ? diffs[0] : 0
+
+    const sellC = marketOpen ? 'rgba(255, 59, 48' : 'rgba(142, 142, 147'
+    const buyC = marketOpen ? 'rgba(52, 199, 89' : 'rgba(142, 142, 147'
 
     return {
       labels,
@@ -275,17 +291,17 @@ export default function LiveTicks() {
         label: 'tanh(S−B)',
         data: [...Array(PRE_PAD).fill(firstTanh), ...tanhValues],
         rawDiffs: [...Array(PRE_PAD).fill(firstDiff), ...diffs],
-        segment: { borderColor: (ctx) => ctx.p0.parsed.y >= 0 ? '#ff3b30' : '#34c759' },
-        borderColor: '#ff3b30',
+        segment: { borderColor: (ctx) => marketOpen ? (ctx.p0.parsed.y >= 0 ? '#ff3b30' : '#34c759') : '#8e8e93' },
+        borderColor: marketOpen ? '#ff3b30' : '#8e8e93',
         backgroundColor: (context) => {
           const chart = context.chart
-          if (!chart.chartArea || !chart.scales?.y) return 'rgba(255, 59, 48, 0.08)'
+          if (!chart.chartArea || !chart.scales?.y) return `${sellC}, 0.08)`
           const { top, bottom } = chart.chartArea
           const zeroY = chart.scales.y.getPixelForValue(0)
           const ratio = Math.max(0, Math.min(1, (zeroY - top) / (bottom - top)))
           const g = chart.ctx.createLinearGradient(0, top, 0, bottom)
-          g.addColorStop(0, 'rgba(255, 59, 48, 0.15)'); g.addColorStop(ratio, 'rgba(255, 59, 48, 0)')
-          g.addColorStop(ratio, 'rgba(52, 199, 89, 0)'); g.addColorStop(1, 'rgba(52, 199, 89, 0.15)')
+          g.addColorStop(0, `${sellC}, 0.15)`); g.addColorStop(ratio, `${sellC}, 0)`)
+          g.addColorStop(ratio, `${buyC}, 0)`); g.addColorStop(1, `${buyC}, 0.15)`)
           return g
         },
         fill: true,
@@ -341,7 +357,14 @@ export default function LiveTicks() {
           <FontAwesomeIcon icon={faChevronDown} style={styles.chevron} />
         </button>
         <div style={styles.statusRow}>
-          <span style={{ ...styles.dot, background: status === 'connected' ? 'var(--color-success)' : status === 'reconnecting' ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+          <span style={{
+            ...styles.dot,
+            background: !isMarketOpen() ? 'var(--color-text-tertiary)'
+              : status === 'connected' ? 'var(--color-success)'
+              : status === 'reconnecting' ? 'var(--color-warning)'
+              : 'var(--color-text-tertiary)',
+            animation: isMarketOpen() ? 'pulse-dot 2s ease-in-out infinite' : 'none',
+          }} />
           <span style={styles.symbolText}>{selectedStock.symbol}</span>
         </div>
       </div>
@@ -466,7 +489,6 @@ const styles = {
     width: '7px',
     height: '7px',
     borderRadius: '50%',
-    animation: 'pulse-dot 2s ease-in-out infinite',
   },
   symbolText: {
     fontSize: 'var(--font-footnote)',

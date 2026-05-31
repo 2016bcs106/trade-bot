@@ -12,6 +12,14 @@ function isCurrentIstDayMinute(minute) {
   return String(minute).slice(0, 10) === getTodayIstDate()
 }
 
+export function isMarketOpen() {
+  const now = moment().utcOffset('+05:30')
+  const day = now.day()
+  if (day === 0 || day === 6) return false
+  const minutes = now.hours() * 60 + now.minutes()
+  return minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30
+}
+
 const LiveTicksContext = createContext(null)
 
 export function LiveTicksProvider({ children }) {

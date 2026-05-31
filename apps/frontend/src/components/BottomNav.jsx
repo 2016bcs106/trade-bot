@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChartLine, faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
+import { isMarketOpen } from '../context/LiveTicksContext'
 
 const navItems = [
   { path: '/', label: 'Live', icon: faChartLine },
@@ -20,6 +21,8 @@ function MinuteProgressBar() {
     const interval = setInterval(() => setSeconds(moment().seconds()), 1000)
     return () => clearInterval(interval)
   }, [])
+
+  if (!isMarketOpen()) return null
 
   const progress = (seconds / 60) * 100
 
