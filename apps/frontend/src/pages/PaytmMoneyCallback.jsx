@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import moment from 'moment'
-import { db, ref, set, onValue, push } from '../utils/firebase'
-import { layout, text, card, merge } from '../utils/styles'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { db, ref, onValue, push } from '../utils/firebase'
 
-const TIMEOUT_MS = 30000 // 30 second timeout
+const TIMEOUT_MS = 30000
 
 export default function PaytmMoneyCallback() {
   const [searchParams] = useSearchParams()
@@ -13,11 +14,7 @@ export default function PaytmMoneyCallback() {
 
   useEffect(() => {
     const requestToken = searchParams.get('requestToken')
-
-    if (!requestToken) {
-      navigate('/login', { replace: true })
-      return
-    }
+    if (!requestToken) { navigate('/login', { replace: true }); return }
 
     let unsubscribe = null
     let timeoutId = null
@@ -26,7 +23,6 @@ export default function PaytmMoneyCallback() {
       try {
         const requestTime = moment().utcOffset('+05:30').valueOf()
 
-        // Push access_token request to request_queue
         await push(ref(db, 'request_queue'), {
           type: 'access_token',
           payload: { requestToken },
@@ -36,7 +32,6 @@ export default function PaytmMoneyCallback() {
 
         setStatus('Waiting for access token...')
 
-        // Listen to updatedOn - navigate only when it's updated AFTER our request
         const updatedOnRef = ref(db, 'auth/updatedOn')
         unsubscribe = onValue(updatedOnRef, (snapshot) => {
           const updatedOn = snapshot.val()
@@ -48,12 +43,10 @@ export default function PaytmMoneyCallback() {
 
         timeoutId = setTimeout(() => {
           cleanup()
-          setStatus('Timed out waiting for access token. Please try again.')
+          setStatus('Timed out. Please try again.')
           setTimeout(() => navigate('/login', { replace: true }), 2000)
         }, TIMEOUT_MS)
-
-      } catch (error) {
-        console.error('Callback error:', error)
+      } catch {
         setStatus('Authentication failed. Please try again.')
         setTimeout(() => navigate('/login', { replace: true }), 2000)
       }
@@ -65,16 +58,41 @@ export default function PaytmMoneyCallback() {
     }
 
     processCallback()
-
     return cleanup
   }, [searchParams, navigate])
 
   return (
-    <div style={merge(layout.page, layout.center)}>
-      <div style={merge(card.base, { padding: '2rem 3rem', textAlign: 'center' })}>
-        <div style={{ marginBottom: '1rem', fontSize: '1.5rem' }}>⏳</div>
-        <p style={text.muted}>{status}</p>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <FontAwesomeIcon icon={faSpinner} spin style={styles.icon} />
+        <p style={styles.text}>{status}</p>
       </div>
     </div>
   )
+}
+
+const styles = {
+  page: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'var(--color-bg)',
+  },
+  card: {
+    background: 'var(--color-card)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--color-border)',
+    padding: '2rem 3rem',
+    textAlign: 'center',
+  },
+  icon: {
+    fontSize: '1.5rem',
+    color: 'var(--color-primary)',
+    marginBottom: 'var(--space-lg)',
+  },
+  text: {
+    fontSize: 'var(--font-md)',
+    color: 'var(--color-text-muted)',
+  },
 }

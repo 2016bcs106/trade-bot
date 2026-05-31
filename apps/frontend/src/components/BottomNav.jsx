@@ -1,28 +1,49 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faChartBar, faDesktop, faGear } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faChartBar, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
 
 const navItems = [
   { path: '/', label: 'Home', icon: faChartLine },
   { path: '/stocks', label: 'Stocks', icon: faChartBar },
-  { path: '/monitor', label: 'Monitor', icon: faDesktop },
+  { path: '/monitor', label: 'Monitor', icon: faHeartPulse },
   { path: '/settings', label: 'Settings', icon: faGear },
 ]
 
 const hiddenPaths = ['/login', '/paytm-money-callback']
 
+export default function BottomNav() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  if (hiddenPaths.includes(location.pathname)) return null
+
+  return (
+    <nav style={styles.nav}>
+      {navItems.map((item) => {
+        const isActive = location.pathname === item.path
+        return (
+          <button key={item.path} onClick={() => navigate(item.path)} style={{ ...styles.item, ...(isActive ? styles.itemActive : {}) }}>
+            <FontAwesomeIcon icon={item.icon} style={{ ...styles.icon, ...(isActive ? styles.iconActive : {}) }} />
+            <span style={{ ...styles.label, ...(isActive ? styles.labelActive : {}) }}>{item.label}</span>
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
 const styles = {
   nav: {
     position: 'fixed',
-    bottom: '0',
-    left: '0',
-    right: '0',
+    bottom: 0,
+    left: 0,
+    right: 0,
     display: 'flex',
     justifyContent: 'space-around',
     alignItems: 'center',
-    background: 'var(--pm-card-bg)',
-    borderTop: '1px solid var(--pm-border)',
-    boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.06)',
+    background: 'var(--color-card)',
+    borderTop: '1px solid var(--color-border)',
+    boxShadow: 'var(--shadow-sm)',
     padding: '0.6rem 0',
     zIndex: 1000,
   },
@@ -30,71 +51,30 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '0.25rem',
+    gap: 'var(--space-xs)',
     padding: '0.4rem 1.5rem',
-    borderRadius: '8px',
+    borderRadius: 'var(--radius-sm)',
     cursor: 'pointer',
-    transition: 'background 0.2s',
     border: 'none',
     background: 'transparent',
+    transition: 'background 0.2s',
   },
   itemActive: {
-    background: 'rgba(59, 130, 246, 0.1)',
+    background: 'var(--color-primary-light)',
   },
   icon: {
-    fontSize: '1.1rem',
-    color: 'var(--pm-text-muted)',
+    fontSize: 'var(--font-xl)',
+    color: 'var(--color-text-muted)',
   },
   iconActive: {
-    color: 'var(--pm-primary)',
+    color: 'var(--color-primary)',
   },
   label: {
-    fontSize: '0.65rem',
-    fontWeight: '600',
-    color: 'var(--pm-text-muted)',
+    fontSize: 'var(--font-xs)',
+    fontWeight: 600,
+    color: 'var(--color-text-muted)',
   },
   labelActive: {
-    color: 'var(--pm-primary)',
+    color: 'var(--color-primary)',
   },
-}
-
-export default function BottomNav() {
-  const navigate = useNavigate()
-  const location = useLocation()
-
-  if (hiddenPaths.includes(location.pathname)) {
-    return null
-  }
-
-  return (
-    <nav style={styles.nav}>
-      {navItems.map((item) => {
-        const isActive = location.pathname === item.path
-        return (
-          <button
-            key={item.path}
-            onClick={() => navigate(item.path)}
-            style={{
-              ...styles.item,
-              ...(isActive ? styles.itemActive : {}),
-            }}
-          >
-            <FontAwesomeIcon
-              icon={item.icon}
-              style={{
-                ...styles.icon,
-                ...(isActive ? styles.iconActive : {}),
-              }}
-            />
-            <span style={{
-              ...styles.label,
-              ...(isActive ? styles.labelActive : {}),
-            }}>
-              {item.label}
-            </span>
-          </button>
-        )
-      })}
-    </nav>
-  )
 }
