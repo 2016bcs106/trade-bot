@@ -10,7 +10,7 @@ import BaseScript from "./base-script.ts";
 import { nowMs, nowISO, todayDate } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
 import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.ts";
-import LIVE_TRADE_CONFIG from "../config/live-trade-config.ts";
+import { StockConfig } from "../types/stocks/stock-config.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,11 +34,11 @@ interface MinuteAggregatePayload {
   lastUpdatedAt: string;
 }
 
-interface LiveTradeStockConfig {
+interface TrackedStock {
+  symbol: string;
   displayName: string;
   exchangeType: string;
   scripId: number;
-  symbol: string;
   scripType: string;
 }
 
@@ -68,9 +68,9 @@ class LiveStreamScript extends BaseScript {
   private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
   private wsDayTracker = this.getDateIST();
   private clientSubscriptions = new Map<WebSocket, ClientSubscription>();
-  private liveTradeConfig = LIVE_TRADE_CONFIG as LiveTradeStockConfig[];
-  private instrumentByKey = new Map<string, LiveTradeStockConfig>();
-  private instrumentBySecurityId = new Map<number, LiveTradeStockConfig>();
+  private trackedStocks: TrackedStock[] = [];
+  private instrumentByKey = new Map<string, TrackedStock>();
+  private instrumentBySecurityId = new Map<number, TrackedStock>();
 
   get scriptName(): string {
     return "live-stream";
@@ -83,22 +83,39 @@ class LiveStreamScript extends BaseScript {
       totalFlushedToday: this.totalFlushedToday,
       bufferSize: Array.from(this.bufferByInstrument.values()).reduce((sum, arr) => sum + arr.length, 0),
       uptimeMinutes: Math.round((nowMs() - this.startTime) / 1000 / 60),
-      trackedStocks: this.liveTradeConfig.length,
+      trackedStocks: this.trackedStocks.length,
       config: this.config.toJSON(),
     };
   }
 
   protected async run(): Promise<void> {
     mkdirSync(this.dataDir, { recursive: true });
-    this.initializeInstrumentMaps();
     this.cleanupOldDataFiles();
     this.startLocalBroadcastWebSocket();
 
-    const { modeType, flushInterval, bufferSize, statsInterval } = this.config;
+    const { flushInterval, statsInterval } = this.config;
 
     this.log.info("Starting live market data recorder");
-    this.log.info(`Config — stocks=${this.liveTradeConfig.length} mode=${modeType} flush=${flushInterval}s buffer=${bufferSize} stats=${statsInterval}s`);
     this.log.info(`Output directory: ${this.dataDir}`);
+
+    // Load stocks from Firebase and listen for changes
+    this.firebase.onStocksChange((stocks) => {
+      const enabled = stocks
+        ? Object.values(stocks).filter((s) => s.enabled && s.securityId)
+        : [];
+
+      this.trackedStocks = enabled.map((s) => this.toTrackedStock(s));
+      this.initializeInstrumentMaps();
+
+      this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);
+
+      // Reconnect WebSocket with new subscriptions
+      if (this.currentToken && this.streamer) {
+        this.streamer.disconnect();
+        this.streamer = this.createStreamer(this.currentToken);
+        this.streamer.connect();
+      }
+    });
 
     // Listen to token changes and connect
     this.firebase.onPublicAccessTokenChange((token: string) => {
@@ -125,14 +142,24 @@ class LiveStreamScript extends BaseScript {
     await new Promise(() => {});
   }
 
+  private toTrackedStock(s: StockConfig): TrackedStock {
+    return {
+      symbol: s.symbol,
+      displayName: s.name,
+      exchangeType: s.exchange,
+      scripId: typeof s.securityId === "string" ? parseInt(s.securityId, 10) : s.securityId,
+      scripType: "EQUITY",
+    };
+  }
+
   private createStreamer(token: string): PaytmMoneyWebSocket {
     const { modeType } = this.config;
     const maxBufferSize = this.config.bufferSize;
     const s = new PaytmMoneyWebSocket(token);
 
     s.on("connected", () => {
-      this.log.info("WebSocket connected");
-      s.subscribe(this.liveTradeConfig.map((c) => ({
+      this.log.info(`WebSocket connected — subscribing to ${this.trackedStocks.length} stocks`);
+      s.subscribe(this.trackedStocks.map((c) => ({
         scripType: c.scripType,
         exchangeType: c.exchangeType,
         scripId: String(c.scripId),
@@ -367,7 +394,7 @@ class LiveStreamScript extends BaseScript {
     if (client.readyState !== WebSocket.OPEN) return;
     client.send(JSON.stringify({
       type: "stock_list",
-      data: this.liveTradeConfig.map((stock) => ({
+      data: this.trackedStocks.map((stock) => ({
         instrumentKey: this.getInstrumentKey(stock),
         symbol: stock.symbol,
         displayName: stock.displayName,
@@ -392,21 +419,21 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
-  private getInstrumentKey(stock: LiveTradeStockConfig): string {
+  private getInstrumentKey(stock: TrackedStock): string {
     return `${stock.exchangeType}:${stock.scripType}:${stock.scripId}`;
   }
 
   private initializeInstrumentMaps(): void {
     this.instrumentByKey.clear();
     this.instrumentBySecurityId.clear();
-    for (const stock of this.liveTradeConfig) {
+    for (const stock of this.trackedStocks) {
       const key = this.getInstrumentKey(stock);
       this.instrumentByKey.set(key, stock);
-      this.instrumentBySecurityId.set(Number(stock.scripId), stock);
+      this.instrumentBySecurityId.set(stock.scripId, stock);
     }
   }
 
-  private resolveStockFromTick(tick: Record<string, unknown>): LiveTradeStockConfig | null {
+  private resolveStockFromTick(tick: Record<string, unknown>): TrackedStock | null {
     const securityId = Number(tick.security_id);
     if (!Number.isFinite(securityId)) return null;
     return this.instrumentBySecurityId.get(securityId) ?? null;
@@ -427,7 +454,7 @@ class LiveStreamScript extends BaseScript {
     return total;
   }
 
-  private getOutputFilePath(stock: LiveTradeStockConfig): string {
+  private getOutputFilePath(stock: TrackedStock): string {
     return resolve(this.dataDir, `${stock.exchangeType}_${stock.scripId}_${this.getDateIST()}.ndjson`);
   }
 
