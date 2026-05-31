@@ -35,10 +35,11 @@ function isCurrentIstDayMinute(minute) {
 const pulsingDotPlugin = {
   id: 'pulsingDot',
   afterDatasetsDraw(chart) {
-    const { ctx } = chart
+    const { ctx, chartArea } = chart
+    if (!chartArea) return
     const time = Date.now() / 1000
-    const scale = 1 + 0.4 * Math.sin(time * 6)
     const alpha = 0.6 + 0.4 * Math.sin(time * 6)
+    const radius = 3
 
     chart.data.datasets.forEach((dataset, datasetIndex) => {
       if (dataset.skipPulsingDot) return
@@ -53,9 +54,9 @@ const pulsingDotPlugin = {
       const color = typeof dataset.borderColor === 'function' ? '#3b82f6' : (dataset.borderColor || '#3b82f6')
       ctx.save()
       ctx.globalAlpha = alpha
-      ctx.beginPath()
-      ctx.arc(lastPoint.x, lastPoint.y, 2.5 * scale, 0, Math.PI * 2)
       ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.arc(lastPoint.x, lastPoint.y, radius, 0, Math.PI * 2)
       ctx.fill()
       ctx.restore()
     })
@@ -142,7 +143,7 @@ const pressureChartOptions = {
   },
   scales: {
     ...baseChartOptions.scales,
-    y: { display: false, min: -1, max: 1, beginAtZero: true },
+    y: { display: false, beginAtZero: true },
   },
 }
 
@@ -160,9 +161,7 @@ function MinuteProgressBar() {
 
   return (
     <div style={styles.progressTrack}>
-      <div style={{ ...styles.progressFill, width: `${progress}%` }}>
-        <span style={styles.progressDot} />
-      </div>
+      <div style={{ ...styles.progressFill, width: `${progress}%` }} />
     </div>
   )
 }
@@ -508,10 +507,12 @@ const styles = {
     fontWeight: 600,
   },
   dot: {
-    width: '10px',
-    height: '10px',
+    width: '8px',
+    height: '8px',
+    minWidth: '8px',
+    minHeight: '8px',
     borderRadius: '50%',
-    display: 'inline-block',
+    display: 'block',
     flexShrink: 0,
     animation: 'pulse-dot 2s ease-in-out infinite',
   },
@@ -567,33 +568,18 @@ const styles = {
   priceRow: { textAlign: 'center', marginBottom: 'var(--space-sm)' },
   progressTrack: {
     position: 'fixed',
-    bottom: '64px',
+    bottom: '56px',
     left: 0,
     right: 0,
     height: '3px',
     background: 'var(--color-border)',
     zIndex: 1001,
-    overflow: 'visible',
   },
   progressFill: {
-    position: 'relative',
     height: '100%',
     background: 'var(--color-info)',
     transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     borderRadius: '0 2px 2px 0',
-    overflow: 'visible',
-  },
-  progressDot: {
-    position: 'absolute',
-    right: '-4px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: 'var(--color-info)',
-    animation: 'pulse-dot 1s ease-in-out infinite',
-    boxShadow: '0 0 6px var(--color-info)',
   },
   sheetItem: {
     width: '100%',
