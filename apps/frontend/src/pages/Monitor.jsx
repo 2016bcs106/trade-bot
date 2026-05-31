@@ -3,7 +3,7 @@ import moment from 'moment'
 import { ref, onValue, remove } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircle, faChevronDown, faChevronRight, faTrash, faHeartPulse } from '@fortawesome/free-solid-svg-icons'
+import { faCircle, faChevronDown, faChevronRight, faTrash, faHeartPulse, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
@@ -83,7 +83,7 @@ function RequestCard({ req, onDelete }) {
 }
 
 export default function Monitor() {
-  const [scripts, setScripts] = useState(null)
+  const [scripts, setScripts] = useState(undefined)
   const [requests, setRequests] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
 
@@ -111,7 +111,9 @@ export default function Monitor() {
       <PageHeader icon={faHeartPulse} title="Monitor" />
 
       <SectionHeader>Scripts</SectionHeader>
-      {!scripts || Object.keys(scripts).length === 0 ? (
+      {scripts === undefined ? (
+        <Card><div style={styles.empty}><FontAwesomeIcon icon={faSpinner} spin style={{ color: 'var(--color-primary)' }} /></div></Card>
+      ) : !scripts || Object.keys(scripts).length === 0 ? (
         <Card><div style={styles.empty}>No scripts reporting</div></Card>
       ) : (
         Object.entries(scripts).map(([name, data]) => (

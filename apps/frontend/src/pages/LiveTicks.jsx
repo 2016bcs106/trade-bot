@@ -12,7 +12,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faRepeat } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faRepeat, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 
@@ -414,13 +414,11 @@ export default function LiveTicks() {
           <>
             {selectedStock.displayName}
             <span style={styles.symbolTag}>{selectedStock.symbol}</span>
+            <FontAwesomeIcon icon={faRepeat} onClick={() => setSheetOpen(true)} style={styles.switchBtn} />
           </>
-        ) : 'Live Ticks'}
-        <FontAwesomeIcon
-          icon={faRepeat}
-          onClick={() => setSheetOpen(true)}
-          style={styles.switchBtn}
-        />
+        ) : (
+          <FontAwesomeIcon icon={faSpinner} spin style={{ color: 'var(--color-text-muted)' }} />
+        )}
       </h2>
 
       {isDisconnected && (

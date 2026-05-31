@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import moment from 'moment'
 import { db, ref, set, push, onValue } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartBar, faTrash, faPlus, faSync, faInfoCircle } from '@fortawesome/free-solid-svg-icons'
+import { faChartBar, faTrash, faPlus, faSync, faInfoCircle, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
@@ -75,7 +75,13 @@ export default function Stocks() {
   }
 
   if (stocks === undefined) {
-    return <Page><EmptyState title="Loading..." /></Page>
+    return (
+      <Page>
+        <div style={styles.loader}>
+          <FontAwesomeIcon icon={faSpinner} spin style={{ fontSize: '1.5rem', color: 'var(--color-primary)' }} />
+        </div>
+      </Page>
+    )
   }
 
   return (
@@ -161,6 +167,12 @@ export default function Stocks() {
 }
 
 const styles = {
+  loader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '60vh',
+  },
   card: {
     background: 'var(--color-card)',
     borderBottom: '1px solid var(--color-border)',
