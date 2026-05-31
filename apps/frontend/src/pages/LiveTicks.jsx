@@ -12,9 +12,10 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faRepeat, faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faRepeat } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
+import Loader from '../components/Loader'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
 
@@ -403,22 +404,19 @@ export default function LiveTicks() {
   const isDisconnected = status === 'disconnected'
   const selectedStock = stocks.find((s) => s.instrumentKey === selectedInstrumentKey)
 
+  if (!selectedStock) {
+    return <div style={styles.wrap}><Loader /></div>
+  }
+
   return (
     <div style={styles.wrap}>
       {/* Header */}
       <h2 style={styles.header}>
         {status === 'connected' && <span style={{ ...styles.dot, background: 'var(--color-success)' }} />}
         {status === 'reconnecting' && <span style={{ ...styles.dot, background: 'var(--color-warning)', animationDuration: '1s' }} />}
-        {status === 'connecting' && <span style={{ ...styles.dot, background: 'var(--color-text-muted)', animationDuration: '1.5s' }} />}
-        {selectedStock ? (
-          <>
-            {selectedStock.displayName}
-            <span style={styles.symbolTag}>{selectedStock.symbol}</span>
-            <FontAwesomeIcon icon={faRepeat} onClick={() => setSheetOpen(true)} style={styles.switchBtn} />
-          </>
-        ) : (
-          <FontAwesomeIcon icon={faSpinner} spin style={{ color: 'var(--color-text-muted)' }} />
-        )}
+        {selectedStock.displayName}
+        <span style={styles.symbolTag}>{selectedStock.symbol}</span>
+        <FontAwesomeIcon icon={faRepeat} onClick={() => setSheetOpen(true)} style={styles.switchBtn} />
       </h2>
 
       {isDisconnected && (

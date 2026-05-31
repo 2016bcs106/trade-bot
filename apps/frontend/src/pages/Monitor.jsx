@@ -3,7 +3,8 @@ import moment from 'moment'
 import { ref, onValue, remove } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircle, faChevronDown, faChevronRight, faTrash, faHeartPulse, faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { faCircle, faChevronDown, faChevronRight, faTrash, faHeartPulse } from '@fortawesome/free-solid-svg-icons'
+import Loader from '../components/Loader'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
@@ -106,14 +107,16 @@ export default function Monitor() {
     ...failedRequests.map(r => ({ ...r, _source: 'failed' })),
   ].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 
+  if (scripts === undefined) {
+    return <Page><Loader /></Page>
+  }
+
   return (
     <Page>
       <PageHeader icon={faHeartPulse} title="Monitor" />
 
       <SectionHeader>Scripts</SectionHeader>
-      {scripts === undefined ? (
-        <Card><div style={styles.empty}><FontAwesomeIcon icon={faSpinner} spin style={{ color: 'var(--color-primary)' }} /></div></Card>
-      ) : !scripts || Object.keys(scripts).length === 0 ? (
+      {!scripts || Object.keys(scripts).length === 0 ? (
         <Card><div style={styles.empty}>No scripts reporting</div></Card>
       ) : (
         Object.entries(scripts).map(([name, data]) => (
