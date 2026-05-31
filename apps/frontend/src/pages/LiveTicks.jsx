@@ -16,19 +16,9 @@ import { faPlugCircleXmark, faChevronDown } from '@fortawesome/free-solid-svg-ic
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Loader from '../components/Loader'
-
-const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
+import { useLiveTicks } from '../context/LiveTicksContext'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
-
-function getTodayIstDate() {
-  return moment().utcOffset('+05:30').format('YYYY-MM-DD')
-}
-
-function isCurrentIstDayMinute(minute) {
-  if (!minute) return false
-  return String(minute).slice(0, 10) === getTodayIstDate()
-}
 
 // ─── Chart Plugins ──────────────────────────────────────────────
 
@@ -174,13 +164,9 @@ const PRE_PAD = 5
 const POST_PAD = 10
 
 export default function LiveTicks() {
-  const [status, setStatus] = useState('connecting')
-  const [stocks, setStocks] = useState([])
-  const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
-  const [rowsByMinute, setRowsByMinute] = useState({})
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock } = useLiveTicks()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
-  const wsRef = useRef(null)
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
@@ -189,56 +175,6 @@ export default function LiveTicks() {
     const interval = setInterval(() => setSecondsElapsed(moment().seconds()), 1000)
     return () => clearInterval(interval)
   }, [])
-
-  useEffect(() => {
-    let retryTimer = null
-    let intentionalClose = false
-
-    function connect() {
-      const ws = new WebSocket(WS_URL)
-      wsRef.current = ws
-      ws.onopen = () => setStatus('connected')
-      ws.onclose = () => { if (!intentionalClose) { setStatus('reconnecting'); retryTimer = setTimeout(connect, 3000) } }
-      ws.onerror = () => {}
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data)
-          if (msg.type === 'stock_list' && Array.isArray(msg.data)) {
-            setStocks(msg.data)
-            if (msg.data.length > 0) {
-              const firstKey = msg.data[0].instrumentKey
-              setSelectedInstrumentKey(firstKey)
-              ws.send(JSON.stringify({ type: 'subscribe', data: { instrumentKey: firstKey } }))
-            }
-            return
-          }
-          if (msg.type === 'snapshot' && Array.isArray(msg.data)) {
-            const next = {}
-            for (const item of msg.data) { if (item?.minute && isCurrentIstDayMinute(item.minute)) next[item.minute] = item }
-            setRowsByMinute(next)
-            return
-          }
-          if (msg.type === 'minute_update' && msg.data?.minute) {
-            if (!isCurrentIstDayMinute(msg.data.minute)) return
-            setRowsByMinute((prev) => ({ ...prev, [msg.data.minute]: msg.data }))
-            return
-          }
-          if (msg.type === 'day_reset') setRowsByMinute({})
-        } catch {}
-      }
-    }
-
-    connect()
-    return () => { intentionalClose = true; if (retryTimer) clearTimeout(retryTimer); wsRef.current?.close() }
-  }, [])
-
-  const handleStockSelect = (instrumentKey) => {
-    setSelectedInstrumentKey(instrumentKey)
-    setRowsByMinute({})
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'subscribe', data: { instrumentKey } }))
-    }
-  }
 
   const rows = useMemo(
     () => Object.values(rowsByMinute).sort((a, b) => String(a.minute).localeCompare(String(b.minute))),
@@ -454,7 +390,7 @@ export default function LiveTicks() {
             {stocks.map((stock) => (
               <button
                 key={stock.instrumentKey}
-                onClick={() => { handleStockSelect(stock.instrumentKey); setSheetOpen(false) }}
+                onClick={() => { selectStock(stock.instrumentKey); setSheetOpen(false) }}
                 style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
               >
                 <span style={{ fontSize: 'var(--font-body)', color: 'var(--color-text)' }}>{stock.displayName}</span>

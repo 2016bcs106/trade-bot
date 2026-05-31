@@ -42,9 +42,6 @@ interface TrackedStock {
   scripType: string;
 }
 
-interface ClientSubscription {
-  instrumentKey: string | null;
-}
 
 class LiveStreamScript extends BaseScript {
   private config = new TradingConfig();
@@ -67,7 +64,7 @@ class LiveStreamScript extends BaseScript {
   private wsPath = "/live-ticks";
   private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
   private wsDayTracker = this.getDateIST();
-  private clientSubscriptions = new Map<WebSocket, ClientSubscription>();
+  private subscribedClients = new Set<WebSocket>();
   private trackedStocks: TrackedStock[] = [];
   private instrumentByKey = new Map<string, TrackedStock>();
   private instrumentBySecurityId = new Map<number, TrackedStock>();
@@ -247,7 +244,6 @@ class LiveStreamScript extends BaseScript {
     });
 
     this.wsServer.on("connection", (client) => {
-      this.clientSubscriptions.set(client, { instrumentKey: null });
       this.sendStockList(client);
 
       client.on("message", (raw) => {
@@ -255,7 +251,7 @@ class LiveStreamScript extends BaseScript {
       });
 
       client.on("close", () => {
-        this.clientSubscriptions.delete(client);
+        this.subscribedClients.delete(client);
       });
     });
 
@@ -381,11 +377,10 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
-  private broadcastToSubscribedClients(instrumentKey: string, payload: Record<string, unknown>): void {
+  private broadcastToSubscribedClients(_instrumentKey: string, payload: Record<string, unknown>): void {
     const message = JSON.stringify(payload);
-    for (const [client, sub] of this.clientSubscriptions.entries()) {
+    for (const client of this.subscribedClients) {
       if (client.readyState !== WebSocket.OPEN) continue;
-      if (sub.instrumentKey !== instrumentKey) continue;
       client.send(message);
     }
   }
@@ -407,13 +402,13 @@ class LiveStreamScript extends BaseScript {
 
   private handleClientMessage(client: WebSocket, raw: string): void {
     try {
-      const msg = JSON.parse(raw) as { type?: string; data?: { instrumentKey?: string } };
-      if (msg.type !== "subscribe") return;
-      const instrumentKey = msg.data?.instrumentKey;
-      if (!instrumentKey || !this.instrumentByKey.has(instrumentKey)) return;
+      const msg = JSON.parse(raw) as { type?: string };
+      if (msg.type !== "subscribe_all") return;
 
-      this.clientSubscriptions.set(client, { instrumentKey });
-      this.sendMinuteSnapshot(client, instrumentKey);
+      this.subscribedClients.add(client);
+      for (const key of this.instrumentByKey.keys()) {
+        this.sendMinuteSnapshot(client, key);
+      }
     } catch {
       // ignore invalid client payload
     }
