@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import moment from 'moment'
-import { ref, onValue, remove, query, orderByChild, limitToLast } from 'firebase/database'
+import { ref, onValue, remove } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCircle, faChevronDown, faChevronRight, faTrash } from '@fortawesome/free-solid-svg-icons'
@@ -29,7 +29,6 @@ const styles = {
     padding: '0.75rem 1rem',
     marginBottom: '0.5rem',
   },
-  // Script Status styles
   scriptRow: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -47,7 +46,6 @@ const styles = {
   },
   statusDot: { fontSize: '0.4rem' },
   scriptMeta: { fontSize: '0.65rem', color: 'var(--pm-text-muted)', marginTop: '0.2rem' },
-  // Collapsible
   collapsibleBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -75,17 +73,6 @@ const styles = {
     color: 'var(--pm-text)',
     overflowX: 'auto',
   },
-  // Audit timeline styles
-  event: {
-    background: 'var(--pm-card-bg)',
-    borderRadius: '10px',
-    border: '1px solid var(--pm-border)',
-    padding: '0.6rem 0.75rem',
-    marginBottom: '0.5rem',
-  },
-  eventType: { fontSize: '0.7rem', fontWeight: '700', color: 'var(--pm-text)', marginBottom: '0.15rem' },
-  eventDesc: { fontSize: '0.65rem', color: 'var(--pm-text-muted)', marginBottom: '0.2rem' },
-  eventMeta: { fontSize: '0.6rem', color: 'var(--pm-text-muted)' },
   empty: { textAlign: 'center', padding: '1.5rem', color: 'var(--pm-text-muted)', fontSize: '0.8rem' },
 }
 
@@ -200,9 +187,8 @@ function RequestsSection({ requests, failed, onDeleteFailed }) {
   })
 }
 
-export default function Audit() {
+export default function Monitor() {
   const [scripts, setScripts] = useState(null)
-  const [events, setEvents] = useState([])
   const [requests, setRequests] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
 
@@ -210,15 +196,6 @@ export default function Audit() {
     const scriptsRef = ref(db, 'scripts')
     const unsubScripts = onValue(scriptsRef, (snap) => {
       setScripts(snap.val())
-    })
-
-    const auditRef = query(ref(db, 'audit'), orderByChild('timestamp'), limitToLast(100))
-    const unsubAudit = onValue(auditRef, (snap) => {
-      const data = snap.val()
-      if (!data) { setEvents([]); return }
-      const list = Object.values(data)
-        .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
-      setEvents(list)
     })
 
     const queueRef = ref(db, 'request_queue')
@@ -235,7 +212,7 @@ export default function Audit() {
       setFailedRequests(Object.entries(data).map(([key, val]) => ({ ...val, _key: key })))
     })
 
-    return () => { unsubScripts(); unsubAudit(); unsubQueue(); unsubFailed() }
+    return () => { unsubScripts(); unsubQueue(); unsubFailed() }
   }, [])
 
   const handleDeleteFailed = async (key) => {
@@ -244,34 +221,15 @@ export default function Audit() {
 
   return (
     <div style={styles.container}>
-      {/* Script Status Section */}
       <div style={styles.sectionTitle}>Script Status</div>
       <ScriptStatusSection scripts={scripts} />
 
-      {/* Requests Section */}
       <div style={{ ...styles.sectionTitle, marginTop: '1.25rem' }}>Requests</div>
       <RequestsSection
         requests={requests}
         failed={failedRequests}
         onDeleteFailed={handleDeleteFailed}
       />
-
-      {/* Audit Section */}
-      <div style={{ ...styles.sectionTitle, marginTop: '1.25rem' }}>Audit Log</div>
-      {events.length === 0 ? (
-        <div style={styles.empty}>No audit events recorded yet</div>
-      ) : (
-        events.map((event, i) => (
-          <div key={event.id || i} style={styles.event}>
-            <div style={styles.eventType}>
-              {event.type?.replace('.', ' › ')}
-              {event.symbol && <span style={{ fontWeight: '400' }}> [{event.symbol}]</span>}
-            </div>
-            {event.description && <div style={styles.eventDesc}>{event.description}</div>}
-            <div style={styles.eventMeta}>{event.timestamp}</div>
-          </div>
-        ))
-      )}
     </div>
   )
 }

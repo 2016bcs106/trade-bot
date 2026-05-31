@@ -1,11 +1,11 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faChartBar, faClipboardList, faGear } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faChartBar, faDesktop, faGear } from '@fortawesome/free-solid-svg-icons'
 
 const navItems = [
   { path: '/', label: 'Home', icon: faChartLine },
   { path: '/stocks', label: 'Stocks', icon: faChartBar },
-  { path: '/audit', label: 'Audit', icon: faClipboardList },
+  { path: '/monitor', label: 'Monitor', icon: faDesktop },
   { path: '/settings', label: 'Settings', icon: faGear },
 ]
 
