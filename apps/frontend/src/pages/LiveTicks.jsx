@@ -111,7 +111,7 @@ const baseChartOptions = {
           const label = this.getLabelForValue(index)
           if (!label) return null
           const [h, m] = label.split(':').map(Number)
-          return (h * 60 + m) % 30 === 0 ? label : null
+          return (h * 60 + m) % 60 === 0 ? label : null
         },
         maxRotation: 0,
         font: { size: 10 },
