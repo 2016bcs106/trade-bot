@@ -27,6 +27,8 @@ export function LiveTicksProvider({ children }) {
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [dataByInstrument, setDataByInstrument] = useState({})
+  const [sortOrder, setSortOrder] = useState([])
+  const [reversedSort, setReversedSort] = useState(false)
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -78,6 +80,10 @@ export function LiveTicksProvider({ children }) {
             }))
             return
           }
+          if (msg.type === 'sort_order' && Array.isArray(msg.data)) {
+            setSortOrder(msg.data)
+            return
+          }
           if (msg.type === 'day_reset') setDataByInstrument({})
         } catch {}
       }
@@ -120,7 +126,7 @@ export function LiveTicksProvider({ children }) {
   }
 
   return (
-    <LiveTicksContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, selectStock, getLatestPrice, getPriceInfo }}>
+    <LiveTicksContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, sortOrder, reversedSort, setReversedSort, selectStock, getLatestPrice, getPriceInfo }}>
       {children}
     </LiveTicksContext.Provider>
   )

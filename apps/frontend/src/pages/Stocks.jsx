@@ -11,6 +11,7 @@ import Loader from '../components/Loader'
 import BottomSheet from '../components/BottomSheet'
 import DetailRow from '../components/DetailRow'
 import SectionHeader from '../components/SectionHeader'
+import Toggle from '../components/Toggle'
 import { useLiveTicks } from '../context/LiveTicksContext'
 
 function getStatusBadge(stock) {
@@ -20,7 +21,7 @@ function getStatusBadge(stock) {
 }
 
 export default function Stocks() {
-  const { stocks: liveStocks, getPriceInfo } = useLiveTicks()
+  const { stocks: liveStocks, getPriceInfo, sortOrder, reversedSort, setReversedSort } = useLiveTicks()
   const [stocks, setStocks] = useState(undefined)
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
@@ -39,7 +40,16 @@ export default function Stocks() {
   const stockList = stocks
     ? Object.entries(stocks)
         .map(([key, val]) => ({ ...val, _key: key, symbol: key }))
-        .sort((a, b) => (b.updatedAt || b.addedAt || '').localeCompare(a.updatedAt || a.addedAt || ''))
+        .sort((a, b) => {
+          if (sortOrder.length > 0) {
+            const ai = sortOrder.indexOf(a.symbol)
+            const bi = sortOrder.indexOf(b.symbol)
+            const aIdx = ai === -1 ? Infinity : ai
+            const bIdx = bi === -1 ? Infinity : bi
+            return reversedSort ? bIdx - aIdx : aIdx - bIdx
+          }
+          return (b.updatedAt || b.addedAt || '').localeCompare(a.updatedAt || a.addedAt || '')
+        })
     : []
 
   const selectedStock = detailSymbol && stocks?.[detailSymbol]
@@ -83,6 +93,12 @@ export default function Stocks() {
   return (
     <Page>
       <PageHeader title="Stocks" />
+
+      {stockList.length > 0 && (
+        <div style={styles.toggleRow}>
+          <Toggle label="Reverse sort" enabled={reversedSort} onToggle={() => setReversedSort((r) => !r)} />
+        </div>
+      )}
 
       {stockList.length === 0 ? (
         <EmptyState icon={faChartBar} title="No stocks tracked" subtitle="Add a symbol below to get started" />
@@ -169,6 +185,10 @@ export default function Stocks() {
 }
 
 const styles = {
+  toggleRow: {
+    padding: '0 var(--space-lg)',
+    marginBottom: 'var(--space-sm)',
+  },
   list: {
     background: 'var(--color-card)',
     borderRadius: 'var(--radius-md)',

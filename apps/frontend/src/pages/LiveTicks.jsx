@@ -15,6 +15,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faPlugCircleXmark, faChevronDown } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
+import Toggle from '../components/Toggle'
 import Loader from '../components/Loader'
 import { useLiveTicks, isMarketOpen } from '../context/LiveTicksContext'
 
@@ -152,7 +153,7 @@ const PRE_PAD = 5
 const POST_PAD = 10
 
 export default function LiveTicks() {
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo } = useLiveTicks()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, sortOrder, reversedSort, setReversedSort, selectStock, getPriceInfo } = useLiveTicks()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)
@@ -392,7 +393,17 @@ export default function LiveTicks() {
       {!isDisconnected && (
         <>
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
-            {stocks.map((stock) => {
+            <div style={styles.sheetToggle}>
+              <Toggle label="Reverse sort" enabled={reversedSort} onToggle={() => setReversedSort((r) => !r)} />
+            </div>
+            {[...stocks].sort((a, b) => {
+              if (sortOrder.length === 0) return 0
+              const ai = sortOrder.indexOf(a.symbol)
+              const bi = sortOrder.indexOf(b.symbol)
+              const aIdx = ai === -1 ? Infinity : ai
+              const bIdx = bi === -1 ? Infinity : bi
+              return reversedSort ? bIdx - aIdx : aIdx - bIdx
+            }).map((stock) => {
               const info = getPriceInfo(stock.instrumentKey)
               return (
                 <button
@@ -539,6 +550,10 @@ const styles = {
     height: '28vh',
     maxHeight: '240px',
     minHeight: '140px',
+  },
+  sheetToggle: {
+    padding: '0 var(--space-xl)',
+    borderBottom: '1px solid var(--color-border)',
   },
   sheetItem: {
     width: '100%',

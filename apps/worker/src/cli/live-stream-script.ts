@@ -68,6 +68,7 @@ class LiveStreamScript extends BaseScript {
   private trackedStocks: TrackedStock[] = [];
   private instrumentByKey = new Map<string, TrackedStock>();
   private instrumentBySecurityId = new Map<number, TrackedStock>();
+  private sortOrder: string[] = [];
 
   get scriptName(): string {
     return "live-stream";
@@ -134,6 +135,7 @@ class LiveStreamScript extends BaseScript {
     // Timers
     setInterval(() => this.flushBuffer(), flushInterval * 1000);
     setInterval(() => this.logStats(), statsInterval * 1000);
+    setInterval(() => this.publishSortOrder(), 60_000);
 
     // Keep process alive
     await new Promise(() => {});
@@ -398,6 +400,9 @@ class LiveStreamScript extends BaseScript {
         scripId: stock.scripId,
       })),
     }));
+    if (this.sortOrder.length > 0) {
+      client.send(JSON.stringify({ type: "sort_order", data: this.sortOrder }));
+    }
   }
 
   private handleClientMessage(client: WebSocket, raw: string): void {
@@ -412,6 +417,54 @@ class LiveStreamScript extends BaseScript {
     } catch {
       // ignore invalid client payload
     }
+  }
+
+  private computeSortOrder(): string[] {
+    const scored: { symbol: string; score: number }[] = [];
+
+    for (const stock of this.trackedStocks) {
+      const key = this.getInstrumentKey(stock);
+      const minuteMap = this.minuteAggregatesByInstrument.get(key);
+      if (!minuteMap || minuteMap.size === 0) {
+        scored.push({ symbol: stock.symbol, score: 0 });
+        continue;
+      }
+
+      const allMinutes = Array.from(minuteMap.values())
+        .sort((a, b) => b.minute.localeCompare(a.minute))
+        .slice(0, 60);
+
+      const byActivity = allMinutes
+        .map((m) => ({ buy: m.buyQtySum, sell: m.sellQtySum, peak: Math.max(m.buyQtySum, m.sellQtySum) }))
+        .sort((a, b) => b.peak - a.peak);
+
+      const topHalf = byActivity.slice(0, Math.max(1, Math.ceil(byActivity.length / 2)));
+
+      let sum = 0;
+      let count = 0;
+      for (const m of topHalf) {
+        if (m.peak === 0) continue;
+        sum += Math.abs(m.buy - m.sell) / m.peak;
+        count++;
+      }
+
+      scored.push({ symbol: stock.symbol, score: count > 0 ? sum / count : 0 });
+    }
+
+    scored.sort((a, b) => a.score - b.score);
+    return scored.map((s) => s.symbol);
+  }
+
+  private publishSortOrder(): void {
+    if (this.trackedStocks.length === 0) return;
+
+    const order = this.computeSortOrder();
+    this.sortOrder = order;
+
+    this.broadcastToAllClients({
+      type: "sort_order",
+      data: order,
+    });
   }
 
   private getInstrumentKey(stock: TrackedStock): string {
