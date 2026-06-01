@@ -149,8 +149,13 @@ const pressureChartOptions = {
 
 // ─── Main Component ──────────────────────────────────────────────
 
-const PRE_PAD = 5
-const POST_PAD = 10
+// Fixed time window: 09:00 to 15:30 (391 labels inclusive)
+const MARKET_START = 9 * 60
+const MARKET_END = 15 * 60 + 30
+const FIXED_LABELS = []
+for (let t = MARKET_START; t <= MARKET_END; t++) {
+  FIXED_LABELS.push(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`)
+}
 
 export default function LiveTicks() {
   const { status, stocks, selectedInstrumentKey, rowsByMinute, sortOrder, reversedSort, setReversedSort, selectStock, getPriceInfo } = useLiveTicks()
@@ -165,54 +170,49 @@ export default function LiveTicks() {
     return () => clearInterval(interval)
   }, [])
 
+  const rowsByTime = useMemo(() => {
+    const map = {}
+    for (const r of Object.values(rowsByMinute)) {
+      const time = String(r.minute).split('T')[1]?.slice(0, 5)
+      if (time) map[time] = r
+    }
+    return map
+  }, [rowsByMinute])
+
   const rows = useMemo(
-    () => Object.values(rowsByMinute).sort((a, b) => String(a.minute).localeCompare(String(b.minute))),
-    [rowsByMinute],
+    () => FIXED_LABELS.map((t) => rowsByTime[t] || null),
+    [rowsByTime],
   )
 
-  const labels = useMemo(() => {
-    const dataLabels = rows.map((r) => String(r.minute).split('T')[1]?.slice(0, 5) || String(r.minute))
-    if (dataLabels.length === 0) return dataLabels
+  const latestPrice = useMemo(() => {
+    const minutes = Object.values(rowsByMinute)
+    if (minutes.length === 0) return null
+    const sorted = minutes.sort((a, b) => String(a.minute).localeCompare(String(b.minute)))
+    return sorted[sorted.length - 1].close
+  }, [rowsByMinute])
 
-    const preLabels = []
-    const startMin = 9 * 60 - PRE_PAD
-    for (let i = 0; i < PRE_PAD; i++) {
-      const t = startMin + i
-      preLabels.push(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`)
-    }
-
-    const lastLabel = dataLabels[dataLabels.length - 1]
-    const [lh, lm] = lastLabel.split(':').map(Number)
-    const postLabels = []
-    for (let i = 1; i <= POST_PAD; i++) {
-      const t = lh * 60 + lm + i
-      postLabels.push(`${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`)
-    }
-
-    return [...preLabels, ...dataLabels, ...postLabels]
-  }, [rows])
-
-  const latestPrice = rows.length > 0 ? rows[rows.length - 1].close : null
   const openPrice = useMemo(() => {
-    for (const r of rows) {
+    const minutes = Object.values(rowsByMinute)
+    if (minutes.length === 0) return null
+    const sorted = minutes.sort((a, b) => String(a.minute).localeCompare(String(b.minute)))
+    for (const r of sorted) {
       const time = String(r.minute).split('T')[1]?.slice(0, 5) || ''
       if (time >= '09:00') return r.close
     }
-    return rows.length > 0 ? rows[0].close : null
-  }, [rows])
+    return sorted[0].close
+  }, [rowsByMinute])
 
   const priceChartData = useMemo(() => {
     const marketOpen = isMarketOpen()
     const isPositive = openPrice != null && latestPrice != null && latestPrice >= openPrice
     const lineColor = !marketOpen ? '#8e8e93' : openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
     const fillRgb = !marketOpen ? '142, 142, 147' : (isPositive ? '52, 199, 89' : '255, 59, 48')
-    const firstClose = rows.length > 0 ? rows[0].close : null
 
     return {
-      labels,
+      labels: FIXED_LABELS,
       datasets: [{
         label: 'Close Price',
-        data: [...Array(PRE_PAD).fill(firstClose), ...rows.map((r) => r.close)],
+        data: rows.map((r) => r ? r.close : null),
         borderColor: lineColor,
         backgroundColor: (ctx) => {
           if (!ctx.chart) return 'transparent'
@@ -223,32 +223,52 @@ export default function LiveTicks() {
           return gradient
         },
         fill: true,
+        spanGaps: true,
       }],
     }
-  }, [labels, rows, openPrice, latestPrice])
+  }, [rows, openPrice, latestPrice])
 
   const qtyChartData = useMemo(() => {
     const clampedSeconds = Math.max(secondsElapsed, 10)
     const scaleFactor = 60 / clampedSeconds
-    const lastIdx = rows.length - 1
-    const paddedLastIdx = PRE_PAD + lastIdx
-    const firstBuy = rows.length > 0 ? rows[0].buyQtySum : null
-    const firstSell = rows.length > 0 ? rows[0].sellQtySum : null
-
-    const buyCompleted = [...Array(PRE_PAD).fill(firstBuy), ...rows.map((r, i) => i < lastIdx ? r.buyQtySum : null)]
-    const sellCompleted = [...Array(PRE_PAD).fill(firstSell), ...rows.map((r, i) => i < lastIdx ? r.sellQtySum : null)]
-    const prevBuy = lastIdx >= 1 ? rows[lastIdx - 1].buyQtySum : 0
-    const prevSell = lastIdx >= 1 ? rows[lastIdx - 1].sellQtySum : 0
-
     const marketLive = isMarketOpen()
-    const buyProjected = [...Array(PRE_PAD).fill(null), ...rows.map((r, i) => {
-      if (i === lastIdx) return !marketLive || secondsElapsed < 3 ? prevBuy : Math.round(r.buyQtySum * scaleFactor)
-      return i === lastIdx - 1 ? r.buyQtySum : null
-    })]
-    const sellProjected = [...Array(PRE_PAD).fill(null), ...rows.map((r, i) => {
-      if (i === lastIdx) return !marketLive || secondsElapsed < 3 ? prevSell : Math.round(r.sellQtySum * scaleFactor)
-      return i === lastIdx - 1 ? r.sellQtySum : null
-    })]
+
+    // Find the last data index
+    let lastDataIdx = -1
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i]) { lastDataIdx = i; break }
+    }
+
+    // Find previous data index (for projection bridge)
+    let prevDataIdx = -1
+    for (let i = lastDataIdx - 1; i >= 0; i--) {
+      if (rows[i]) { prevDataIdx = i; break }
+    }
+
+    const prevBuy = prevDataIdx >= 0 ? rows[prevDataIdx].buyQtySum : 0
+    const prevSell = prevDataIdx >= 0 ? rows[prevDataIdx].sellQtySum : 0
+
+    const buyCompleted = rows.map((r, i) => {
+      if (!r) return null
+      if (i === lastDataIdx) return null
+      return r.buyQtySum
+    })
+    const sellCompleted = rows.map((r, i) => {
+      if (!r) return null
+      if (i === lastDataIdx) return null
+      return r.sellQtySum
+    })
+
+    const buyProjected = rows.map((r, i) => {
+      if (i === lastDataIdx && r) return !marketLive || secondsElapsed < 3 ? prevBuy : Math.round(r.buyQtySum * scaleFactor)
+      if (i === prevDataIdx && rows[prevDataIdx]) return rows[prevDataIdx].buyQtySum
+      return null
+    })
+    const sellProjected = rows.map((r, i) => {
+      if (i === lastDataIdx && r) return !marketLive || secondsElapsed < 3 ? prevSell : Math.round(r.sellQtySum * scaleFactor)
+      if (i === prevDataIdx && rows[prevDataIdx]) return rows[prevDataIdx].sellQtySum
+      return null
+    })
 
     const mkGradient = (rgb) => (ctx) => {
       if (!ctx.chart?.chartArea) return `rgba(${rgb}, 0.05)`
@@ -265,33 +285,32 @@ export default function LiveTicks() {
     const sellRgb = marketOpen ? '255, 59, 48' : '142, 142, 147'
 
     return {
-      labels,
+      labels: FIXED_LABELS,
       datasets: [
-        { label: 'Buy Qty', data: buyCompleted, borderColor: buyColor, backgroundColor: mkGradient(buyRgb), fill: true, spanGaps: false, skipPulsingDot: true },
-        { label: 'Sell Qty', data: sellCompleted, borderColor: sellColor, backgroundColor: mkGradient(sellRgb), fill: true, spanGaps: false, skipPulsingDot: true },
-        { label: 'Buy (Projected)', data: buyProjected, borderColor: buyColor, borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, pointBackgroundColor: buyColor, pointBorderWidth: 0, spanGaps: true },
-        { label: 'Sell (Projected)', data: sellProjected, borderColor: sellColor, borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === paddedLastIdx ? 3 : 0, pointBackgroundColor: sellColor, pointBorderWidth: 0, spanGaps: true },
+        { label: 'Buy Qty', data: buyCompleted, borderColor: buyColor, backgroundColor: mkGradient(buyRgb), fill: true, spanGaps: true, skipPulsingDot: true },
+        { label: 'Sell Qty', data: sellCompleted, borderColor: sellColor, backgroundColor: mkGradient(sellRgb), fill: true, spanGaps: true, skipPulsingDot: true },
+        { label: 'Buy (Projected)', data: buyProjected, borderColor: buyColor, borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === lastDataIdx ? 3 : 0, pointBackgroundColor: buyColor, pointBorderWidth: 0, spanGaps: true },
+        { label: 'Sell (Projected)', data: sellProjected, borderColor: sellColor, borderWidth: 1.5, pointRadius: (ctx) => ctx.dataIndex === lastDataIdx ? 3 : 0, pointBackgroundColor: sellColor, pointBorderWidth: 0, spanGaps: true },
       ],
     }
-  }, [labels, rows, secondsElapsed])
+  }, [rows, secondsElapsed])
 
   const pressureChartData = useMemo(() => {
     const marketOpen = isMarketOpen()
-    const diffs = rows.map((r) => (r.sellQtySum || 0) - (r.buyQtySum || 0))
-    const maxAbs = Math.max(1, ...diffs.map(Math.abs))
-    const tanhValues = diffs.map((d) => Math.tanh(d / (maxAbs * 0.05)))
-    const firstTanh = tanhValues.length > 0 ? tanhValues[0] : 0
-    const firstDiff = diffs.length > 0 ? diffs[0] : 0
+    const diffs = rows.map((r) => r ? (r.sellQtySum || 0) - (r.buyQtySum || 0) : null)
+    const validDiffs = diffs.filter((d) => d != null)
+    const maxAbs = Math.max(1, ...validDiffs.map(Math.abs))
+    const tanhValues = diffs.map((d) => d != null ? Math.tanh(d / (maxAbs * 0.05)) : null)
 
     const sellC = marketOpen ? 'rgba(255, 59, 48' : 'rgba(142, 142, 147'
     const buyC = marketOpen ? 'rgba(52, 199, 89' : 'rgba(142, 142, 147'
 
     return {
-      labels,
+      labels: FIXED_LABELS,
       datasets: [{
         label: 'tanh(S−B)',
-        data: [...Array(PRE_PAD).fill(firstTanh), ...tanhValues],
-        rawDiffs: [...Array(PRE_PAD).fill(firstDiff), ...diffs],
+        data: tanhValues,
+        rawDiffs: diffs,
         segment: { borderColor: (ctx) => marketOpen ? (ctx.p0.parsed.y >= 0 ? '#ff3b30' : '#34c759') : '#8e8e93' },
         borderColor: marketOpen ? '#ff3b30' : '#8e8e93',
         backgroundColor: (context) => {
@@ -308,9 +327,10 @@ export default function LiveTicks() {
         fill: true,
         borderWidth: 1.5,
         pointRadius: 0,
+        spanGaps: true,
       }],
     }
-  }, [labels, rows])
+  }, [rows])
 
   const syncChartsAtIndex = (sourceChart, index) => {
     const charts = [priceChartRef.current, pressureChartRef.current, qtyChartRef.current].filter(Boolean)
