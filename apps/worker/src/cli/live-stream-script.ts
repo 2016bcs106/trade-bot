@@ -2,7 +2,7 @@ import "../config/env.ts";
 import { dirname, resolve } from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { mkdirSync, appendFileSync, readdirSync, unlinkSync } from "fs";
+import { mkdirSync, appendFileSync, readdirSync, unlinkSync, readFileSync, existsSync } from "fs";
 import { createServer } from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import moment from "moment";
@@ -96,6 +96,7 @@ class LiveStreamScript extends BaseScript {
 
       this.trackedStocks = active;
       this.initializeInstrumentMaps();
+      this.loadHistoricalData();
 
       this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);
 
@@ -486,12 +487,64 @@ class LiveStreamScript extends BaseScript {
     return resolve(this.dataDir, `${stock.exchange}_${this.getScripId(stock)}_${this.getDateIST()}.ndjson`);
   }
 
+  private loadHistoricalData(): void {
+    let totalLoaded = 0;
+
+    for (const stock of this.trackedStocks) {
+      const instrumentKey = this.getInstrumentKey(stock);
+      if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
+
+      const scripId = this.getScripId(stock);
+      let loaded = false;
+
+      for (let daysBack = 0; daysBack < 7; daysBack++) {
+        const date = moment().utcOffset("+05:30").subtract(daysBack, "days").format("YYYY-MM-DD");
+        const filePath = resolve(this.dataDir, `${stock.exchange}_${scripId}_${date}.ndjson`);
+
+        if (!existsSync(filePath)) continue;
+
+        try {
+          const content = readFileSync(filePath, "utf-8");
+          const lines = content.trim().split("\n").filter(Boolean);
+          if (lines.length === 0) continue;
+
+          let count = 0;
+          for (const line of lines) {
+            try {
+              const tick = JSON.parse(line);
+              this.upsertMinuteAggregate(tick);
+              count++;
+            } catch {
+              // skip malformed lines
+            }
+          }
+
+          if (count > 0) {
+            this.log.info(`Loaded ${count} historical ticks for ${stock.symbol} from ${date}`);
+            totalLoaded += count;
+            loaded = true;
+            break;
+          }
+        } catch {
+          // skip unreadable files
+        }
+      }
+
+      if (!loaded) {
+        this.log.info(`No historical data found for ${stock.symbol} (checked 7 days)`);
+      }
+    }
+
+    if (totalLoaded > 0) {
+      this.log.info(`Historical data loaded — ${totalLoaded} total ticks replayed`);
+    }
+  }
+
   private cleanupOldDataFiles(): void {
-    const keepDates = new Set([
-      moment().utcOffset("+05:30").format("YYYY-MM-DD"),
-      moment().utcOffset("+05:30").subtract(1, "day").format("YYYY-MM-DD"),
-      moment().utcOffset("+05:30").subtract(2, "day").format("YYYY-MM-DD"),
-    ]);
+    const keepDates = new Set<string>();
+    for (let i = 0; i < 7; i++) {
+      keepDates.add(moment().utcOffset("+05:30").subtract(i, "days").format("YYYY-MM-DD"));
+    }
 
     for (const fileName of readdirSync(this.dataDir)) {
       if (!fileName.endsWith(".ndjson")) continue;

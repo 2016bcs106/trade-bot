@@ -4,14 +4,6 @@ import { db, ref, onValue } from '../utils/firebase'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
 
-function getTodayIstDate() {
-  return moment().utcOffset('+05:30').format('YYYY-MM-DD')
-}
-
-function isCurrentIstDayMinute(minute) {
-  if (!minute) return false
-  return String(minute).slice(0, 10) === getTodayIstDate()
-}
 
 export function isMarketOpen() {
   const now = moment().utcOffset('+05:30')
@@ -68,13 +60,12 @@ export function AppProvider({ children }) {
             if (!instrumentKey) return
             const next = {}
             for (const item of msg.data) {
-              if (item?.minute && isCurrentIstDayMinute(item.minute)) next[item.minute] = item
+              if (item?.minute) next[item.minute] = item
             }
             setDataByInstrument((prev) => ({ ...prev, [instrumentKey]: next }))
             return
           }
           if (msg.type === 'minute_update' && msg.data?.minute) {
-            if (!isCurrentIstDayMinute(msg.data.minute)) return
             const instrumentKey = msg.meta?.instrumentKey || msg.data?.instrumentKey
             if (!instrumentKey) return
             setDataByInstrument((prev) => ({
