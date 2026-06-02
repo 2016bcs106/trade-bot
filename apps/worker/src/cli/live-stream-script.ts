@@ -138,11 +138,22 @@ class LiveStreamScript extends BaseScript {
     this.firebase.onMarketStatusChange((data) => {
       if (!data) return;
       const prevStatus = this.marketStatus;
+      const prevTradeDate = this.lastTradeDate;
       this.marketStatus = data.status;
       this.lastTradeDate = data.tradeDate;
 
       this.log.info(`Market status: ${data.status} | tradeDate=${data.tradeDate}`);
       this.broadcastToAllClients({ type: "market_status", data: { status: data.status, tradeDate: data.tradeDate } });
+
+      if (!prevTradeDate && data.tradeDate && this.trackedStocks.length > 0) {
+        this.minuteAggregatesByInstrument.clear();
+        this.loadHistoricalData();
+        for (const client of this.wsServer.clients) {
+          for (const key of this.instrumentByKey.keys()) {
+            this.sendMinuteSnapshot(client, key);
+          }
+        }
+      }
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
         this.log.info("Market closed — disconnecting streamer");
