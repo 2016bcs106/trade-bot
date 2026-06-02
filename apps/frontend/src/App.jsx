@@ -22,8 +22,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/paytm-money-callback" element={<PaytmMoneyCallback />} />
-          <Route path="/" element={<AuthGuard><LiveTicks /></AuthGuard>} />
-          <Route path="/stocks" element={<AuthGuard><Stocks /></AuthGuard>} />
+          <Route path="/" element={<AuthGuard><Stocks /></AuthGuard>} />
+          <Route path="/live/:symbol" element={<AuthGuard><LiveTicks /></AuthGuard>} />
           <Route path="/monitor" element={<AuthGuard><Monitor /></AuthGuard>} />
           <Route path="/settings" element={<AuthGuard><Settings /></AuthGuard>} />
         </Routes>

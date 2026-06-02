@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import moment from 'moment'
 import { db, ref, set, push, onValue } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -12,6 +13,7 @@ import BottomSheet from '../components/BottomSheet'
 import DetailRow from '../components/DetailRow'
 import SectionHeader from '../components/SectionHeader'
 import Toggle from '../components/Toggle'
+import useLongPress from '../hooks/useLongPress'
 import { useLiveTicks } from '../context/LiveTicksContext'
 
 function getStatusBadge(stock) {
@@ -20,8 +22,38 @@ function getStatusBadge(stock) {
   return null
 }
 
+function StockRow({ stock, bordered, info, onTap, onLongPress }) {
+  const handlers = useLongPress(
+    () => onLongPress(stock.symbol),
+    () => onTap(stock.symbol),
+  )
+  const badge = getStatusBadge(stock)
+
+  return (
+    <div
+      style={{ ...styles.stockRow, ...(bordered ? styles.bordered : {}) }}
+      {...handlers}
+    >
+      <div style={styles.stockInfo}>
+        <span style={styles.symbol}>{stock.symbol}</span>
+        <span style={styles.name}>{stock.name || '—'}</span>
+      </div>
+      {info && (
+        <div style={styles.priceCol}>
+          <span style={{ ...styles.price, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{info.price.toFixed(2)}</span>
+          <span style={{ ...styles.change, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+            {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
+          </span>
+        </div>
+      )}
+      {badge && <Badge label={badge.label} color={badge.color} />}
+    </div>
+  )
+}
+
 export default function Stocks() {
-  const { stocks: liveStocks, getPriceInfo, sortOrder, reversedSort, setReversedSort } = useLiveTicks()
+  const navigate = useNavigate()
+  const { stocks: liveStocks, getPriceInfo, sortOrder, reversedSort, setReversedSort, selectStock } = useLiveTicks()
   const [stocks, setStocks] = useState(undefined)
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
@@ -104,27 +136,16 @@ export default function Stocks() {
         <EmptyState icon={faChartBar} title="No stocks tracked" subtitle="Add a symbol below to get started" />
       ) : (
         <div style={styles.list}>
-          {stockList.map((stock, i) => {
-            const badge = getStatusBadge(stock)
-            const info = getLivePriceInfo(stock.symbol)
-            return (
-              <div key={stock._key} style={{ ...styles.stockRow, ...(i < stockList.length - 1 ? styles.bordered : {}) }} onClick={() => setDetailSymbol(stock.symbol)}>
-                <div style={styles.stockInfo}>
-                  <span style={styles.symbol}>{stock.symbol}</span>
-                  <span style={styles.name}>{stock.name || '—'}</span>
-                </div>
-                {info && (
-                  <div style={styles.priceCol}>
-                    <span style={{ ...styles.price, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{info.price.toFixed(2)}</span>
-                    <span style={{ ...styles.change, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                      {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-                {badge && <Badge label={badge.label} color={badge.color} />}
-              </div>
-            )
-          })}
+          {stockList.map((stock, i) => (
+            <StockRow
+              key={stock._key}
+              stock={stock}
+              bordered={i < stockList.length - 1}
+              info={getLivePriceInfo(stock.symbol)}
+              onTap={(symbol) => navigate(`/live/${symbol}`)}
+              onLongPress={(symbol) => setDetailSymbol(symbol)}
+            />
+          ))}
         </div>
       )}
 

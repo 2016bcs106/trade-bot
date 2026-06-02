@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
+import { faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import { isMarketOpen } from '../context/LiveTicksContext'
 
 const navItems = [
-  { path: '/', label: 'Live', icon: faChartLine },
-  { path: '/stocks', label: 'Stocks', icon: faListUl },
+  { path: '/', label: 'Stocks', icon: faListUl },
   { path: '/monitor', label: 'Monitor', icon: faHeartPulse },
   { path: '/settings', label: 'Settings', icon: faGear },
 ]
@@ -43,7 +42,9 @@ export default function BottomNav() {
     <nav style={styles.nav}>
       <MinuteProgressBar />
       {navItems.map((item) => {
-        const isActive = location.pathname === item.path
+        const isActive = item.path === '/'
+          ? (location.pathname === '/' || location.pathname.startsWith('/live/'))
+          : location.pathname === item.path
         const color = isActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
         return (
           <button key={item.path} onClick={() => navigate(item.path)} style={styles.item}>

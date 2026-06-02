@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,7 +13,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronDown } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Toggle from '../components/Toggle'
@@ -158,12 +159,21 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 }
 
 export default function LiveTicks() {
+  const { symbol } = useParams()
+  const navigate = useNavigate()
   const { status, stocks, selectedInstrumentKey, rowsByMinute, sortOrder, reversedSort, setReversedSort, selectStock, getPriceInfo } = useLiveTicks()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
+
+  useEffect(() => {
+    if (symbol && stocks.length > 0) {
+      const match = stocks.find((s) => s.symbol === symbol)
+      if (match) selectStock(match.instrumentKey)
+    }
+  }, [symbol, stocks])
 
   useEffect(() => {
     const interval = setInterval(() => setSecondsElapsed(moment().seconds()), 1000)
@@ -373,21 +383,28 @@ export default function LiveTicks() {
     <div style={styles.wrap}>
       {/* Header */}
       <div style={styles.header}>
+        <div style={styles.headerRow}>
+          <button style={styles.backBtn} onClick={() => navigate('/')}>
+            <FontAwesomeIcon icon={faChevronLeft} />
+          </button>
+          <div>
+            <span style={styles.stockName}>{selectedStock.displayName}</span>
+            <div style={styles.statusRow}>
+              <span style={{
+                ...styles.dot,
+                background: !isMarketOpen() ? 'var(--color-text-tertiary)'
+                  : status === 'connected' ? 'var(--color-success)'
+                  : status === 'reconnecting' ? 'var(--color-warning)'
+                  : 'var(--color-text-tertiary)',
+                animation: isMarketOpen() ? 'pulse-dot 2s ease-in-out infinite' : 'none',
+              }} />
+              <span style={styles.symbolText}>{selectedStock.symbol}</span>
+            </div>
+          </div>
+        </div>
         <button style={styles.stockSelector} onClick={() => setSheetOpen(true)}>
-          <span style={styles.stockName}>{selectedStock.displayName}</span>
           <FontAwesomeIcon icon={faChevronDown} style={styles.chevron} />
         </button>
-        <div style={styles.statusRow}>
-          <span style={{
-            ...styles.dot,
-            background: !isMarketOpen() ? 'var(--color-text-tertiary)'
-              : status === 'connected' ? 'var(--color-success)'
-              : status === 'reconnecting' ? 'var(--color-warning)'
-              : 'var(--color-text-tertiary)',
-            animation: isMarketOpen() ? 'pulse-dot 2s ease-in-out infinite' : 'none',
-          }} />
-          <span style={styles.symbolText}>{selectedStock.symbol}</span>
-        </div>
       </div>
 
       {/* Price display */}
@@ -428,7 +445,7 @@ export default function LiveTicks() {
               return (
                 <button
                   key={stock.instrumentKey}
-                  onClick={() => { selectStock(stock.instrumentKey); setSheetOpen(false) }}
+                  onClick={() => { selectStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}
                   style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
                 >
                   <div>
@@ -489,6 +506,28 @@ const styles = {
   header: {
     padding: '0 var(--space-xl)',
     marginBottom: 'var(--space-sm)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-sm)',
+  },
+  backBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--color-primary)',
+    fontSize: '1.1rem',
+    cursor: 'pointer',
+    padding: 0,
   },
   stockSelector: {
     display: 'flex',
@@ -497,18 +536,18 @@ const styles = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: 0,
+    padding: '8px',
   },
   stockName: {
+    display: 'block',
     fontSize: 'var(--font-title2)',
     fontWeight: 700,
     color: 'var(--color-text)',
     letterSpacing: '-0.3px',
   },
   chevron: {
-    fontSize: '0.75rem',
+    fontSize: '0.85rem',
     color: 'var(--color-text-muted)',
-    marginTop: '2px',
   },
   statusRow: {
     display: 'flex',
