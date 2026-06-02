@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import moment from 'moment'
-import { db, ref, set, push, onValue } from '../utils/firebase'
+import { db, ref, set, push } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChartBar, faPlus } from '@fortawesome/free-solid-svg-icons'
 import Page from '../components/Page'
@@ -14,7 +14,7 @@ import DetailRow from '../components/DetailRow'
 import SectionHeader from '../components/SectionHeader'
 import Toggle from '../components/Toggle'
 import useLongPress from '../hooks/useLongPress'
-import { useLiveTicks } from '../context/LiveTicksContext'
+import { useApp } from '../context/AppContext'
 
 function getStatusBadge(stock) {
   if (stock.status === 'pending_sync') return { label: 'Syncing', color: 'var(--color-warning)' }
@@ -53,8 +53,7 @@ function StockRow({ stock, bordered, info, onTap, onLongPress }) {
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { stocks: liveStocks, getPriceInfo, sortOrder, reversedSort, setReversedSort, selectStock } = useLiveTicks()
-  const [stocks, setStocks] = useState(undefined)
+  const { stocks: liveStocks, getPriceInfo, sortOrder, reversedSort, setReversedSort, selectStock, firebaseStocks: stocks } = useApp()
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
 
@@ -63,11 +62,6 @@ export default function Stocks() {
     if (!liveStock) return null
     return getPriceInfo(liveStock.instrumentKey)
   }
-
-  useEffect(() => {
-    const unsub = onValue(ref(db, 'stocks'), (snap) => setStocks(snap.val() || {}))
-    return () => unsub()
-  }, [])
 
   const stockList = stocks
     ? Object.entries(stocks)

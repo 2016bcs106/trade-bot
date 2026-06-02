@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AuthGuard from './components/AuthGuard'
 import BottomNav from './components/BottomNav'
-import { LiveTicksProvider } from './context/LiveTicksContext'
+import { AppProvider } from './context/AppContext'
 import Login from './pages/Login'
 import Stocks from './pages/Stocks'
 import Monitor from './pages/Monitor'
@@ -17,7 +17,7 @@ function App() {
   }
 
   return (
-    <LiveTicksProvider>
+    <AppProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -29,7 +29,7 @@ function App() {
         </Routes>
         <BottomNav />
       </BrowserRouter>
-    </LiveTicksProvider>
+    </AppProvider>
   )
 }
 

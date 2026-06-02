@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
-import { isMarketOpen } from '../context/LiveTicksContext'
+import { isMarketOpen } from '../context/AppContext'
 
 const navItems = [
   { path: '/', label: 'Stocks', icon: faListUl },

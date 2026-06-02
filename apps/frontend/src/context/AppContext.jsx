@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useMemo } from 'react'
 import moment from 'moment'
+import { db, ref, onValue } from '../utils/firebase'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
 
@@ -20,15 +21,19 @@ export function isMarketOpen() {
   return minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30
 }
 
-const LiveTicksContext = createContext(null)
+const AppContext = createContext(null)
 
-export function LiveTicksProvider({ children }) {
+export function AppProvider({ children }) {
   const [status, setStatus] = useState('connecting')
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [dataByInstrument, setDataByInstrument] = useState({})
   const [sortOrder, setSortOrder] = useState([])
   const [reversedSort, setReversedSort] = useState(false)
+  const [firebaseStocks, setFirebaseStocks] = useState(undefined)
+  const [scripts, setScripts] = useState(undefined)
+  const [requestQueue, setRequestQueue] = useState([])
+  const [failedRequests, setFailedRequests] = useState([])
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -93,6 +98,20 @@ export function LiveTicksProvider({ children }) {
     return () => { intentionalClose = true; if (retryTimer) clearTimeout(retryTimer); wsRef.current?.close() }
   }, [])
 
+  useEffect(() => {
+    const unsubStocks = onValue(ref(db, 'stocks'), (snap) => setFirebaseStocks(snap.val() || {}))
+    const unsubScripts = onValue(ref(db, 'scripts'), (snap) => setScripts(snap.val()))
+    const unsubQueue = onValue(ref(db, 'request_queue'), (snap) => {
+      const data = snap.val()
+      setRequestQueue(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
+    })
+    const unsubFailed = onValue(ref(db, 'failed_requests'), (snap) => {
+      const data = snap.val()
+      setFailedRequests(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
+    })
+    return () => { unsubStocks(); unsubScripts(); unsubQueue(); unsubFailed() }
+  }, [])
+
   const selectStock = (instrumentKey) => {
     setSelectedInstrumentKey(instrumentKey)
   }
@@ -126,14 +145,14 @@ export function LiveTicksProvider({ children }) {
   }
 
   return (
-    <LiveTicksContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, sortOrder, reversedSort, setReversedSort, selectStock, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, sortOrder, reversedSort, setReversedSort, firebaseStocks, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
       {children}
-    </LiveTicksContext.Provider>
+    </AppContext.Provider>
   )
 }
 
-export function useLiveTicks() {
-  const ctx = useContext(LiveTicksContext)
-  if (!ctx) throw new Error('useLiveTicks must be used within LiveTicksProvider')
+export function useApp() {
+  const ctx = useContext(AppContext)
+  if (!ctx) throw new Error('useApp must be used within AppProvider')
   return ctx
 }

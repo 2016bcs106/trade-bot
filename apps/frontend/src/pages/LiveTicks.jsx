@@ -18,7 +18,7 @@ import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Toggle from '../components/Toggle'
 import Loader from '../components/Loader'
-import { useLiveTicks, isMarketOpen } from '../context/LiveTicksContext'
+import { useApp, isMarketOpen } from '../context/AppContext'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
 
@@ -161,7 +161,7 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, sortOrder, reversedSort, setReversedSort, selectStock, getPriceInfo } = useLiveTicks()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, sortOrder, reversedSort, setReversedSort, selectStock, getPriceInfo } = useApp()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)

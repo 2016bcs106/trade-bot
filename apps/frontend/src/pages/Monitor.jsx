@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import moment from 'moment'
-import { ref, onValue, remove } from 'firebase/database'
+import { ref, remove } from 'firebase/database'
 import { db } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCircle } from '@fortawesome/free-solid-svg-icons'
@@ -11,6 +11,7 @@ import Card from '../components/Card'
 import Badge from '../components/Badge'
 import Loader from '../components/Loader'
 import BottomSheet from '../components/BottomSheet'
+import { useApp } from '../context/AppContext'
 
 const STATUS_COLORS = {
   running: 'var(--color-success)',
@@ -64,23 +65,8 @@ function RequestCard({ req, onTap }) {
 }
 
 export default function Monitor() {
-  const [scripts, setScripts] = useState(undefined)
-  const [requests, setRequests] = useState([])
-  const [failedRequests, setFailedRequests] = useState([])
+  const { scripts, requestQueue: requests, failedRequests } = useApp()
   const [sheetData, setSheetData] = useState(null)
-
-  useEffect(() => {
-    const unsubScripts = onValue(ref(db, 'scripts'), (snap) => setScripts(snap.val()))
-    const unsubQueue = onValue(ref(db, 'request_queue'), (snap) => {
-      const data = snap.val()
-      setRequests(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
-    })
-    const unsubFailed = onValue(ref(db, 'failed_requests'), (snap) => {
-      const data = snap.val()
-      setFailedRequests(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
-    })
-    return () => { unsubScripts(); unsubQueue(); unsubFailed() }
-  }, [])
 
   if (scripts === undefined) {
     return <Page><Loader /></Page>
