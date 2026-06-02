@@ -123,11 +123,21 @@ export default class FirebaseClient {
     });
   }
 
+  onMarketStatusChange(callback: (data: { status: string; tradeDate: string; updatedAt: string } | null) => void): Unsubscribe {
+    return this._onChange("market_status", (value) => {
+      callback(value as { status: string; tradeDate: string; updatedAt: string } | null);
+    });
+  }
+
   // ─── Private Helpers ──────────────────────────────────────────────
 
   private async _getValue(path: string): Promise<unknown> {
     const snapshot = await get(ref(this.db, path));
     return snapshot.val();
+  }
+
+  async setValue(path: string, value: unknown): Promise<void> {
+    await set(ref(this.db, path), value);
   }
 
   private async _setValue(path: string, value: unknown): Promise<void> {

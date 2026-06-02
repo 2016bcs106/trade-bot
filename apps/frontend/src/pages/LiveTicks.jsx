@@ -18,10 +18,12 @@ import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Loader from '../components/Loader'
 import StatusBadges from '../components/StatusBadges'
-import { useApp, isMarketOpen } from '../context/AppContext'
+import { useApp } from '../context/AppContext'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
 
+
+let _marketOpen = false
 
 // ─── Chart Plugins ──────────────────────────────────────────────
 
@@ -30,9 +32,8 @@ const pulsingDotPlugin = {
   afterDatasetsDraw(chart) {
     const { ctx, chartArea } = chart
     if (!chartArea) return
-    const marketOpen = isMarketOpen()
     const time = Date.now() / 1000
-    const alpha = marketOpen ? (0.6 + 0.4 * Math.sin(time * 6)) : 0.5
+    const alpha = _marketOpen ? (0.6 + 0.4 * Math.sin(time * 6)) : 0.5
     const radius = 3
 
     chart.data.datasets.forEach((dataset, datasetIndex) => {
@@ -45,7 +46,7 @@ const pulsingDotPlugin = {
       }
       if (!lastPoint) return
 
-      const color = marketOpen
+      const color = _marketOpen
         ? (typeof dataset.borderColor === 'function' ? '#007aff' : (dataset.borderColor || '#007aff'))
         : '#8e8e93'
       ctx.save()
@@ -161,7 +162,9 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo, sortBy, sortAsc } = useApp()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo, sortBy, sortAsc, marketStatus } = useApp()
+  const isMarketOpen = () => marketStatus !== 'Closed'
+  _marketOpen = marketStatus !== 'Closed'
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)

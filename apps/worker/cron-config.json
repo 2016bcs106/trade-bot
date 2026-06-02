@@ -8,5 +8,10 @@
     "name": "live-stream",
     "schedule": "* * * * *",
     "command": "src/cli/live-stream-script.ts"
+  },
+  {
+    "name": "market-status",
+    "schedule": "* * * * *",
+    "command": "src/cli/market-status-script.ts"
   }
 ]

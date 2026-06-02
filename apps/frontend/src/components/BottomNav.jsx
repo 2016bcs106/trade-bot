@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
-import { isMarketOpen } from '../context/AppContext'
+import { useApp } from '../context/AppContext'
 
 const navItems = [
   { path: '/', label: 'Stocks', icon: faListUl },
@@ -14,6 +14,7 @@ const navItems = [
 const hiddenPaths = ['/login', '/paytm-money-callback']
 
 function MinuteProgressBar() {
+  const { marketStatus } = useApp()
   const [seconds, setSeconds] = useState(moment().seconds())
 
   useEffect(() => {
@@ -21,7 +22,7 @@ function MinuteProgressBar() {
     return () => clearInterval(interval)
   }, [])
 
-  if (!isMarketOpen()) return null
+  if (marketStatus === 'Closed') return null
 
   const progress = (seconds / 60) * 100
 

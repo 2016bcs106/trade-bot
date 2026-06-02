@@ -1,9 +1,9 @@
-import { useApp, isMarketOpen } from '../context/AppContext'
+import { useApp } from '../context/AppContext'
 
 export default function StatusBadges() {
-  const { status } = useApp()
+  const { status, marketStatus } = useApp()
   const online = status === 'connected'
-  const marketOpen = isMarketOpen()
+  const marketOpen = marketStatus !== 'Closed'
 
   return (
     <div style={styles.badges}>

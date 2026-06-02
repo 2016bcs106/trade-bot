@@ -61,6 +61,8 @@ class LiveStreamScript extends BaseScript {
   private instrumentByKey = new Map<string, StockConfig>();
   private instrumentBySecurityId = new Map<number, StockConfig>();
   private relevanceScores = new Map<string, number>();
+  private marketStatus: string = "Closed";
+  private lastTradeDate: string | null = null;
 
   get scriptName(): string {
     return "live-stream";
@@ -126,8 +128,33 @@ class LiveStreamScript extends BaseScript {
         if (this.streamer) this.streamer.disconnect();
       }
 
-      this.streamer = this.createStreamer(this.currentToken);
-      this.streamer.connect();
+      if (this.marketStatus !== "Closed") {
+        this.streamer = this.createStreamer(this.currentToken);
+        this.streamer.connect();
+      }
+    });
+
+    // Listen to market status changes
+    this.firebase.onMarketStatusChange((data) => {
+      if (!data) return;
+      const prevStatus = this.marketStatus;
+      this.marketStatus = data.status;
+      this.lastTradeDate = data.tradeDate;
+
+      this.log.info(`Market status: ${data.status} | tradeDate=${data.tradeDate}`);
+      this.broadcastToAllClients({ type: "market_status", data: { status: data.status, tradeDate: data.tradeDate } });
+
+      if (data.status === "Closed" && prevStatus !== "Closed") {
+        this.log.info("Market closed — disconnecting streamer");
+        this.flushBuffer();
+        if (this.streamer) { this.streamer.disconnect(); this.streamer = null; }
+      } else if (data.status !== "Closed" && prevStatus === "Closed") {
+        this.log.info("Market opened — connecting streamer");
+        if (this.currentToken) {
+          this.streamer = this.createStreamer(this.currentToken);
+          this.streamer.connect();
+        }
+      }
     });
 
     // Timers
@@ -250,6 +277,7 @@ class LiveStreamScript extends BaseScript {
       this.log.info(`Client connected — ip=${ip} clients=${totalClients}`);
 
       this.sendStockList(client);
+      this.sendMarketStatus(client);
       for (const key of this.instrumentByKey.keys()) {
         this.sendMinuteSnapshot(client, key);
       }
@@ -387,6 +415,14 @@ class LiveStreamScript extends BaseScript {
   }
 
 
+  private sendMarketStatus(client: WebSocket): void {
+    if (client.readyState !== WebSocket.OPEN) return;
+    client.send(JSON.stringify({
+      type: "market_status",
+      data: { status: this.marketStatus, tradeDate: this.lastTradeDate },
+    }));
+  }
+
   private sendStockList(client: WebSocket): void {
     if (client.readyState !== WebSocket.OPEN) return;
     client.send(JSON.stringify({
@@ -487,8 +523,19 @@ class LiveStreamScript extends BaseScript {
     return resolve(this.dataDir, `${stock.exchange}_${this.getScripId(stock)}_${this.getDateIST()}.ndjson`);
   }
 
+  private getTargetDate(): string | null {
+    if (this.lastTradeDate) {
+      const parsed = moment(this.lastTradeDate, "DD-MMM-YYYY HH:mm").utcOffset("+05:30");
+      if (parsed.isValid()) return parsed.format("YYYY-MM-DD");
+      const dateOnly = moment(this.lastTradeDate, "DD-MMM-YYYY").utcOffset("+05:30");
+      if (dateOnly.isValid()) return dateOnly.format("YYYY-MM-DD");
+    }
+    return null;
+  }
+
   private loadHistoricalData(): void {
     let totalLoaded = 0;
+    const targetDate = this.getTargetDate();
 
     for (const stock of this.trackedStocks) {
       const instrumentKey = this.getInstrumentKey(stock);
@@ -497,47 +544,55 @@ class LiveStreamScript extends BaseScript {
       const scripId = this.getScripId(stock);
       let loaded = false;
 
+      if (targetDate) {
+        loaded = this.loadFileForStock(stock, scripId, targetDate);
+        if (loaded) { totalLoaded++; continue; }
+      }
+
       for (let daysBack = 0; daysBack < 7; daysBack++) {
         const date = moment().utcOffset("+05:30").subtract(daysBack, "days").format("YYYY-MM-DD");
-        const filePath = resolve(this.dataDir, `${stock.exchange}_${scripId}_${date}.ndjson`);
-
-        if (!existsSync(filePath)) continue;
-
-        try {
-          const content = readFileSync(filePath, "utf-8");
-          const lines = content.trim().split("\n").filter(Boolean);
-          if (lines.length === 0) continue;
-
-          let count = 0;
-          for (const line of lines) {
-            try {
-              const tick = JSON.parse(line);
-              this.upsertMinuteAggregate(tick);
-              count++;
-            } catch {
-              // skip malformed lines
-            }
-          }
-
-          if (count > 0) {
-            this.log.info(`Loaded ${count} historical ticks for ${stock.symbol} from ${date}`);
-            totalLoaded += count;
-            loaded = true;
-            break;
-          }
-        } catch {
-          // skip unreadable files
-        }
+        loaded = this.loadFileForStock(stock, scripId, date);
+        if (loaded) { totalLoaded++; break; }
       }
 
       if (!loaded) {
-        this.log.info(`No historical data found for ${stock.symbol} (checked 7 days)`);
+        this.log.info(`No historical data found for ${stock.symbol}`);
       }
     }
 
     if (totalLoaded > 0) {
-      this.log.info(`Historical data loaded — ${totalLoaded} total ticks replayed`);
+      this.log.info(`Historical data loaded for ${totalLoaded} stocks`);
     }
+  }
+
+  private loadFileForStock(stock: StockConfig, scripId: number, date: string): boolean {
+    const filePath = resolve(this.dataDir, `${stock.exchange}_${scripId}_${date}.ndjson`);
+    if (!existsSync(filePath)) return false;
+
+    try {
+      const content = readFileSync(filePath, "utf-8");
+      const lines = content.trim().split("\n").filter(Boolean);
+      if (lines.length === 0) return false;
+
+      let count = 0;
+      for (const line of lines) {
+        try {
+          const tick = JSON.parse(line);
+          this.upsertMinuteAggregate(tick);
+          count++;
+        } catch {
+          // skip malformed lines
+        }
+      }
+
+      if (count > 0) {
+        this.log.info(`Loaded ${count} ticks for ${stock.symbol} from ${date}`);
+        return true;
+      }
+    } catch {
+      // skip unreadable files
+    }
+    return false;
   }
 
   private cleanupOldDataFiles(): void {

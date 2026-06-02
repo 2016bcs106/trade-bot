@@ -1,17 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useMemo } from 'react'
-import moment from 'moment'
 import { db, ref, onValue } from '../utils/firebase'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
-
-
-export function isMarketOpen() {
-  const now = moment().utcOffset('+05:30')
-  const day = now.day()
-  if (day === 0 || day === 6) return false
-  const minutes = now.hours() * 60 + now.minutes()
-  return minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30
-}
 
 const AppContext = createContext(null)
 
@@ -20,6 +10,7 @@ export function AppProvider({ children }) {
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [dataByInstrument, setDataByInstrument] = useState({})
+  const [marketStatus, setMarketStatus] = useState('Closed')
   const [sortBy, setSortBy] = useState('relevance')
   const [sortAsc, setSortAsc] = useState(false)
   const [scripts, setScripts] = useState(undefined)
@@ -72,6 +63,10 @@ export function AppProvider({ children }) {
               ...prev,
               [instrumentKey]: { ...(prev[instrumentKey] || {}), [msg.data.minute]: msg.data },
             }))
+            return
+          }
+          if (msg.type === 'market_status' && msg.data) {
+            setMarketStatus(msg.data.status)
             return
           }
           if (msg.type === 'day_reset') setDataByInstrument({})
@@ -129,7 +124,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, sortBy, setSortBy, sortAsc, setSortAsc, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy, sortAsc, setSortAsc, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )
