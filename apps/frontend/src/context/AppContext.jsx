@@ -28,9 +28,6 @@ export function AppProvider({ children }) {
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [dataByInstrument, setDataByInstrument] = useState({})
-  const [sortOrder, setSortOrder] = useState([])
-  const [reversedSort, setReversedSort] = useState(false)
-  const [firebaseStocks, setFirebaseStocks] = useState(undefined)
   const [scripts, setScripts] = useState(undefined)
   const [requestQueue, setRequestQueue] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
@@ -61,7 +58,6 @@ export function AppProvider({ children }) {
                 if (prev && msg.data.find((s) => s.instrumentKey === prev)) return prev
                 return msg.data[0].instrumentKey
               })
-              ws.send(JSON.stringify({ type: 'subscribe_all' }))
             }
             return
           }
@@ -85,10 +81,6 @@ export function AppProvider({ children }) {
             }))
             return
           }
-          if (msg.type === 'sort_order' && Array.isArray(msg.data)) {
-            setSortOrder(msg.data)
-            return
-          }
           if (msg.type === 'day_reset') setDataByInstrument({})
         } catch {}
       }
@@ -99,7 +91,6 @@ export function AppProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    const unsubStocks = onValue(ref(db, 'stocks'), (snap) => setFirebaseStocks(snap.val() || {}))
     const unsubScripts = onValue(ref(db, 'scripts'), (snap) => setScripts(snap.val()))
     const unsubQueue = onValue(ref(db, 'request_queue'), (snap) => {
       const data = snap.val()
@@ -109,7 +100,7 @@ export function AppProvider({ children }) {
       const data = snap.val()
       setFailedRequests(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
     })
-    return () => { unsubStocks(); unsubScripts(); unsubQueue(); unsubFailed() }
+    return () => { unsubScripts(); unsubQueue(); unsubFailed() }
   }, [])
 
   const selectStock = (instrumentKey) => {
@@ -145,7 +136,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, sortOrder, reversedSort, setReversedSort, firebaseStocks, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )

@@ -34,7 +34,7 @@ function StockRow({ stock, bordered, info, onTap, onLongPress }) {
     >
       <div style={styles.stockInfo}>
         <span style={styles.symbol}>{stock.symbol}</span>
-        <span style={styles.name}>{stock.name || '—'}</span>
+        <span style={styles.name}>{stock.displayName || '—'}</span>
       </div>
       {info && (
         <div style={styles.priceCol}>
@@ -59,7 +59,7 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { stocks: liveStocks, getPriceInfo, sortOrder, selectStock, firebaseStocks: stocks } = useApp()
+  const { status, stocks, getPriceInfo, selectStock } = useApp()
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortBy, setSortBy] = useState('relevance')
@@ -67,45 +67,38 @@ export default function Stocks() {
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
 
   const getLivePriceInfo = (symbol) => {
-    const liveStock = liveStocks.find((s) => s.symbol === symbol)
-    if (!liveStock) return null
-    return getPriceInfo(liveStock.instrumentKey)
+    const stock = stocks.find((s) => s.symbol === symbol)
+    if (!stock) return null
+    return getPriceInfo(stock.instrumentKey)
   }
 
-  const stockList = stocks
-    ? Object.entries(stocks)
-        .map(([key, val]) => ({ ...val, _key: key, symbol: key }))
-        .sort((a, b) => {
-          let cmp = 0
-          if (sortBy === 'relevance') {
-            if (sortOrder.length === 0) return 0
-            const ai = sortOrder.indexOf(a.symbol)
-            const bi = sortOrder.indexOf(b.symbol)
-            cmp = (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi)
-          } else if (sortBy === 'created') {
-            cmp = (b.addedAt || '').localeCompare(a.addedAt || '')
-          } else if (sortBy === 'symbol') {
-            cmp = a.symbol.localeCompare(b.symbol)
-          } else if (sortBy === 'price') {
-            const ap = getLivePriceInfo(a.symbol)?.price ?? 0
-            const bp = getLivePriceInfo(b.symbol)?.price ?? 0
-            cmp = bp - ap
-          } else if (sortBy === 'change') {
-            const ac = getLivePriceInfo(a.symbol)?.changePct ?? 0
-            const bc = getLivePriceInfo(b.symbol)?.changePct ?? 0
-            cmp = bc - ac
-          }
-          return sortAsc ? -cmp : cmp
-        })
-    : []
+  const stockList = [...stocks].sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'relevance') {
+      cmp = (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)
+    } else if (sortBy === 'created') {
+      cmp = (b.addedAt || '').localeCompare(a.addedAt || '')
+    } else if (sortBy === 'symbol') {
+      cmp = a.symbol.localeCompare(b.symbol)
+    } else if (sortBy === 'price') {
+      const ap = getLivePriceInfo(a.symbol)?.price ?? 0
+      const bp = getLivePriceInfo(b.symbol)?.price ?? 0
+      cmp = bp - ap
+    } else if (sortBy === 'change') {
+      const ac = getLivePriceInfo(a.symbol)?.changePct ?? 0
+      const bc = getLivePriceInfo(b.symbol)?.changePct ?? 0
+      cmp = bc - ac
+    }
+    return sortAsc ? -cmp : cmp
+  })
 
-  const selectedStock = detailSymbol && stocks?.[detailSymbol]
-    ? { ...stocks[detailSymbol], _key: detailSymbol, symbol: detailSymbol }
+  const selectedStock = detailSymbol
+    ? stocks.find((s) => s.symbol === detailSymbol) || null
     : null
 
   const handleAdd = async () => {
     const symbol = symbolInput.trim().toUpperCase()
-    if (!symbol || stocks?.[symbol]) { setSymbolInput(''); return }
+    if (!symbol || stocks.find((s) => s.symbol === symbol)) { setSymbolInput(''); return }
     const now = moment().utcOffset('+05:30').toISOString()
     await set(ref(db, `stocks/${symbol}`), {
       symbol, name: symbol, status: 'pending_sync', enabled: true, addedAt: now, updatedAt: now,
@@ -120,7 +113,7 @@ export default function Stocks() {
     setDetailSymbol(null)
     await push(ref(db, 'request_queue'), {
       type: 'stock_sync',
-      payload: { symbol: stock._key, action: 'remove' },
+      payload: { symbol: stock.symbol, action: 'remove' },
       status: 'pending',
       createdAt: moment().utcOffset('+05:30').toISOString(),
     })
@@ -133,7 +126,7 @@ export default function Stocks() {
     })
   }
 
-  if (stocks === undefined) {
+  if (stocks.length === 0 && status === 'connecting') {
     return <Page><Loader /></Page>
   }
 
@@ -156,7 +149,7 @@ export default function Stocks() {
         <div style={styles.list}>
           {stockList.map((stock, i) => (
             <StockRow
-              key={stock._key}
+              key={stock.instrumentKey}
               stock={stock}
               bordered={i < stockList.length - 1}
               info={getLivePriceInfo(stock.symbol)}
@@ -197,9 +190,9 @@ export default function Stocks() {
                   const sign = info.change >= 0 ? '+' : ''
                   return `${info.price.toFixed(2)} (${sign}${info.change.toFixed(2)})`
                 })()} />
-                <DetailRow label="Name" value={selectedStock.name} />
-                <DetailRow label="Exchange" value={selectedStock.exchange} />
-                <DetailRow label="Security ID" value={selectedStock.securityId} />
+                <DetailRow label="Name" value={selectedStock.displayName} />
+                <DetailRow label="Exchange" value={selectedStock.exchangeType} />
+                <DetailRow label="Security ID" value={selectedStock.scripId} />
                 <DetailRow label="ISIN" value={selectedStock.isin} />
                 <DetailRow label="Industry" value={selectedStock.industryName} />
                 <DetailRow label="Market Cap" value={selectedStock.mcap ? `${selectedStock.mcap.toLocaleString('en-IN')} Cr` : undefined} />

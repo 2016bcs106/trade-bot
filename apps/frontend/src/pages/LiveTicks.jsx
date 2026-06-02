@@ -160,7 +160,7 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, sortOrder, selectStock, getPriceInfo } = useApp()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo } = useApp()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)
@@ -429,14 +429,7 @@ export default function LiveTicks() {
       {!isDisconnected && (
         <>
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
-            {[...stocks].sort((a, b) => {
-              if (sortOrder.length === 0) return 0
-              const ai = sortOrder.indexOf(a.symbol)
-              const bi = sortOrder.indexOf(b.symbol)
-              const aIdx = ai === -1 ? Infinity : ai
-              const bIdx = bi === -1 ? Infinity : bi
-              return aIdx - bIdx
-            }).map((stock) => {
+            {[...stocks].sort((a, b) => (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)).map((stock) => {
               const info = getPriceInfo(stock.instrumentKey)
               return (
                 <button

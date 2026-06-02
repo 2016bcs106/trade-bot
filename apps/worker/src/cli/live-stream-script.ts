@@ -34,13 +34,6 @@ interface MinuteAggregatePayload {
   lastUpdatedAt: string;
 }
 
-interface TrackedStock {
-  symbol: string;
-  displayName: string;
-  exchangeType: string;
-  scripId: number;
-  scripType: string;
-}
 
 
 class LiveStreamScript extends BaseScript {
@@ -64,11 +57,10 @@ class LiveStreamScript extends BaseScript {
   private wsPath = "/live-ticks";
   private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
   private wsDayTracker = this.getDateIST();
-  private subscribedClients = new Set<WebSocket>();
-  private trackedStocks: TrackedStock[] = [];
-  private instrumentByKey = new Map<string, TrackedStock>();
-  private instrumentBySecurityId = new Map<number, TrackedStock>();
-  private sortOrder: string[] = [];
+  private trackedStocks: StockConfig[] = [];
+  private instrumentByKey = new Map<string, StockConfig>();
+  private instrumentBySecurityId = new Map<number, StockConfig>();
+  private relevanceScores = new Map<string, number>();
 
   get scriptName(): string {
     return "live-stream";
@@ -102,10 +94,15 @@ class LiveStreamScript extends BaseScript {
         ? Object.values(stocks).filter((s) => s.securityId)
         : [];
 
-      this.trackedStocks = active.map((s) => this.toTrackedStock(s));
+      this.trackedStocks = active;
       this.initializeInstrumentMaps();
 
       this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);
+
+      // Broadcast updated stock list to all connected clients
+      for (const client of this.wsServer.clients) {
+        this.sendStockList(client);
+      }
 
       // Reconnect WebSocket with new subscriptions
       if (this.currentToken && this.streamer) {
@@ -135,20 +132,14 @@ class LiveStreamScript extends BaseScript {
     // Timers
     setInterval(() => this.flushBuffer(), flushInterval * 1000);
     setInterval(() => this.logStats(), statsInterval * 1000);
-    setInterval(() => this.publishSortOrder(), 60_000);
+    setInterval(() => this.publishStockList(), 60_000);
 
     // Keep process alive
     await new Promise(() => {});
   }
 
-  private toTrackedStock(s: StockConfig): TrackedStock {
-    return {
-      symbol: s.symbol,
-      displayName: s.name,
-      exchangeType: s.exchange,
-      scripId: typeof s.securityId === "string" ? parseInt(s.securityId, 10) : s.securityId,
-      scripType: "EQUITY",
-    };
+  private getScripId(stock: StockConfig): number {
+    return typeof stock.securityId === "string" ? parseInt(stock.securityId, 10) : stock.securityId;
   }
 
   private createStreamer(token: string): PaytmMoneyWebSocket {
@@ -159,9 +150,9 @@ class LiveStreamScript extends BaseScript {
     s.on("connected", () => {
       this.log.info(`WebSocket connected — subscribing to ${this.trackedStocks.length} stocks`);
       s.subscribe(this.trackedStocks.map((c) => ({
-        scripType: c.scripType,
-        exchangeType: c.exchangeType,
-        scripId: String(c.scripId),
+        scripType: "EQUITY",
+        exchangeType: c.exchange,
+        scripId: String(this.getScripId(c)),
         modeType,
       })));
     });
@@ -220,12 +211,11 @@ class LiveStreamScript extends BaseScript {
     const ticksPerSec = ((this.tickCount - this.tickCountAtLastStats) / statsInterval).toFixed(1);
     const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
     const wsClients = this.wsServer.clients.size;
-    const subscribedCount = this.subscribedClients.size;
 
     this.log.info(
       `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${this.totalFlushedToday} ` +
       `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()} tracked=${this.minuteAggregatesByInstrument.size} ` +
-      `clients=${wsClients} subscribed=${subscribedCount} mem=${memUsageMB}MB`,
+      `clients=${wsClients} mem=${memUsageMB}MB`,
     );
 
     this.tickCountAtLastStats = this.tickCount;
@@ -259,13 +249,11 @@ class LiveStreamScript extends BaseScript {
       this.log.info(`Client connected — ip=${ip} clients=${totalClients}`);
 
       this.sendStockList(client);
-
-      client.on("message", (raw) => {
-        this.handleClientMessage(client, raw.toString());
-      });
+      for (const key of this.instrumentByKey.keys()) {
+        this.sendMinuteSnapshot(client, key);
+      }
 
       client.on("close", (code, reason) => {
-        this.subscribedClients.delete(client);
         const remaining = this.wsServer.clients.size;
         this.log.info(`Client disconnected — ip=${ip} code=${code} reason=${reason || "none"} clients=${remaining}`);
       });
@@ -286,7 +274,7 @@ class LiveStreamScript extends BaseScript {
     const aggregate = this.upsertMinuteAggregate(tick);
     if (!aggregate) return;
 
-    this.broadcastToSubscribedClients(aggregate.instrumentKey, {
+    this.broadcastToAllClients({
       type: "minute_update",
       data: aggregate,
       meta: { instrumentKey: aggregate.instrumentKey },
@@ -340,10 +328,10 @@ class LiveStreamScript extends BaseScript {
       const first: MinuteAggregatePayload = {
         instrumentKey,
         symbol: stock.symbol,
-        displayName: stock.displayName,
-        exchangeType: stock.exchangeType,
-        scripType: stock.scripType,
-        scripId: stock.scripId,
+        displayName: stock.name,
+        exchangeType: stock.exchange,
+        scripType: "EQUITY",
+        scripId: this.getScripId(stock),
         minute: minuteKey,
         dateIst,
         open: price,
@@ -397,13 +385,6 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
-  private broadcastToSubscribedClients(_instrumentKey: string, payload: Record<string, unknown>): void {
-    const message = JSON.stringify(payload);
-    for (const client of this.subscribedClients) {
-      if (client.readyState !== WebSocket.OPEN) continue;
-      client.send(message);
-    }
-  }
 
   private sendStockList(client: WebSocket): void {
     if (client.readyState !== WebSocket.OPEN) return;
@@ -412,40 +393,27 @@ class LiveStreamScript extends BaseScript {
       data: this.trackedStocks.map((stock) => ({
         instrumentKey: this.getInstrumentKey(stock),
         symbol: stock.symbol,
-        displayName: stock.displayName,
-        exchangeType: stock.exchangeType,
-        scripType: stock.scripType,
-        scripId: stock.scripId,
+        displayName: stock.name,
+        exchangeType: stock.exchange,
+        scripType: "EQUITY",
+        scripId: this.getScripId(stock),
+        isin: stock.isin,
+        industryName: stock.industryName,
+        mcap: stock.mcap,
+        addedAt: stock.addedAt,
+        updatedAt: stock.updatedAt,
+        status: stock.status,
+        relevanceScore: this.relevanceScores.get(stock.symbol) ?? 0,
       })),
     }));
-    if (this.sortOrder.length > 0) {
-      client.send(JSON.stringify({ type: "sort_order", data: this.sortOrder }));
-    }
   }
 
-  private handleClientMessage(client: WebSocket, raw: string): void {
-    try {
-      const msg = JSON.parse(raw) as { type?: string };
-      if (msg.type !== "subscribe_all") return;
-
-      this.subscribedClients.add(client);
-      this.log.info(`Client subscribed — total subscribed=${this.subscribedClients.size}`);
-      for (const key of this.instrumentByKey.keys()) {
-        this.sendMinuteSnapshot(client, key);
-      }
-    } catch {
-      // ignore invalid client payload
-    }
-  }
-
-  private computeSortOrder(): string[] {
-    const scored: { symbol: string; score: number }[] = [];
-
+  private computeRelevanceScores(): void {
     for (const stock of this.trackedStocks) {
       const key = this.getInstrumentKey(stock);
       const minuteMap = this.minuteAggregatesByInstrument.get(key);
       if (!minuteMap || minuteMap.size === 0) {
-        scored.push({ symbol: stock.symbol, score: 0 });
+        this.relevanceScores.set(stock.symbol, 0);
         continue;
       }
 
@@ -467,27 +435,20 @@ class LiveStreamScript extends BaseScript {
         count++;
       }
 
-      scored.push({ symbol: stock.symbol, score: count > 0 ? sum / count : 0 });
+      this.relevanceScores.set(stock.symbol, count > 0 ? sum / count : 0);
     }
-
-    scored.sort((a, b) => a.score - b.score);
-    return scored.map((s) => s.symbol);
   }
 
-  private publishSortOrder(): void {
+  private publishStockList(): void {
     if (this.trackedStocks.length === 0) return;
-
-    const order = this.computeSortOrder();
-    this.sortOrder = order;
-
-    this.broadcastToAllClients({
-      type: "sort_order",
-      data: order,
-    });
+    this.computeRelevanceScores();
+    for (const client of this.wsServer.clients) {
+      this.sendStockList(client);
+    }
   }
 
-  private getInstrumentKey(stock: TrackedStock): string {
-    return `${stock.exchangeType}:${stock.scripType}:${stock.scripId}`;
+  private getInstrumentKey(stock: StockConfig): string {
+    return `${stock.exchange}:EQUITY:${this.getScripId(stock)}`;
   }
 
   private initializeInstrumentMaps(): void {
@@ -496,11 +457,11 @@ class LiveStreamScript extends BaseScript {
     for (const stock of this.trackedStocks) {
       const key = this.getInstrumentKey(stock);
       this.instrumentByKey.set(key, stock);
-      this.instrumentBySecurityId.set(stock.scripId, stock);
+      this.instrumentBySecurityId.set(this.getScripId(stock), stock);
     }
   }
 
-  private resolveStockFromTick(tick: Record<string, unknown>): TrackedStock | null {
+  private resolveStockFromTick(tick: Record<string, unknown>): StockConfig | null {
     const securityId = Number(tick.security_id);
     if (!Number.isFinite(securityId)) return null;
     return this.instrumentBySecurityId.get(securityId) ?? null;
@@ -521,8 +482,8 @@ class LiveStreamScript extends BaseScript {
     return total;
   }
 
-  private getOutputFilePath(stock: TrackedStock): string {
-    return resolve(this.dataDir, `${stock.exchangeType}_${stock.scripId}_${this.getDateIST()}.ndjson`);
+  private getOutputFilePath(stock: StockConfig): string {
+    return resolve(this.dataDir, `${stock.exchange}_${this.getScripId(stock)}_${this.getDateIST()}.ndjson`);
   }
 
   private cleanupOldDataFiles(): void {
