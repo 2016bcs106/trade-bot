@@ -219,10 +219,13 @@ class LiveStreamScript extends BaseScript {
     const statsInterval = this.config.statsInterval;
     const ticksPerSec = ((this.tickCount - this.tickCountAtLastStats) / statsInterval).toFixed(1);
     const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
+    const wsClients = this.wsServer.clients.size;
+    const subscribedCount = this.subscribedClients.size;
 
     this.log.info(
       `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${this.totalFlushedToday} ` +
-      `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()} tracked=${this.minuteAggregatesByInstrument.size} mem=${memUsageMB}MB`,
+      `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()} tracked=${this.minuteAggregatesByInstrument.size} ` +
+      `clients=${wsClients} subscribed=${subscribedCount} mem=${memUsageMB}MB`,
     );
 
     this.tickCountAtLastStats = this.tickCount;
@@ -236,6 +239,7 @@ class LiveStreamScript extends BaseScript {
     this.wsHttpServer.on("upgrade", (request, socket, head) => {
       const requestUrl = new URL(request.url ?? "", "http://localhost");
       if (requestUrl.pathname !== this.wsPath) {
+        this.log.warn(`Rejected upgrade — path=${requestUrl.pathname} (expected ${this.wsPath})`);
         socket.destroy();
         return;
       }
@@ -245,15 +249,29 @@ class LiveStreamScript extends BaseScript {
       });
     });
 
-    this.wsServer.on("connection", (client) => {
+    this.wsHttpServer.on("error", (err) => {
+      this.log.error("HTTPS server error", err);
+    });
+
+    this.wsServer.on("connection", (client, request) => {
+      const ip = request.headers["x-forwarded-for"] || request.socket.remoteAddress || "unknown";
+      const totalClients = this.wsServer.clients.size;
+      this.log.info(`Client connected — ip=${ip} clients=${totalClients}`);
+
       this.sendStockList(client);
 
       client.on("message", (raw) => {
         this.handleClientMessage(client, raw.toString());
       });
 
-      client.on("close", () => {
+      client.on("close", (code, reason) => {
         this.subscribedClients.delete(client);
+        const remaining = this.wsServer.clients.size;
+        this.log.info(`Client disconnected — ip=${ip} code=${code} reason=${reason || "none"} clients=${remaining}`);
+      });
+
+      client.on("error", (err) => {
+        this.log.warn(`Client error — ip=${ip} error=${err.message}`);
       });
     });
 
@@ -411,6 +429,7 @@ class LiveStreamScript extends BaseScript {
       if (msg.type !== "subscribe_all") return;
 
       this.subscribedClients.add(client);
+      this.log.info(`Client subscribed — total subscribed=${this.subscribedClients.size}`);
       for (const key of this.instrumentByKey.keys()) {
         this.sendMinuteSnapshot(client, key);
       }
