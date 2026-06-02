@@ -46,10 +46,12 @@ class TickArchiverScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
-    this.log.info("Starting tick data archival");
+    const dateArg = process.argv[2];
+    const date = dateArg || moment().utcOffset("+05:30").format("YYYY-MM-DD");
 
-    const today = moment().utcOffset("+05:30").format("YYYY-MM-DD");
-    await this.uploadDayFiles(today);
+    this.log.info(`Starting tick data archival for ${date}`);
+
+    await this.uploadDayFiles(date);
     await this.deleteOldFiles();
 
     this.log.info(`Archival complete — uploaded=${this.uploadedCount} deleted=${this.deletedCount}`);
