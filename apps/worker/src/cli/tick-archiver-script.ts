@@ -55,6 +55,7 @@ class TickArchiverScript extends BaseScript {
     await this.deleteOldFiles();
 
     this.log.info(`Archival complete — uploaded=${this.uploadedCount} deleted=${this.deletedCount}`);
+    process.exit(0);
   }
 
   private async uploadDayFiles(date: string): Promise<void> {
