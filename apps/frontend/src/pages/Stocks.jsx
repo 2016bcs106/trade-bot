@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import moment from 'moment'
 import { db, ref, set, push } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartBar, faPlus } from '@fortawesome/free-solid-svg-icons'
+import { faChartBar, faPlus, faArrowDownWideShort, faArrowUp, faArrowDown } from '@fortawesome/free-solid-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
@@ -11,8 +11,6 @@ import EmptyState from '../components/EmptyState'
 import Loader from '../components/Loader'
 import BottomSheet from '../components/BottomSheet'
 import DetailRow from '../components/DetailRow'
-import SectionHeader from '../components/SectionHeader'
-import Toggle from '../components/Toggle'
 import useLongPress from '../hooks/useLongPress'
 import { useApp } from '../context/AppContext'
 
@@ -51,11 +49,22 @@ function StockRow({ stock, bordered, info, onTap, onLongPress }) {
   )
 }
 
+const SORT_OPTIONS = [
+  { key: 'relevance', label: 'Relevance' },
+  { key: 'created', label: 'Created on' },
+  { key: 'symbol', label: 'Symbol (A–Z)' },
+  { key: 'price', label: 'Live price' },
+  { key: 'change', label: '% Change today' },
+]
+
 export default function Stocks() {
   const navigate = useNavigate()
-  const { stocks: liveStocks, getPriceInfo, sortOrder, reversedSort, setReversedSort, selectStock, firebaseStocks: stocks } = useApp()
+  const { stocks: liveStocks, getPriceInfo, sortOrder, selectStock, firebaseStocks: stocks } = useApp()
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
+  const [sortBy, setSortBy] = useState('relevance')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [sortSheetOpen, setSortSheetOpen] = useState(false)
 
   const getLivePriceInfo = (symbol) => {
     const liveStock = liveStocks.find((s) => s.symbol === symbol)
@@ -67,14 +76,26 @@ export default function Stocks() {
     ? Object.entries(stocks)
         .map(([key, val]) => ({ ...val, _key: key, symbol: key }))
         .sort((a, b) => {
-          if (sortOrder.length > 0) {
+          let cmp = 0
+          if (sortBy === 'relevance') {
+            if (sortOrder.length === 0) return 0
             const ai = sortOrder.indexOf(a.symbol)
             const bi = sortOrder.indexOf(b.symbol)
-            const aIdx = ai === -1 ? Infinity : ai
-            const bIdx = bi === -1 ? Infinity : bi
-            return reversedSort ? bIdx - aIdx : aIdx - bIdx
+            cmp = (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi)
+          } else if (sortBy === 'created') {
+            cmp = (b.addedAt || '').localeCompare(a.addedAt || '')
+          } else if (sortBy === 'symbol') {
+            cmp = a.symbol.localeCompare(b.symbol)
+          } else if (sortBy === 'price') {
+            const ap = getLivePriceInfo(a.symbol)?.price ?? 0
+            const bp = getLivePriceInfo(b.symbol)?.price ?? 0
+            cmp = bp - ap
+          } else if (sortBy === 'change') {
+            const ac = getLivePriceInfo(a.symbol)?.changePct ?? 0
+            const bc = getLivePriceInfo(b.symbol)?.changePct ?? 0
+            cmp = bc - ac
           }
-          return (b.updatedAt || b.addedAt || '').localeCompare(a.updatedAt || a.addedAt || '')
+          return sortAsc ? -cmp : cmp
         })
     : []
 
@@ -121,8 +142,11 @@ export default function Stocks() {
       <PageHeader title="Stocks" />
 
       {stockList.length > 0 && (
-        <div style={styles.toggleRow}>
-          <Toggle label="Reverse sort" enabled={reversedSort} onToggle={() => setReversedSort((r) => !r)} />
+        <div style={styles.sortRow}>
+          <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
+            <FontAwesomeIcon icon={faArrowDownWideShort} style={styles.sortIcon} />
+            <span>{SORT_OPTIONS.find((o) => o.key === sortBy)?.label}</span>
+          </button>
         </div>
       )}
 
@@ -195,14 +219,96 @@ export default function Stocks() {
           </div>
         )}
       </BottomSheet>
+
+      {/* Sort sheet */}
+      <BottomSheet title="Sort by" isOpen={sortSheetOpen} onClose={() => setSortSheetOpen(false)}>
+        <div style={styles.sortList}>
+          {SORT_OPTIONS.map((opt) => {
+            const isActive = sortBy === opt.key
+            return (
+              <button
+                key={opt.key}
+                style={{ ...styles.sortOption, ...(isActive ? styles.sortOptionActive : {}) }}
+                onClick={() => {
+                  if (isActive) {
+                    setSortAsc((v) => !v)
+                  } else {
+                    setSortBy(opt.key)
+                    setSortAsc(false)
+                  }
+                }}
+              >
+                <span>{opt.label}</span>
+                {isActive && <FontAwesomeIcon icon={sortAsc ? faArrowUp : faArrowDown} style={styles.sortArrow} />}
+              </button>
+            )
+          })}
+        </div>
+        <div style={styles.sortApplyRow}>
+          <button style={styles.sortApplyBtn} onClick={() => setSortSheetOpen(false)}>Apply</button>
+        </div>
+      </BottomSheet>
     </Page>
   )
 }
 
 const styles = {
-  toggleRow: {
+  sortRow: {
     padding: '0 var(--space-lg)',
     marginBottom: 'var(--space-sm)',
+  },
+  sortBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '8px 0',
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 500,
+    color: 'var(--color-primary)',
+  },
+  sortIcon: {
+    fontSize: '0.9rem',
+  },
+  sortList: {
+    padding: 'var(--space-sm) 0',
+  },
+  sortOption: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    padding: '14px var(--space-xl)',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '1px solid var(--color-border)',
+    textAlign: 'left',
+    fontSize: 'var(--font-body)',
+    color: 'var(--color-text)',
+    cursor: 'pointer',
+  },
+  sortOptionActive: {
+    color: 'var(--color-primary)',
+    fontWeight: 600,
+  },
+  sortArrow: {
+    fontSize: '0.8rem',
+  },
+  sortApplyRow: {
+    padding: 'var(--space-lg) var(--space-xl)',
+  },
+  sortApplyBtn: {
+    width: '100%',
+    padding: '14px',
+    background: 'var(--color-primary)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--font-body)',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   list: {
     background: 'var(--color-card)',
