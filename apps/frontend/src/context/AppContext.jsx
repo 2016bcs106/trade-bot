@@ -28,6 +28,8 @@ export function AppProvider({ children }) {
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [dataByInstrument, setDataByInstrument] = useState({})
+  const [sortBy, setSortBy] = useState('relevance')
+  const [sortAsc, setSortAsc] = useState(false)
   const [scripts, setScripts] = useState(undefined)
   const [requestQueue, setRequestQueue] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
@@ -136,7 +138,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, sortBy, setSortBy, sortAsc, setSortAsc, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )

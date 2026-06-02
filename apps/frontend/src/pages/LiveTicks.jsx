@@ -17,6 +17,7 @@ import { faPlugCircleXmark, faChevronLeft, faChevronDown } from '@fortawesome/fr
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Loader from '../components/Loader'
+import StatusBadges from '../components/StatusBadges'
 import { useApp, isMarketOpen } from '../context/AppContext'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
@@ -160,7 +161,7 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo } = useApp()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo, sortBy, sortAsc } = useApp()
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const priceChartRef = useRef(null)
@@ -388,22 +389,15 @@ export default function LiveTicks() {
           </button>
           <div>
             <span style={styles.stockName}>{selectedStock.displayName}</span>
-            <div style={styles.statusRow}>
-              <span style={{
-                ...styles.dot,
-                background: !isMarketOpen() ? 'var(--color-text-tertiary)'
-                  : status === 'connected' ? 'var(--color-success)'
-                  : status === 'reconnecting' ? 'var(--color-warning)'
-                  : 'var(--color-text-tertiary)',
-                animation: isMarketOpen() ? 'pulse-dot 2s ease-in-out infinite' : 'none',
-              }} />
-              <span style={styles.symbolText}>{selectedStock.symbol}</span>
-            </div>
+            <span style={styles.symbolText}>{selectedStock.symbol}</span>
           </div>
         </div>
-        <button style={styles.stockSelector} onClick={() => setSheetOpen(true)}>
-          <FontAwesomeIcon icon={faChevronDown} style={styles.chevron} />
-        </button>
+        <div style={styles.headerRight}>
+          <StatusBadges />
+          <button style={styles.stockSelector} onClick={() => setSheetOpen(true)}>
+            <FontAwesomeIcon icon={faChevronDown} style={styles.chevron} />
+          </button>
+        </div>
       </div>
 
       {/* Price display */}
@@ -429,7 +423,25 @@ export default function LiveTicks() {
       {!isDisconnected && (
         <>
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
-            {[...stocks].sort((a, b) => (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)).map((stock) => {
+            {[...stocks].sort((a, b) => {
+              let cmp = 0
+              if (sortBy === 'relevance') {
+                cmp = (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)
+              } else if (sortBy === 'created') {
+                cmp = (b.addedAt || '').localeCompare(a.addedAt || '')
+              } else if (sortBy === 'symbol') {
+                cmp = a.symbol.localeCompare(b.symbol)
+              } else if (sortBy === 'price') {
+                const ap = getPriceInfo(a.instrumentKey)?.price ?? 0
+                const bp = getPriceInfo(b.instrumentKey)?.price ?? 0
+                cmp = bp - ap
+              } else if (sortBy === 'change') {
+                const ac = getPriceInfo(a.instrumentKey)?.changePct ?? 0
+                const bc = getPriceInfo(b.instrumentKey)?.changePct ?? 0
+                cmp = bc - ac
+              }
+              return sortAsc ? -cmp : cmp
+            }).map((stock) => {
               const info = getPriceInfo(stock.instrumentKey)
               return (
                 <button
@@ -504,6 +516,11 @@ const styles = {
     alignItems: 'center',
     gap: 'var(--space-sm)',
   },
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-sm)',
+  },
   backBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -538,20 +555,11 @@ const styles = {
     fontSize: '0.85rem',
     color: 'var(--color-text-muted)',
   },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginTop: '4px',
-  },
-  dot: {
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-  },
   symbolText: {
+    display: 'block',
     fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
+    marginTop: '2px',
   },
   priceSection: {
     padding: '0 var(--space-xl)',

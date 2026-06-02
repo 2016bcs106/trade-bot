@@ -59,11 +59,9 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { status, stocks, getPriceInfo, selectStock } = useApp()
+  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc } = useApp()
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
-  const [sortBy, setSortBy] = useState('relevance')
-  const [sortAsc, setSortAsc] = useState(false)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
 
   const getLivePriceInfo = (symbol) => {
