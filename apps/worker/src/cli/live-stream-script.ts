@@ -56,7 +56,6 @@ class LiveStreamScript extends BaseScript {
   private wsPort = 8081;
   private wsPath = "/live-ticks";
   private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
-  private wsDayTracker = this.getDateIST();
   private trackedStocks: StockConfig[] = [];
   private instrumentByKey = new Map<string, StockConfig>();
   private instrumentBySecurityId = new Map<number, StockConfig>();
@@ -98,7 +97,10 @@ class LiveStreamScript extends BaseScript {
 
       this.trackedStocks = active;
       this.initializeInstrumentMaps();
-      this.loadHistoricalData();
+      if (this.lastTradeDate) {
+        this.loadHistoricalData();
+        this.broadcastAllSnapshots();
+      }
 
       this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);
 
@@ -107,8 +109,8 @@ class LiveStreamScript extends BaseScript {
         this.sendStockList(client);
       }
 
-      // Reconnect WebSocket with new subscriptions
-      if (this.currentToken && this.streamer) {
+      // Reconnect data streamer with new subscriptions (only during market hours)
+      if (this.currentToken && this.streamer && this.marketStatus !== "Closed") {
         this.streamer.disconnect();
         this.streamer = this.createStreamer(this.currentToken);
         this.streamer.connect();
@@ -148,19 +150,17 @@ class LiveStreamScript extends BaseScript {
       if (!prevTradeDate && data.tradeDate && this.trackedStocks.length > 0) {
         this.minuteAggregatesByInstrument.clear();
         this.loadHistoricalData();
-        for (const client of this.wsServer.clients) {
-          for (const key of this.instrumentByKey.keys()) {
-            this.sendMinuteSnapshot(client, key);
-          }
-        }
+        this.broadcastAllSnapshots();
       }
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
-        this.log.info("Market closed — disconnecting streamer");
-        this.flushBuffer();
+        this.log.info("Market closed — final flush and disconnecting streamer");
+        this.flushBuffer(true);
         if (this.streamer) { this.streamer.disconnect(); this.streamer = null; }
       } else if (data.status !== "Closed" && prevStatus === "Closed") {
-        this.log.info("Market opened — connecting streamer");
+        this.log.info("Market opened — clearing aggregates and connecting streamer");
+        this.minuteAggregatesByInstrument.clear();
+        this.broadcastToAllClients({ type: "day_reset", data: { reason: "market opened" } });
         if (this.currentToken) {
           this.streamer = this.createStreamer(this.currentToken);
           this.streamer.connect();
@@ -197,6 +197,7 @@ class LiveStreamScript extends BaseScript {
     });
 
     s.on("tick", (data: Record<string, unknown>) => {
+      if (this.marketStatus === "Closed") return;
       this.tickCount++;
       const tick = { ...data, received_at: nowISO() };
       this.pushTickToInstrumentBuffer(tick);
@@ -205,21 +206,26 @@ class LiveStreamScript extends BaseScript {
     });
 
     s.on("error", (err: Error) => this.log.error("WebSocket error", err));
-    s.on("disconnected", ({ code }: { code: number }) => { this.flushBuffer(); this.log.warn(`WebSocket disconnected — code=${code}`); });
+    s.on("disconnected", ({ code }: { code: number }) => { this.flushBuffer(true); this.log.warn(`WebSocket disconnected — code=${code}`); });
     s.on("reconnecting", (n: number) => this.log.info(`WebSocket reconnecting — attempt ${n}`));
 
     return s;
   }
 
-  private flushBuffer(): void {
+  private flushBuffer(force = false): void {
     if (this.getTotalBufferedTicks() === 0) return;
+
+    if (!force && this.marketStatus === "Closed") {
+      this.log.info(`Discarding ${this.getTotalBufferedTicks()} off-market ticks`);
+      this.bufferByInstrument.clear();
+      return;
+    }
 
     const today = this.getDateIST();
     if (today !== this.lastFlushDate) {
       this.log.info(`New trading day: ${today}`);
       this.totalFlushedToday = 0;
       this.lastFlushDate = today;
-      this.resetMinuteAggregatesForNewDay(today);
       this.cleanupOldDataFiles();
     }
 
@@ -309,8 +315,6 @@ class LiveStreamScript extends BaseScript {
   }
 
   private publishTickToLocalWebSocket(tick: Record<string, unknown>): void {
-    this.ensureMinuteAggregationDaySync();
-
     const aggregate = this.upsertMinuteAggregate(tick);
     if (!aggregate) return;
 
@@ -318,24 +322,6 @@ class LiveStreamScript extends BaseScript {
       type: "minute_update",
       data: aggregate,
       meta: { instrumentKey: aggregate.instrumentKey },
-    });
-  }
-
-  private ensureMinuteAggregationDaySync(): void {
-    const today = this.getDateIST();
-    if (today === this.wsDayTracker) return;
-    this.wsDayTracker = today;
-    this.resetMinuteAggregatesForNewDay(today);
-  }
-
-  private resetMinuteAggregatesForNewDay(dateIst: string): void {
-    this.minuteAggregatesByInstrument.clear();
-    this.broadcastToAllClients({
-      type: "day_reset",
-      data: {
-        dateIst,
-        reason: "IST day changed; cleared in-memory minute aggregates",
-      },
     });
   }
 
@@ -404,6 +390,14 @@ class LiveStreamScript extends BaseScript {
     const map = this.minuteAggregatesByInstrument.get(instrumentKey);
     if (!map) return [];
     return Array.from(map.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+  }
+
+  private broadcastAllSnapshots(): void {
+    for (const client of this.wsServer.clients) {
+      for (const key of this.instrumentByKey.keys()) {
+        this.sendMinuteSnapshot(client, key);
+      }
+    }
   }
 
   private sendMinuteSnapshot(client: WebSocket, instrumentKey: string): void {
@@ -546,28 +540,35 @@ class LiveStreamScript extends BaseScript {
 
   private loadHistoricalData(): void {
     let totalLoaded = 0;
-    const targetDate = this.getTargetDate();
 
-    for (const stock of this.trackedStocks) {
-      const instrumentKey = this.getInstrumentKey(stock);
-      if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
-
-      const scripId = this.getScripId(stock);
-      let loaded = false;
-
-      if (targetDate) {
-        loaded = this.loadFileForStock(stock, scripId, targetDate);
-        if (loaded) { totalLoaded++; continue; }
+    if (this.marketStatus !== "Closed") {
+      const today = this.getDateIST();
+      for (const stock of this.trackedStocks) {
+        const instrumentKey = this.getInstrumentKey(stock);
+        if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
+        const scripId = this.getScripId(stock);
+        if (this.loadFileForStock(stock, scripId, today)) totalLoaded++;
       }
+    } else {
+      const targetDate = this.getTargetDate();
+      for (const stock of this.trackedStocks) {
+        const instrumentKey = this.getInstrumentKey(stock);
+        if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
+        const scripId = this.getScripId(stock);
+        let loaded = false;
 
-      for (let daysBack = 0; daysBack < 7; daysBack++) {
-        const date = moment().utcOffset("+05:30").subtract(daysBack, "days").format("YYYY-MM-DD");
-        loaded = this.loadFileForStock(stock, scripId, date);
-        if (loaded) { totalLoaded++; break; }
-      }
+        if (targetDate) {
+          loaded = this.loadFileForStock(stock, scripId, targetDate);
+        }
 
-      if (!loaded) {
-        this.log.info(`No historical data found for ${stock.symbol}`);
+        if (!loaded) {
+          for (let daysBack = 0; daysBack < 7; daysBack++) {
+            const date = moment().utcOffset("+05:30").subtract(daysBack, "days").format("YYYY-MM-DD");
+            if (this.loadFileForStock(stock, scripId, date)) { loaded = true; break; }
+          }
+        }
+
+        if (loaded) totalLoaded++;
       }
     }
 
