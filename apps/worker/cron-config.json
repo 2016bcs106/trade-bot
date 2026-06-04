@@ -13,10 +13,5 @@
     "name": "market-status",
     "schedule": "* * * * *",
     "command": "src/cli/market-status-script.ts"
-  },
-  {
-    "name": "tick-archiver",
-    "schedule": "29 18 * * *",
-    "command": "src/cli/tick-archiver-script.ts"
   }
 ]

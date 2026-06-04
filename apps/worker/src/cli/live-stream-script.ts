@@ -2,10 +2,13 @@ import "../config/env.ts";
 import { dirname, resolve } from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { mkdirSync, appendFileSync, readdirSync, unlinkSync, readFileSync, existsSync } from "fs";
+import { mkdirSync, readdirSync, unlinkSync, readFileSync, existsSync, writeFileSync } from "fs";
+import { gzipSync } from "zlib";
 import { createServer } from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import moment from "moment";
+// @ts-ignore — installed on server
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import BaseScript from "./base-script.ts";
 import { nowMs, nowISO, todayDate } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
@@ -36,13 +39,28 @@ interface MinuteAggregatePayload {
 
 
 
+const R2_ENDPOINT = process.env.R2_ENDPOINT || "";
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
+const R2_BUCKET = process.env.R2_BUCKET || "";
+const MEMORY_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB
+const FLUSH_TOP_PERCENT = 0.1; // flush top 10%
+
 class LiveStreamScript extends BaseScript {
   private config = new TradingConfig();
   private dataDir = resolve(__dirname, "..", "..", "..", "..", "data");
+  private aggregatesDir = resolve(this.dataDir, "aggregates");
   private bufferByInstrument = new Map<string, Record<string, unknown>[]>();
+  private bufferBytesTotal = 0;
+  private bufferBytesByInstrument = new Map<string, number>();
   private totalFlushed = 0;
   private totalFlushedToday = 0;
   private lastFlushDate = this.getDateIST();
+  private s3 = new S3Client({
+    region: "auto",
+    endpoint: R2_ENDPOINT,
+    credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
+  });
   private tickCount = 0;
   private tickCountAtLastStats = 0;
   private startTime = nowMs();
@@ -80,11 +98,11 @@ class LiveStreamScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
-    mkdirSync(this.dataDir, { recursive: true });
-    this.cleanupOldDataFiles();
+    mkdirSync(this.aggregatesDir, { recursive: true });
+    this.cleanupOldAggregateFiles();
     this.startLocalBroadcastWebSocket();
 
-    const { flushInterval, statsInterval } = this.config;
+    const { statsInterval } = this.config;
 
     this.log.info("Starting live market data recorder");
     this.log.info(`Output directory: ${this.dataDir}`);
@@ -126,7 +144,7 @@ class LiveStreamScript extends BaseScript {
         this.log.info("Public access token loaded from Firebase");
       } else {
         this.log.info("Public access token updated — reconnecting WebSocket");
-        this.flushBuffer();
+        this.flushToR2(true);
         if (this.streamer) this.streamer.disconnect();
       }
 
@@ -155,7 +173,8 @@ class LiveStreamScript extends BaseScript {
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
         this.log.info("Market closed — final flush and disconnecting streamer");
-        this.flushBuffer(true);
+        this.flushToR2(true);
+        this.saveAggregates();
         if (this.streamer) { this.streamer.disconnect(); this.streamer = null; }
       } else if (data.status !== "Closed" && prevStatus === "Closed") {
         this.log.info("Market opened — clearing aggregates and connecting streamer");
@@ -169,7 +188,8 @@ class LiveStreamScript extends BaseScript {
     });
 
     // Timers
-    setInterval(() => this.flushBuffer(), flushInterval * 1000);
+    setInterval(() => this.flushToR2(), 10_000);
+    setInterval(() => this.saveAggregates(), 60_000);
     setInterval(() => this.logStats(), statsInterval * 1000);
     setInterval(() => this.publishStockList(), 60_000);
 
@@ -183,7 +203,6 @@ class LiveStreamScript extends BaseScript {
 
   private createStreamer(token: string): PaytmMoneyWebSocket {
     const { modeType } = this.config;
-    const maxBufferSize = this.config.bufferSize;
     const s = new PaytmMoneyWebSocket(token);
 
     s.on("connected", () => {
@@ -202,52 +221,93 @@ class LiveStreamScript extends BaseScript {
       const tick = { ...data, received_at: nowISO() };
       this.pushTickToInstrumentBuffer(tick);
       this.publishTickToLocalWebSocket(tick);
-      if (this.getTotalBufferedTicks() >= maxBufferSize) this.flushBuffer();
     });
 
     s.on("error", (err: Error) => this.log.error("WebSocket error", err));
-    s.on("disconnected", ({ code }: { code: number }) => { this.flushBuffer(true); this.log.warn(`WebSocket disconnected — code=${code}`); });
+    s.on("disconnected", ({ code }: { code: number }) => { this.flushToR2(true); this.log.warn(`WebSocket disconnected — code=${code}`); });
     s.on("reconnecting", (n: number) => this.log.info(`WebSocket reconnecting — attempt ${n}`));
 
     return s;
   }
 
-  private flushBuffer(force = false): void {
+  private flushToR2(force = false): void {
     if (this.getTotalBufferedTicks() === 0) return;
 
     if (!force && this.marketStatus === "Closed") {
       this.log.info(`Discarding ${this.getTotalBufferedTicks()} off-market ticks`);
       this.bufferByInstrument.clear();
+      this.bufferBytesByInstrument.clear();
+      this.bufferBytesTotal = 0;
       return;
     }
+
+    if (!force && this.bufferBytesTotal < MEMORY_THRESHOLD_BYTES) return;
 
     const today = this.getDateIST();
     if (today !== this.lastFlushDate) {
       this.log.info(`New trading day: ${today}`);
       this.totalFlushedToday = 0;
       this.lastFlushDate = today;
-      this.cleanupOldDataFiles();
+      this.cleanupOldAggregateFiles();
     }
 
-    try {
-      let flushedCount = 0;
-      for (const [instrumentKey, ticks] of this.bufferByInstrument.entries()) {
-        if (ticks.length === 0) continue;
-        const stock = this.instrumentByKey.get(instrumentKey);
-        if (!stock) continue;
-        const filePath = this.getOutputFilePath(stock);
-        const lines = ticks.map((tick) => JSON.stringify(tick)).join("\n") + "\n";
-        appendFileSync(filePath, lines);
-        flushedCount += ticks.length;
-      }
+    const entries = Array.from(this.bufferBytesByInstrument.entries())
+      .filter(([key]) => (this.bufferByInstrument.get(key)?.length ?? 0) > 0)
+      .sort((a, b) => b[1] - a[1]);
 
-      this.totalFlushed += flushedCount;
-      this.totalFlushedToday += flushedCount;
-      this.bufferByInstrument.clear();
-      this.log.info(`Flushed ${flushedCount} ticks — total=${this.totalFlushed}`);
-    } catch (err) {
-      this.log.error("Flush error", err);
+    const count = force ? entries.length : Math.max(1, Math.ceil(entries.length * FLUSH_TOP_PERCENT));
+    const toFlush = entries.slice(0, count);
+    const timestamp = moment().utcOffset("+05:30").format("HH-mm-ss");
+
+    let flushedCount = 0;
+    let flushedBytes = 0;
+    for (const [instrumentKey] of toFlush) {
+      const ticks = this.bufferByInstrument.get(instrumentKey);
+      if (!ticks || ticks.length === 0) continue;
+      const stock = this.instrumentByKey.get(instrumentKey);
+      if (!stock) continue;
+
+      const lines = ticks.map((tick) => JSON.stringify(tick)).join("\n") + "\n";
+      const compressed = gzipSync(Buffer.from(lines), { level: 9 });
+      const key = `${today}/${stock.exchange}_${this.getScripId(stock)}/${timestamp}.ndjson.gz`;
+
+      this.s3.send(new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: key,
+        Body: compressed,
+        ContentType: "application/gzip",
+      })).catch((err: Error) => this.log.error(`R2 upload failed for ${key}`, err));
+
+      flushedCount += ticks.length;
+      const instrumentBytes = this.bufferBytesByInstrument.get(instrumentKey) ?? 0;
+      flushedBytes += instrumentBytes;
+      this.bufferByInstrument.set(instrumentKey, []);
+      this.bufferBytesByInstrument.set(instrumentKey, 0);
     }
+
+    this.bufferBytesTotal -= flushedBytes;
+    this.totalFlushed += flushedCount;
+    this.totalFlushedToday += flushedCount;
+    this.log.info(`Flushed ${flushedCount} ticks to R2 (${toFlush.length} instruments, ${(flushedBytes / 1024 / 1024).toFixed(1)}MB) — total=${this.totalFlushed}`);
+  }
+
+  private saveAggregates(): void {
+    if (this.minuteAggregatesByInstrument.size === 0) return;
+
+    let saved = 0;
+    for (const [instrumentKey, minuteMap] of this.minuteAggregatesByInstrument.entries()) {
+      if (minuteMap.size === 0) continue;
+      const stock = this.instrumentByKey.get(instrumentKey);
+      if (!stock) continue;
+
+      const data = Array.from(minuteMap.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+      const date = data[0].dateIst;
+      const filePath = resolve(this.aggregatesDir, `${stock.exchange}_${this.getScripId(stock)}_${date}.json`);
+      writeFileSync(filePath, JSON.stringify(data));
+      saved++;
+    }
+
+    this.log.info(`Saved aggregates for ${saved} instruments`);
   }
 
   private logStats(): void {
@@ -259,8 +319,8 @@ class LiveStreamScript extends BaseScript {
 
     this.log.info(
       `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${this.totalFlushedToday} ` +
-      `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()} tracked=${this.minuteAggregatesByInstrument.size} ` +
-      `clients=${wsClients} mem=${memUsageMB}MB`,
+      `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()}/${(this.bufferBytesTotal / 1024 / 1024).toFixed(1)}MB ` +
+      `tracked=${this.minuteAggregatesByInstrument.size} clients=${wsClients} mem=${memUsageMB}MB`,
     );
 
     this.tickCountAtLastStats = this.tickCount;
@@ -514,8 +574,11 @@ class LiveStreamScript extends BaseScript {
     if (!stock) return;
     const key = this.getInstrumentKey(stock);
     const list = this.bufferByInstrument.get(key) ?? [];
+    const bytes = JSON.stringify(tick).length;
     list.push(tick);
     this.bufferByInstrument.set(key, list);
+    this.bufferBytesTotal += bytes;
+    this.bufferBytesByInstrument.set(key, (this.bufferBytesByInstrument.get(key) ?? 0) + bytes);
   }
 
   private getTotalBufferedTicks(): number {
@@ -524,9 +587,6 @@ class LiveStreamScript extends BaseScript {
     return total;
   }
 
-  private getOutputFilePath(stock: StockConfig): string {
-    return resolve(this.dataDir, `${stock.exchange}_${this.getScripId(stock)}_${this.getDateIST()}.ndjson`);
-  }
 
   private getTargetDate(): string | null {
     if (this.lastTradeDate) {
@@ -546,25 +606,23 @@ class LiveStreamScript extends BaseScript {
       for (const stock of this.trackedStocks) {
         const instrumentKey = this.getInstrumentKey(stock);
         if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
-        const scripId = this.getScripId(stock);
-        if (this.loadFileForStock(stock, scripId, today)) totalLoaded++;
+        if (this.loadAggregateFile(stock, today)) totalLoaded++;
       }
     } else {
       const targetDate = this.getTargetDate();
       for (const stock of this.trackedStocks) {
         const instrumentKey = this.getInstrumentKey(stock);
         if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
-        const scripId = this.getScripId(stock);
         let loaded = false;
 
         if (targetDate) {
-          loaded = this.loadFileForStock(stock, scripId, targetDate);
+          loaded = this.loadAggregateFile(stock, targetDate);
         }
 
         if (!loaded) {
           for (let daysBack = 0; daysBack < 7; daysBack++) {
             const date = moment().utcOffset("+05:30").subtract(daysBack, "days").format("YYYY-MM-DD");
-            if (this.loadFileForStock(stock, scripId, date)) { loaded = true; break; }
+            if (this.loadAggregateFile(stock, date)) { loaded = true; break; }
           }
         }
 
@@ -577,52 +635,47 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
-  private loadFileForStock(stock: StockConfig, scripId: number, date: string): boolean {
-    const filePath = resolve(this.dataDir, `${stock.exchange}_${scripId}_${date}.ndjson`);
+  private loadAggregateFile(stock: StockConfig, date: string): boolean {
+    const scripId = this.getScripId(stock);
+    const filePath = resolve(this.aggregatesDir, `${stock.exchange}_${scripId}_${date}.json`);
     if (!existsSync(filePath)) return false;
 
     try {
       const content = readFileSync(filePath, "utf-8");
-      const lines = content.trim().split("\n").filter(Boolean);
-      if (lines.length === 0) return false;
+      const data = JSON.parse(content) as MinuteAggregatePayload[];
+      if (!Array.isArray(data) || data.length === 0) return false;
 
-      let count = 0;
-      for (const line of lines) {
-        try {
-          const tick = JSON.parse(line);
-          this.upsertMinuteAggregate(tick);
-          count++;
-        } catch {
-          // skip malformed lines
-        }
+      const instrumentKey = this.getInstrumentKey(stock);
+      const minuteMap = new Map<string, MinuteAggregatePayload>();
+      for (const entry of data) {
+        minuteMap.set(entry.minute, entry);
       }
+      this.minuteAggregatesByInstrument.set(instrumentKey, minuteMap);
 
-      if (count > 0) {
-        this.log.info(`Loaded ${count} ticks for ${stock.symbol} from ${date}`);
-        return true;
-      }
+      this.log.info(`Loaded ${data.length} minutes for ${stock.symbol} from ${date}`);
+      return true;
     } catch {
-      // skip unreadable files
+      return false;
     }
-    return false;
   }
 
-  private cleanupOldDataFiles(): void {
+  private cleanupOldAggregateFiles(): void {
     const keepDates = new Set<string>();
     for (let i = 0; i < 7; i++) {
       keepDates.add(moment().utcOffset("+05:30").subtract(i, "days").format("YYYY-MM-DD"));
     }
 
-    for (const fileName of readdirSync(this.dataDir)) {
-      if (!fileName.endsWith(".ndjson")) continue;
-      const match = fileName.match(/_(\d{4}-\d{2}-\d{2})\.ndjson$/);
+    for (const fileName of readdirSync(this.aggregatesDir)) {
+      if (!fileName.endsWith(".json")) continue;
+      const match = fileName.match(/_(\d{4}-\d{2}-\d{2})\.json$/);
       if (!match) continue;
       const fileDate = match[1];
       if (keepDates.has(fileDate)) continue;
       try {
-        unlinkSync(resolve(this.dataDir, fileName));
+        unlinkSync(resolve(this.aggregatesDir, fileName));
+        this.log.info(`Cleaned up old aggregate file: ${fileName}`);
       } catch {
-        // ignore cleanup failures for individual files
+        // ignore cleanup failures
       }
     }
   }
