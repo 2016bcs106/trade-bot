@@ -1,143 +1,107 @@
 import "../config/env.ts";
 import { dirname, resolve } from "path";
-import fs from "fs";
 import { fileURLToPath } from "url";
-import { mkdirSync, readdirSync, unlinkSync, readFileSync, existsSync, writeFileSync } from "fs";
-import { gzipSync } from "zlib";
-import { createServer } from "https";
-import { WebSocketServer, WebSocket } from "ws";
 import moment from "moment";
-// @ts-ignore — installed on server
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import BaseScript from "./base-script.ts";
-import { nowMs, nowISO, todayDate } from "../utils/time.ts";
+import { nowMs, todayDate } from "../utils/time.ts";
 import TradingConfig from "../config/trading-config.ts";
-import PaytmMoneyWebSocket from "../data/providers/paytm-money-websocket.ts";
-import { StockConfig } from "../types/stocks/stock-config.ts";
+import TickBuffer from "./live-stream/tick-buffer.ts";
+import AggregateStore from "./live-stream/aggregate-store.ts";
+import StreamerManager from "./live-stream/streamer-manager.ts";
+import ClientBroadcaster from "./live-stream/client-broadcaster.ts";
+import StockRegistry from "./live-stream/stock-registry.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-interface MinuteAggregatePayload {
-  instrumentKey: string;
-  symbol: string;
-  displayName: string;
-  exchangeType: string;
-  scripType: string;
-  scripId: number;
-  minute: string;
-  dateIst: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  tickCount: number;
-  buyQtySum: number;
-  sellQtySum: number;
-  buySellRatio: number | null;
-  lastUpdatedAt: string;
-}
-
-
-
-const R2_ENDPOINT = process.env.R2_ENDPOINT || "";
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
-const R2_BUCKET = process.env.R2_BUCKET || "";
-const MEMORY_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB
-const FLUSH_TOP_PERCENT = 0.1; // flush top 10%
-const MAX_STOCKS_PER_SOCKET = 500;
 
 class LiveStreamScript extends BaseScript {
   private config = new TradingConfig();
   private dataDir = resolve(__dirname, "..", "..", "..", "..", "data");
-  private aggregatesDir = resolve(this.dataDir, "aggregates");
-  private bufferByInstrument = new Map<string, Record<string, unknown>[]>();
-  private bufferBytesTotal = 0;
-  private bufferBytesByInstrument = new Map<string, number>();
-  private totalFlushed = 0;
-  private totalFlushedToday = 0;
-  private lastFlushDate = this.getDateIST();
-  private s3 = new S3Client({
-    region: "auto",
-    endpoint: R2_ENDPOINT,
-    credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
-  });
   private tickCount = 0;
   private tickCountAtLastStats = 0;
   private startTime = nowMs();
   private currentToken: string | null = null;
-  private streamers: PaytmMoneyWebSocket[] = [];
-  private wsHttpServer = createServer({
-    cert: fs.readFileSync("/etc/letsencrypt/live/trade-bot-ws.duckdns.org/fullchain.pem"),
-    key: fs.readFileSync("/etc/letsencrypt/live/trade-bot-ws.duckdns.org/privkey.pem"),
-  });
-  private wsServer = new WebSocketServer({ noServer: true });
-  private wsPort = 8081;
-  private wsPath = "/live-ticks";
-  private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
-  private trackedStocks: StockConfig[] = [];
-  private instrumentByKey = new Map<string, StockConfig>();
-  private instrumentBySecurityId = new Map<number, StockConfig>();
-  private relevanceScores = new Map<string, number>();
-  private marketStatus: string = "Closed";
+  private marketStatus = "Closed";
   private lastTradeDate: string | null = null;
-  private favorites = new Set<string>();
-  private clientSubscriptions = new Map<WebSocket, Set<string>>();
-  private latestPriceByInstrument = new Map<string, { price: number; change: number; changePct: number }>();
+
+  private registry = new StockRegistry();
+  private aggregateStore!: AggregateStore;
+  private tickBuffer!: TickBuffer;
+  private streamerManager!: StreamerManager;
+  private broadcaster!: ClientBroadcaster;
 
   get scriptName(): string {
     return "live-stream";
   }
 
   protected getMetadata(): Record<string, unknown> {
+    const stats = this.tickBuffer?.getStats();
     return {
       tickCount: this.tickCount,
-      totalFlushed: this.totalFlushed,
-      totalFlushedToday: this.totalFlushedToday,
-      bufferSize: Array.from(this.bufferByInstrument.values()).reduce((sum, arr) => sum + arr.length, 0),
+      totalFlushed: stats?.totalFlushed ?? 0,
+      totalFlushedToday: stats?.totalFlushedToday ?? 0,
+      bufferSize: stats?.bufferSize ?? 0,
       uptimeMinutes: Math.round((nowMs() - this.startTime) / 1000 / 60),
-      trackedStocks: this.trackedStocks.length,
+      trackedStocks: this.registry.stocks.length,
       config: this.config.toJSON(),
     };
   }
 
   protected async run(): Promise<void> {
-    mkdirSync(this.aggregatesDir, { recursive: true });
-    this.cleanupOldAggregateFiles();
-    this.startLocalBroadcastWebSocket();
+    this.aggregateStore = new AggregateStore(
+      this.log, this.dataDir,
+      (s) => this.registry.getInstrumentKey(s),
+      (s) => this.registry.getScripId(s),
+    );
 
-    const { statsInterval } = this.config;
+    this.tickBuffer = new TickBuffer(
+      this.log,
+      () => todayDate(),
+      (s) => this.registry.getScripId(s),
+      this.registry.instrumentByKey,
+      () => this.marketStatus,
+      () => this.aggregateStore.cleanupOldFiles(),
+    );
 
+    this.streamerManager = new StreamerManager(
+      this.log,
+      this.config.modeType,
+      (s) => this.registry.getScripId(s),
+      () => this.marketStatus,
+      (tick) => this.handleTick(tick),
+      () => this.tickBuffer.flush(true),
+    );
+
+    this.broadcaster = new ClientBroadcaster(
+      this.log,
+      this.firebase,
+      () => this.registry.buildStockList(),
+      () => ({ status: this.marketStatus, tradeDate: this.lastTradeDate }),
+      () => this.registry.favorites,
+      (key) => this.aggregateStore.getSnapshotData(key),
+      () => this.registry.buildFavoritePrices(this.aggregateStore),
+    );
+
+    this.aggregateStore.cleanupOldFiles();
+    this.broadcaster.start();
     this.log.info("Starting live market data recorder");
-    this.log.info(`Output directory: ${this.dataDir}`);
 
-    // Load stocks from Firebase and listen for changes
     this.firebase.onStocksChange((stocks) => {
-      const active = stocks
-        ? Object.values(stocks).filter((s) => s.securityId)
-        : [];
+      const active = stocks ? Object.values(stocks).filter((s) => s.securityId) : [];
+      this.registry.setStocks(active);
 
-      this.trackedStocks = active;
-      this.initializeInstrumentMaps();
       if (this.lastTradeDate) {
         this.loadHistoricalData();
-        this.sendSnapshotsToSubscribers();
+        this.broadcaster.sendSnapshotsToSubscribers();
       }
 
-      this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);
+      this.log.info(`Stocks updated — tracking ${this.registry.stocks.length}`);
+      this.broadcaster.broadcastStockList();
 
-      // Broadcast updated stock list to all connected clients
-      for (const client of this.wsServer.clients) {
-        this.sendStockList(client);
-      }
-
-      // Reconnect data streamers with new subscriptions (only during market hours)
-      if (this.currentToken && this.streamers.length > 0 && this.marketStatus !== "Closed") {
-        this.connectStreamers();
+      if (this.currentToken && this.streamerManager.isConnected && this.marketStatus !== "Closed") {
+        this.streamerManager.connect(this.currentToken, this.registry.stocks);
       }
     });
 
-    // Listen to token changes and connect
     this.firebase.onPublicAccessTokenChange((token: string) => {
       const isFirstConnect = this.currentToken === null;
       this.currentToken = token;
@@ -145,17 +109,16 @@ class LiveStreamScript extends BaseScript {
       if (isFirstConnect) {
         this.log.info("Public access token loaded from Firebase");
       } else {
-        this.log.info("Public access token updated — reconnecting WebSocket");
-        this.flushToR2(true);
-        this.disconnectStreamers();
+        this.log.info("Public access token updated — reconnecting");
+        this.tickBuffer.flush(true);
+        this.streamerManager.disconnect();
       }
 
       if (this.marketStatus !== "Closed") {
-        this.connectStreamers();
+        this.streamerManager.connect(this.currentToken, this.registry.stocks);
       }
     });
 
-    // Listen to market status changes
     this.firebase.onMarketStatusChange((data) => {
       if (!data) return;
       const prevStatus = this.marketStatus;
@@ -164,553 +127,92 @@ class LiveStreamScript extends BaseScript {
       this.lastTradeDate = data.tradeDate;
 
       this.log.info(`Market status: ${data.status} | tradeDate=${data.tradeDate}`);
-      this.broadcastToAllClients({ type: "market_status", data: { status: data.status, tradeDate: data.tradeDate } });
+      this.broadcaster.broadcastAll({ type: "market_status", data: { status: data.status, tradeDate: data.tradeDate } });
 
-      if (!prevTradeDate && data.tradeDate && this.trackedStocks.length > 0) {
-        this.minuteAggregatesByInstrument.clear();
+      if (!prevTradeDate && data.tradeDate && this.registry.stocks.length > 0) {
+        this.aggregateStore.clear();
         this.loadHistoricalData();
-        this.sendSnapshotsToSubscribers();
+        this.broadcaster.sendSnapshotsToSubscribers();
       }
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
         this.log.info("Market closed — final flush and disconnecting streamers");
-        this.flushToR2(true);
-        this.saveAggregates();
-        this.disconnectStreamers();
+        this.tickBuffer.flush(true);
+        this.aggregateStore.save(this.registry.instrumentByKey);
+        this.streamerManager.disconnect();
       } else if (data.status !== "Closed" && prevStatus === "Closed") {
         this.log.info("Market opened — clearing aggregates and connecting streamers");
-        this.minuteAggregatesByInstrument.clear();
-        this.broadcastToAllClients({ type: "day_reset", data: { reason: "market opened" } });
-        this.connectStreamers();
+        this.aggregateStore.clear();
+        this.broadcaster.broadcastAll({ type: "day_reset", data: { reason: "market opened" } });
+        if (this.currentToken) {
+          this.streamerManager.connect(this.currentToken, this.registry.stocks);
+        }
       }
     });
 
-    // Listen to favorites changes
     this.firebase.onFavoritesChange((data) => {
-      this.favorites = new Set(data ? Object.keys(data) : []);
-      this.log.info(`Favorites updated — ${this.favorites.size} stocks`);
-      for (const client of this.wsServer.clients) {
-        this.sendStockList(client);
-      }
+      this.registry.setFavorites(data ? Object.keys(data) : []);
+      this.log.info(`Favorites updated — ${this.registry.favorites.size} stocks`);
+      this.broadcaster.broadcastStockList();
     });
 
-    // Timers
-    setInterval(() => this.flushToR2(), 10_000);
-    setInterval(() => this.saveAggregates(), 60_000);
-    setInterval(() => this.logStats(), statsInterval * 1000);
+    setInterval(() => this.tickBuffer.flush(), 10_000);
+    setInterval(() => this.aggregateStore.save(this.registry.instrumentByKey), 60_000);
+    setInterval(() => this.logStats(), this.config.statsInterval * 1000);
     setInterval(() => this.publishStockList(), 60_000);
 
-    // Keep process alive
     await new Promise(() => {});
   }
 
-  private getScripId(stock: StockConfig): number {
-    return typeof stock.securityId === "string" ? parseInt(stock.securityId, 10) : stock.securityId;
+  private handleTick(tick: Record<string, unknown>): void {
+    this.tickCount++;
+    const stock = this.registry.resolveStockFromTick(tick);
+    if (!stock) return;
+
+    const instrumentKey = this.registry.getInstrumentKey(stock);
+    this.tickBuffer.push(tick, instrumentKey);
+
+    const aggregate = this.aggregateStore.upsertFromTick(tick, stock);
+    if (!aggregate) return;
+
+    if (this.registry.favorites.has(stock.symbol)) {
+      const priceInfo = this.aggregateStore.getPrice(instrumentKey);
+      if (priceInfo) {
+        this.broadcaster.broadcastPriceUpdate(instrumentKey, stock.symbol, priceInfo);
+      }
+    }
+
+    this.broadcaster.sendMinuteUpdate(instrumentKey, aggregate);
   }
 
-  private connectStreamers(): void {
-    if (!this.currentToken) return;
-    this.disconnectStreamers();
-
-    const batches: StockConfig[][] = [];
-    for (let i = 0; i < this.trackedStocks.length; i += MAX_STOCKS_PER_SOCKET) {
-      batches.push(this.trackedStocks.slice(i, i + MAX_STOCKS_PER_SOCKET));
-    }
-
-    this.log.info(`Creating ${batches.length} streamer(s) for ${this.trackedStocks.length} stocks`);
-
-    for (const batch of batches) {
-      const s = this.createStreamer(this.currentToken, batch);
-      this.streamers.push(s);
-      s.connect();
-    }
-  }
-
-  private disconnectStreamers(): void {
-    for (const s of this.streamers) {
-      s.disconnect();
-    }
-    this.streamers = [];
-  }
-
-  private createStreamer(token: string, stocks: StockConfig[]): PaytmMoneyWebSocket {
-    const { modeType } = this.config;
-    const s = new PaytmMoneyWebSocket(token);
-
-    s.on("connected", () => {
-      this.log.info(`WebSocket connected — subscribing to ${stocks.length} stocks`);
-      s.subscribe(stocks.map((c) => ({
-        scripType: "EQUITY",
-        exchangeType: c.exchange,
-        scripId: String(this.getScripId(c)),
-        modeType,
-      })));
-    });
-
-    s.on("tick", (data: Record<string, unknown>) => {
-      if (this.marketStatus === "Closed") return;
-      this.tickCount++;
-      const tick = { ...data, received_at: nowISO() };
-      this.pushTickToInstrumentBuffer(tick);
-      this.publishTickToLocalWebSocket(tick);
-    });
-
-    s.on("error", (err: Error) => this.log.error("WebSocket error", err));
-    s.on("disconnected", ({ code }: { code: number }) => { this.flushToR2(true); this.log.warn(`WebSocket disconnected — code=${code}`); });
-    s.on("reconnecting", (n: number) => this.log.info(`WebSocket reconnecting — attempt ${n}`));
-
-    return s;
-  }
-
-  private flushToR2(force = false): void {
-    if (this.getTotalBufferedTicks() === 0) return;
-
-    if (!force && this.marketStatus === "Closed") {
-      this.log.info(`Discarding ${this.getTotalBufferedTicks()} off-market ticks`);
-      this.bufferByInstrument.clear();
-      this.bufferBytesByInstrument.clear();
-      this.bufferBytesTotal = 0;
-      return;
-    }
-
-    if (!force && this.bufferBytesTotal < MEMORY_THRESHOLD_BYTES) return;
-
-    const today = this.getDateIST();
-    if (today !== this.lastFlushDate) {
-      this.log.info(`New trading day: ${today}`);
-      this.totalFlushedToday = 0;
-      this.lastFlushDate = today;
-      this.cleanupOldAggregateFiles();
-    }
-
-    const entries = Array.from(this.bufferBytesByInstrument.entries())
-      .filter(([key]) => (this.bufferByInstrument.get(key)?.length ?? 0) > 0)
-      .sort((a, b) => b[1] - a[1]);
-
-    const count = force ? entries.length : Math.max(1, Math.ceil(entries.length * FLUSH_TOP_PERCENT));
-    const toFlush = entries.slice(0, count);
-    const timestamp = moment().utcOffset("+05:30").format("HH-mm-ss");
-
-    let flushedCount = 0;
-    let flushedBytes = 0;
-    for (const [instrumentKey] of toFlush) {
-      const ticks = this.bufferByInstrument.get(instrumentKey);
-      if (!ticks || ticks.length === 0) continue;
-      const stock = this.instrumentByKey.get(instrumentKey);
-      if (!stock) continue;
-
-      const lines = ticks.map((tick) => JSON.stringify(tick)).join("\n") + "\n";
-      const compressed = gzipSync(Buffer.from(lines), { level: 9 });
-      const key = `${today}/${stock.exchange}_${this.getScripId(stock)}/${timestamp}.ndjson.gz`;
-
-      this.s3.send(new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: key,
-        Body: compressed,
-        ContentType: "application/gzip",
-      })).catch((err: Error) => this.log.error(`R2 upload failed for ${key}`, err));
-
-      flushedCount += ticks.length;
-      const instrumentBytes = this.bufferBytesByInstrument.get(instrumentKey) ?? 0;
-      flushedBytes += instrumentBytes;
-      this.bufferByInstrument.set(instrumentKey, []);
-      this.bufferBytesByInstrument.set(instrumentKey, 0);
-    }
-
-    this.bufferBytesTotal -= flushedBytes;
-    this.totalFlushed += flushedCount;
-    this.totalFlushedToday += flushedCount;
-    this.log.info(`Flushed ${flushedCount} ticks to R2 (${toFlush.length} instruments, ${(flushedBytes / 1024 / 1024).toFixed(1)}MB) — total=${this.totalFlushed}`);
-  }
-
-  private saveAggregates(): void {
-    if (this.minuteAggregatesByInstrument.size === 0) return;
-
-    let saved = 0;
-    for (const [instrumentKey, minuteMap] of this.minuteAggregatesByInstrument.entries()) {
-      if (minuteMap.size === 0) continue;
-      const stock = this.instrumentByKey.get(instrumentKey);
-      if (!stock) continue;
-
-      const data = Array.from(minuteMap.values()).sort((a, b) => a.minute.localeCompare(b.minute));
-      const date = data[0].dateIst;
-      const filePath = resolve(this.aggregatesDir, `${stock.exchange}_${this.getScripId(stock)}_${date}.json`);
-      writeFileSync(filePath, JSON.stringify(data));
-      saved++;
-    }
-
-    this.log.info(`Saved aggregates for ${saved} instruments`);
+  private loadHistoricalData(): void {
+    const stocks = this.registry.stocks.map((stock) => ({
+      stock,
+      instrumentKey: this.registry.getInstrumentKey(stock),
+    }));
+    const targetDate = this.getTargetDate();
+    this.aggregateStore.loadHistorical(stocks, this.marketStatus, todayDate(), targetDate);
   }
 
   private logStats(): void {
     const uptimeMin = Math.round((nowMs() - this.startTime) / 1000 / 60);
-    const statsInterval = this.config.statsInterval;
-    const ticksPerSec = ((this.tickCount - this.tickCountAtLastStats) / statsInterval).toFixed(1);
+    const ticksPerSec = ((this.tickCount - this.tickCountAtLastStats) / this.config.statsInterval).toFixed(1);
     const memUsageMB = (process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(1);
-    const wsClients = this.wsServer.clients.size;
+    const bufferStats = this.tickBuffer.getStats();
 
     this.log.info(
-      `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${this.totalFlushedToday} ` +
-      `rate=${ticksPerSec}/s buffer=${this.getTotalBufferedTicks()}/${(this.bufferBytesTotal / 1024 / 1024).toFixed(1)}MB ` +
-      `tracked=${this.minuteAggregatesByInstrument.size} clients=${wsClients} mem=${memUsageMB}MB`,
+      `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${bufferStats.totalFlushedToday} ` +
+      `rate=${ticksPerSec}/s buffer=${bufferStats.bufferSize}/${bufferStats.bufferMB.toFixed(1)}MB ` +
+      `tracked=${this.aggregateStore.size} clients=${this.broadcaster.clientCount} mem=${memUsageMB}MB`,
     );
-
     this.tickCountAtLastStats = this.tickCount;
   }
 
-  private getDateIST(): string {
-    return todayDate();
-  }
-
-  private startLocalBroadcastWebSocket(): void {
-    this.wsHttpServer.on("upgrade", (request, socket, head) => {
-      const requestUrl = new URL(request.url ?? "", "http://localhost");
-      if (requestUrl.pathname !== this.wsPath) {
-        this.log.warn(`Rejected upgrade — path=${requestUrl.pathname} (expected ${this.wsPath})`);
-        socket.destroy();
-        return;
-      }
-
-      this.wsServer.handleUpgrade(request, socket, head, (ws) => {
-        this.wsServer.emit("connection", ws, request);
-      });
-    });
-
-    this.wsHttpServer.on("error", (err) => {
-      this.log.error("HTTPS server error", err);
-    });
-
-    this.wsServer.on("connection", (client, request) => {
-      const ip = request.headers["x-forwarded-for"] || request.socket.remoteAddress || "unknown";
-      const totalClients = this.wsServer.clients.size;
-      this.log.info(`Client connected — ip=${ip} clients=${totalClients}`);
-
-      this.clientSubscriptions.set(client, new Set());
-      this.sendStockList(client);
-      this.sendMarketStatus(client);
-      this.sendFavoritePrices(client);
-
-      client.on("message", (raw) => {
-        this.handleClientMessage(client, raw.toString());
-      });
-
-      client.on("close", (code, reason) => {
-        this.clientSubscriptions.delete(client);
-        const remaining = this.wsServer.clients.size;
-        this.log.info(`Client disconnected — ip=${ip} code=${code} reason=${reason || "none"} clients=${remaining}`);
-      });
-
-      client.on("error", (err) => {
-        this.log.warn(`Client error — ip=${ip} error=${err.message}`);
-      });
-    });
-
-    this.wsHttpServer.listen(this.wsPort, () => {
-      this.log.info(`Local broadcast websocket listening on wss://0.0.0.0:${this.wsPort}${this.wsPath}`);
-    });
-  }
-
-  private publishTickToLocalWebSocket(tick: Record<string, unknown>): void {
-    const aggregate = this.upsertMinuteAggregate(tick);
-    if (!aggregate) return;
-
-    const { instrumentKey, symbol } = aggregate;
-
-    // Update latest price cache
-    const allMinutes = this.minuteAggregatesByInstrument.get(instrumentKey);
-    if (allMinutes) {
-      const sorted = Array.from(allMinutes.values()).sort((a, b) => a.minute.localeCompare(b.minute));
-      const price = sorted[sorted.length - 1].close;
-      let open: number | null = null;
-      for (const r of sorted) {
-        const time = r.minute.split("T")[1]?.slice(0, 5) || "";
-        if (time >= "09:00") { open = r.close; break; }
-      }
-      if (open == null) open = sorted[0].close;
-      const change = price - open;
-      const changePct = open !== 0 ? (change / open) * 100 : 0;
-      this.latestPriceByInstrument.set(instrumentKey, { price, change, changePct });
-    }
-
-    // Send lightweight price_update to all clients for favorites
-    if (this.favorites.has(symbol)) {
-      const priceInfo = this.latestPriceByInstrument.get(instrumentKey);
-      if (priceInfo) {
-        this.broadcastToAllClients({
-          type: "price_update",
-          data: { instrumentKey, symbol, ...priceInfo },
-        });
-      }
-    }
-
-    // Send minute_update only to clients subscribed to this instrument
-    const message = JSON.stringify({
-      type: "minute_update",
-      data: aggregate,
-      meta: { instrumentKey },
-    });
-    for (const [client, subs] of this.clientSubscriptions.entries()) {
-      if (subs.has(instrumentKey) && client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    }
-  }
-
-  private upsertMinuteAggregate(tick: Record<string, unknown>): MinuteAggregatePayload | null {
-    const price = Number(tick.last_price);
-    if (!Number.isFinite(price)) return null;
-
-    const stock = this.resolveStockFromTick(tick);
-    if (!stock) return null;
-
-    const instrumentKey = this.getInstrumentKey(stock);
-
-    const receivedAt = String(tick.received_at ?? nowISO());
-    const minuteKey = moment(receivedAt).utcOffset("+05:30").format("YYYY-MM-DDTHH:mm");
-    const dateIst = minuteKey.slice(0, 10);
-
-    const buyQtyRaw = Number(tick.total_buy_quantity);
-    const sellQtyRaw = Number(tick.total_sell_quantity);
-    const buyQty = Number.isFinite(buyQtyRaw) ? buyQtyRaw : 0;
-    const sellQty = Number.isFinite(sellQtyRaw) ? sellQtyRaw : 0;
-
-    let perInstrument = this.minuteAggregatesByInstrument.get(instrumentKey);
-    if (!perInstrument) {
-      perInstrument = new Map<string, MinuteAggregatePayload>();
-      this.minuteAggregatesByInstrument.set(instrumentKey, perInstrument);
-    }
-
-    const existing = perInstrument.get(minuteKey);
-    if (!existing) {
-      const first: MinuteAggregatePayload = {
-        instrumentKey,
-        symbol: stock.symbol,
-        displayName: stock.name,
-        exchangeType: stock.exchange,
-        scripType: "EQUITY",
-        scripId: this.getScripId(stock),
-        minute: minuteKey,
-        dateIst,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-        tickCount: 1,
-        buyQtySum: buyQty,
-        sellQtySum: sellQty,
-        buySellRatio: sellQty > 0 ? Number((buyQty / sellQty).toFixed(6)) : null,
-        lastUpdatedAt: receivedAt,
-      };
-      perInstrument.set(minuteKey, first);
-      return first;
-    }
-
-    existing.high = Math.max(existing.high, price);
-    existing.low = Math.min(existing.low, price);
-    existing.close = price;
-    existing.tickCount += 1;
-    existing.buyQtySum += buyQty;
-    existing.sellQtySum += sellQty;
-    existing.buySellRatio = existing.sellQtySum > 0 ? Number((existing.buyQtySum / existing.sellQtySum).toFixed(6)) : null;
-    existing.lastUpdatedAt = receivedAt;
-
-    return existing;
-  }
-
-  private getMinuteSnapshotData(instrumentKey: string): MinuteAggregatePayload[] {
-    const map = this.minuteAggregatesByInstrument.get(instrumentKey);
-    if (!map) return [];
-    return Array.from(map.values()).sort((a, b) => a.minute.localeCompare(b.minute));
-  }
-
-  private sendSnapshotsToSubscribers(): void {
-    for (const [client, subs] of this.clientSubscriptions.entries()) {
-      for (const instrumentKey of subs) {
-        this.sendMinuteSnapshot(client, instrumentKey);
-      }
-    }
-  }
-
-  private sendMinuteSnapshot(client: WebSocket, instrumentKey: string): void {
-    if (client.readyState !== WebSocket.OPEN) return;
-    const snapshot = this.getMinuteSnapshotData(instrumentKey);
-    client.send(JSON.stringify({
-      type: "snapshot",
-      data: snapshot,
-      meta: { count: snapshot.length, asOf: nowISO(), instrumentKey },
-    }));
-  }
-
-  private broadcastToAllClients(payload: Record<string, unknown>): void {
-    const message = JSON.stringify(payload);
-    for (const client of this.wsServer.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    }
-  }
-
-
-  private handleClientMessage(client: WebSocket, raw: string): void {
-    try {
-      const msg = JSON.parse(raw) as { type?: string; instrumentKey?: string; symbol?: string };
-
-      if (msg.type === "subscribe" && msg.instrumentKey) {
-        const subs = this.clientSubscriptions.get(client);
-        if (subs) {
-          subs.add(msg.instrumentKey);
-          this.sendMinuteSnapshot(client, msg.instrumentKey);
-          this.log.info(`Client subscribed to ${msg.instrumentKey}`);
-        }
-        return;
-      }
-
-      if (msg.type === "unsubscribe" && msg.instrumentKey) {
-        const subs = this.clientSubscriptions.get(client);
-        if (subs) {
-          subs.delete(msg.instrumentKey);
-          this.log.info(`Client unsubscribed from ${msg.instrumentKey}`);
-        }
-        return;
-      }
-
-      if (msg.type === "toggle_favorite" && msg.symbol) {
-        if (this.favorites.has(msg.symbol)) {
-          this.firebase.setValue(`favorites/${msg.symbol}`, null);
-        } else {
-          this.firebase.setValue(`favorites/${msg.symbol}`, true);
-        }
-        return;
-      }
-    } catch {
-      // ignore invalid messages
-    }
-  }
-
-  private sendFavoritePrices(client: WebSocket): void {
-    if (client.readyState !== WebSocket.OPEN) return;
-    const prices: { instrumentKey: string; symbol: string; price: number; change: number; changePct: number }[] = [];
-    for (const stock of this.trackedStocks) {
-      if (!this.favorites.has(stock.symbol)) continue;
-      const instrumentKey = this.getInstrumentKey(stock);
-      const priceInfo = this.latestPriceByInstrument.get(instrumentKey);
-      if (priceInfo) {
-        prices.push({ instrumentKey, symbol: stock.symbol, ...priceInfo });
-      }
-    }
-    if (prices.length > 0) {
-      client.send(JSON.stringify({ type: "favorite_prices", data: prices }));
-    }
-  }
-
-  private sendMarketStatus(client: WebSocket): void {
-    if (client.readyState !== WebSocket.OPEN) return;
-    client.send(JSON.stringify({
-      type: "market_status",
-      data: { status: this.marketStatus, tradeDate: this.lastTradeDate },
-    }));
-  }
-
-  private sendStockList(client: WebSocket): void {
-    if (client.readyState !== WebSocket.OPEN) return;
-    client.send(JSON.stringify({
-      type: "stock_list",
-      data: this.trackedStocks.map((stock) => ({
-        instrumentKey: this.getInstrumentKey(stock),
-        symbol: stock.symbol,
-        displayName: stock.name,
-        exchangeType: stock.exchange,
-        scripType: "EQUITY",
-        scripId: this.getScripId(stock),
-        isin: stock.isin,
-        industryName: stock.industryName,
-        mcap: stock.mcap,
-        addedAt: stock.addedAt,
-        updatedAt: stock.updatedAt,
-        status: stock.status,
-        isFavorite: this.favorites.has(stock.symbol),
-        relevanceScore: this.relevanceScores.get(stock.symbol) ?? 0,
-      })),
-    }));
-  }
-
-  private computeRelevanceScores(): void {
-    for (const stock of this.trackedStocks) {
-      const key = this.getInstrumentKey(stock);
-      const minuteMap = this.minuteAggregatesByInstrument.get(key);
-      if (!minuteMap || minuteMap.size === 0) {
-        this.relevanceScores.set(stock.symbol, 0);
-        continue;
-      }
-
-      const allMinutes = Array.from(minuteMap.values())
-        .sort((a, b) => b.minute.localeCompare(a.minute))
-        .slice(0, 60);
-
-      const byActivity = allMinutes
-        .map((m) => ({ buy: m.buyQtySum, sell: m.sellQtySum, peak: Math.max(m.buyQtySum, m.sellQtySum) }))
-        .sort((a, b) => b.peak - a.peak);
-
-      const topHalf = byActivity.slice(0, Math.max(1, Math.ceil(byActivity.length / 2)));
-
-      let sum = 0;
-      let count = 0;
-      for (const m of topHalf) {
-        if (m.peak === 0) continue;
-        sum += Math.abs(m.buy - m.sell) / m.peak;
-        count++;
-      }
-
-      this.relevanceScores.set(stock.symbol, count > 0 ? sum / count : 0);
-    }
-  }
-
   private publishStockList(): void {
-    if (this.trackedStocks.length === 0) return;
-    this.computeRelevanceScores();
-    for (const client of this.wsServer.clients) {
-      this.sendStockList(client);
-    }
+    if (this.registry.stocks.length === 0) return;
+    this.registry.computeRelevanceScores(this.aggregateStore);
+    this.broadcaster.broadcastStockList();
   }
-
-  private getInstrumentKey(stock: StockConfig): string {
-    return `${stock.exchange}:EQUITY:${this.getScripId(stock)}`;
-  }
-
-  private initializeInstrumentMaps(): void {
-    this.instrumentByKey.clear();
-    this.instrumentBySecurityId.clear();
-    for (const stock of this.trackedStocks) {
-      const key = this.getInstrumentKey(stock);
-      this.instrumentByKey.set(key, stock);
-      this.instrumentBySecurityId.set(this.getScripId(stock), stock);
-    }
-  }
-
-  private resolveStockFromTick(tick: Record<string, unknown>): StockConfig | null {
-    const securityId = Number(tick.security_id);
-    if (!Number.isFinite(securityId)) return null;
-    return this.instrumentBySecurityId.get(securityId) ?? null;
-  }
-
-  private pushTickToInstrumentBuffer(tick: Record<string, unknown>): void {
-    const stock = this.resolveStockFromTick(tick);
-    if (!stock) return;
-    const key = this.getInstrumentKey(stock);
-    const list = this.bufferByInstrument.get(key) ?? [];
-    const bytes = JSON.stringify(tick).length;
-    list.push(tick);
-    this.bufferByInstrument.set(key, list);
-    this.bufferBytesTotal += bytes;
-    this.bufferBytesByInstrument.set(key, (this.bufferBytesByInstrument.get(key) ?? 0) + bytes);
-  }
-
-  private getTotalBufferedTicks(): number {
-    let total = 0;
-    for (const arr of this.bufferByInstrument.values()) total += arr.length;
-    return total;
-  }
-
 
   private getTargetDate(): string | null {
     if (this.lastTradeDate) {
@@ -721,89 +223,6 @@ class LiveStreamScript extends BaseScript {
     }
     return null;
   }
-
-  private loadHistoricalData(): void {
-    let totalLoaded = 0;
-
-    if (this.marketStatus !== "Closed") {
-      const today = this.getDateIST();
-      for (const stock of this.trackedStocks) {
-        const instrumentKey = this.getInstrumentKey(stock);
-        if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
-        if (this.loadAggregateFile(stock, today)) totalLoaded++;
-      }
-    } else {
-      const targetDate = this.getTargetDate();
-      for (const stock of this.trackedStocks) {
-        const instrumentKey = this.getInstrumentKey(stock);
-        if (this.minuteAggregatesByInstrument.has(instrumentKey)) continue;
-        let loaded = false;
-
-        if (targetDate) {
-          loaded = this.loadAggregateFile(stock, targetDate);
-        }
-
-        if (!loaded) {
-          for (let daysBack = 0; daysBack < 7; daysBack++) {
-            const date = moment().utcOffset("+05:30").subtract(daysBack, "days").format("YYYY-MM-DD");
-            if (this.loadAggregateFile(stock, date)) { loaded = true; break; }
-          }
-        }
-
-        if (loaded) totalLoaded++;
-      }
-    }
-
-    if (totalLoaded > 0) {
-      this.log.info(`Historical data loaded for ${totalLoaded} stocks`);
-    }
-  }
-
-  private loadAggregateFile(stock: StockConfig, date: string): boolean {
-    const scripId = this.getScripId(stock);
-    const filePath = resolve(this.aggregatesDir, `${stock.exchange}_${scripId}_${date}.json`);
-    if (!existsSync(filePath)) return false;
-
-    try {
-      const content = readFileSync(filePath, "utf-8");
-      const data = JSON.parse(content) as MinuteAggregatePayload[];
-      if (!Array.isArray(data) || data.length === 0) return false;
-
-      const instrumentKey = this.getInstrumentKey(stock);
-      const minuteMap = new Map<string, MinuteAggregatePayload>();
-      for (const entry of data) {
-        minuteMap.set(entry.minute, entry);
-      }
-      this.minuteAggregatesByInstrument.set(instrumentKey, minuteMap);
-
-      this.log.info(`Loaded ${data.length} minutes for ${stock.symbol} from ${date}`);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private cleanupOldAggregateFiles(): void {
-    const keepDates = new Set<string>();
-    for (let i = 0; i < 7; i++) {
-      keepDates.add(moment().utcOffset("+05:30").subtract(i, "days").format("YYYY-MM-DD"));
-    }
-
-    for (const fileName of readdirSync(this.aggregatesDir)) {
-      if (!fileName.endsWith(".json")) continue;
-      const match = fileName.match(/_(\d{4}-\d{2}-\d{2})\.json$/);
-      if (!match) continue;
-      const fileDate = match[1];
-      if (keepDates.has(fileDate)) continue;
-      try {
-        unlinkSync(resolve(this.aggregatesDir, fileName));
-        this.log.info(`Cleaned up old aggregate file: ${fileName}`);
-      } catch {
-        // ignore cleanup failures
-      }
-    }
-  }
-
 }
 
 new LiveStreamScript().start();
