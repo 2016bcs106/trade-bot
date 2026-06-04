@@ -358,7 +358,7 @@ const styles = {
   },
   searchBar: {
     position: 'fixed',
-    bottom: '70px',
+    bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))',
     left: 'var(--space-lg)',
     right: 'var(--space-lg)',
     display: 'flex',
