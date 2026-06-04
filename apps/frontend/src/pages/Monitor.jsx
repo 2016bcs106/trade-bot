@@ -2,12 +2,9 @@ import { useState } from 'react'
 import moment from 'moment'
 import { ref, remove } from 'firebase/database'
 import { db } from '../utils/firebase'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircle } from '@fortawesome/free-solid-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
-import Card from '../components/Card'
 import Badge from '../components/Badge'
 import Loader from '../components/Loader'
 import BottomSheet from '../components/BottomSheet'
@@ -26,44 +23,6 @@ const REQUEST_COLORS = {
   failed: 'var(--color-danger)',
 }
 
-function ScriptCard({ name, data, onTap }) {
-  const status = data.status || 'stopped'
-  const color = STATUS_COLORS[status] || STATUS_COLORS.stopped
-
-  return (
-    <Card style={{ cursor: 'pointer' }} onClick={onTap}>
-      <div style={styles.row}>
-        <div style={{ flex: 1 }}>
-          <div style={styles.name}>{name}</div>
-          <div style={styles.meta}>{data.lastHeartbeat ? moment(data.lastHeartbeat).fromNow() : '—'}</div>
-        </div>
-        <Badge label={status} color={color} />
-      </div>
-      {data.error && <div style={styles.error}>{data.error}</div>}
-    </Card>
-  )
-}
-
-function RequestCard({ req, onTap }) {
-  return (
-    <Card style={{ cursor: 'pointer' }} onClick={onTap}>
-      <div style={styles.row}>
-        <div style={{ flex: 1 }}>
-          <div style={styles.name}>{req.type}</div>
-          <div style={styles.meta}>
-            {req.createdAt ? moment(req.createdAt).fromNow() : '—'}
-            {req.payload && Object.keys(req.payload).length > 0 && (
-              <span> · {Object.entries(req.payload).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
-            )}
-          </div>
-        </div>
-        <Badge label={req.status} color={REQUEST_COLORS[req.status] || REQUEST_COLORS.pending} />
-      </div>
-      {req.error && <div style={styles.error}>{req.error}</div>}
-    </Card>
-  )
-}
-
 export default function Monitor() {
   const { scripts, requestQueue: requests, failedRequests } = useApp()
   const [sheetData, setSheetData] = useState(null)
@@ -71,6 +30,8 @@ export default function Monitor() {
   if (scripts === undefined) {
     return <Page><Loader /></Page>
   }
+
+  const scriptEntries = scripts ? Object.entries(scripts) : []
 
   const allRequests = [
     ...requests.map(r => ({ ...r, _source: 'queue' })),
@@ -87,24 +48,56 @@ export default function Monitor() {
       <PageHeader title="Monitor" />
 
       <SectionHeader>Scripts</SectionHeader>
-      {!scripts || Object.keys(scripts).length === 0 ? (
-        <Card><div style={styles.empty}>No scripts reporting</div></Card>
+      {scriptEntries.length === 0 ? (
+        <div style={styles.emptyCard}><span style={styles.emptyText}>No scripts reporting</span></div>
       ) : (
-        Object.entries(scripts).map(([name, data]) => (
-          <ScriptCard key={name} name={name} data={data} onTap={() => setSheetData({ title: name, data, type: 'script' })} />
-        ))
+        <div style={styles.list}>
+          {scriptEntries.map(([name, data], i) => {
+            const status = data.status || 'stopped'
+            const color = STATUS_COLORS[status] || STATUS_COLORS.stopped
+            return (
+              <div
+                key={name}
+                style={{ ...styles.row, ...(i < scriptEntries.length - 1 ? styles.bordered : {}) }}
+                onClick={() => setSheetData({ title: name, data, type: 'script' })}
+              >
+                <div style={styles.info}>
+                  <span style={styles.name}>{name}</span>
+                  <span style={styles.meta}>{data.lastHeartbeat ? moment(data.lastHeartbeat).fromNow() : '—'}</span>
+                </div>
+                <Badge label={status} color={color} />
+              </div>
+            )
+          })}
+        </div>
       )}
 
       <SectionHeader>Requests</SectionHeader>
       {allRequests.length === 0 ? (
-        <Card><div style={styles.empty}>No requests</div></Card>
+        <div style={styles.emptyCard}><span style={styles.emptyText}>No requests</span></div>
       ) : (
-        allRequests.map((req) => (
-          <RequestCard key={req._key} req={req} onTap={() => setSheetData({ title: req.type, data: req, type: 'request' })} />
-        ))
+        <div style={styles.list}>
+          {allRequests.map((req, i) => (
+            <div
+              key={req._key}
+              style={{ ...styles.row, ...(i < allRequests.length - 1 ? styles.bordered : {}) }}
+              onClick={() => setSheetData({ title: req.type, data: req, type: 'request' })}
+            >
+              <div style={styles.info}>
+                <span style={styles.name}>{req.type}</span>
+                <span style={styles.meta}>
+                  {req.createdAt ? moment(req.createdAt).fromNow() : '—'}
+                  {req.payload && Object.keys(req.payload).length > 0 && (
+                    <span> · {Object.entries(req.payload).map(([k, v]) => `${k}: ${v}`).join(', ')}</span>
+                  )}
+                </span>
+              </div>
+              <Badge label={req.status} color={REQUEST_COLORS[req.status] || REQUEST_COLORS.pending} />
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Detail bottom sheet */}
       <BottomSheet title={sheetData?.title} isOpen={!!sheetData} onClose={() => setSheetData(null)}>
         {sheetData && (
           <div style={styles.sheetBody}>
@@ -122,31 +115,50 @@ export default function Monitor() {
 }
 
 const styles = {
+  list: {
+    background: 'var(--color-card)',
+    borderRadius: 'var(--radius-md)',
+    overflow: 'hidden',
+  },
   row: {
     display: 'flex',
     alignItems: 'center',
+    padding: '14px var(--space-lg)',
+    cursor: 'pointer',
     gap: 'var(--space-md)',
+    minHeight: '56px',
+  },
+  bordered: {
+    borderBottom: '1px solid var(--color-border)',
+  },
+  info: {
+    flex: 1,
+    minWidth: 0,
   },
   name: {
+    display: 'block',
     fontSize: 'var(--font-body)',
     fontWeight: 500,
     color: 'var(--color-text)',
   },
   meta: {
+    display: 'block',
     fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
     marginTop: '2px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
-  error: {
-    fontSize: 'var(--font-footnote)',
-    color: 'var(--color-danger)',
-    marginTop: 'var(--space-sm)',
-  },
-  empty: {
-    textAlign: 'center',
+  emptyCard: {
+    background: 'var(--color-card)',
+    borderRadius: 'var(--radius-md)',
     padding: 'var(--space-xl)',
-    color: 'var(--color-text-muted)',
+    textAlign: 'center',
+  },
+  emptyText: {
     fontSize: 'var(--font-subhead)',
+    color: 'var(--color-text-muted)',
   },
   sheetBody: {
     padding: 'var(--space-lg) var(--space-xl)',
