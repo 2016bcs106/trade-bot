@@ -53,7 +53,13 @@ export class SystemUpdateRequestHandler implements RequestHandler {
 
     // ─── Step 2: Git pull --rebase ───────────────────────────────────
     this.log.info("Step 2: Pulling latest code...");
-    this.exec("git pull --rebase origin master", PROJECT_ROOT);
+    const pullOutput = this.exec("git pull --rebase origin master", PROJECT_ROOT);
+
+    if (pullOutput.includes("Already up to date") || pullOutput.includes("Current branch master is up to date")) {
+      this.log.info("  No new commits — nothing to deploy");
+      this.log.info("=== SYSTEM UPDATE COMPLETE (no changes) ===");
+      return;
+    }
 
     // ─── Step 3: Detect what changed ──────────────────────────────────
     this.log.info("Step 3: Detecting changes...");
