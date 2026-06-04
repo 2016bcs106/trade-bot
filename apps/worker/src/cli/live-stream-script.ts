@@ -45,6 +45,7 @@ const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
 const R2_BUCKET = process.env.R2_BUCKET || "";
 const MEMORY_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB
 const FLUSH_TOP_PERCENT = 0.1; // flush top 10%
+const MAX_STOCKS_PER_SOCKET = 500;
 
 class LiveStreamScript extends BaseScript {
   private config = new TradingConfig();
@@ -65,7 +66,7 @@ class LiveStreamScript extends BaseScript {
   private tickCountAtLastStats = 0;
   private startTime = nowMs();
   private currentToken: string | null = null;
-  private streamer: PaytmMoneyWebSocket | null = null;
+  private streamers: PaytmMoneyWebSocket[] = [];
   private wsHttpServer = createServer({
     cert: fs.readFileSync("/etc/letsencrypt/live/trade-bot-ws.duckdns.org/fullchain.pem"),
     key: fs.readFileSync("/etc/letsencrypt/live/trade-bot-ws.duckdns.org/privkey.pem"),
@@ -127,11 +128,9 @@ class LiveStreamScript extends BaseScript {
         this.sendStockList(client);
       }
 
-      // Reconnect data streamer with new subscriptions (only during market hours)
-      if (this.currentToken && this.streamer && this.marketStatus !== "Closed") {
-        this.streamer.disconnect();
-        this.streamer = this.createStreamer(this.currentToken);
-        this.streamer.connect();
+      // Reconnect data streamers with new subscriptions (only during market hours)
+      if (this.currentToken && this.streamers.length > 0 && this.marketStatus !== "Closed") {
+        this.connectStreamers();
       }
     });
 
@@ -145,12 +144,11 @@ class LiveStreamScript extends BaseScript {
       } else {
         this.log.info("Public access token updated — reconnecting WebSocket");
         this.flushToR2(true);
-        if (this.streamer) this.streamer.disconnect();
+        this.disconnectStreamers();
       }
 
       if (this.marketStatus !== "Closed") {
-        this.streamer = this.createStreamer(this.currentToken);
-        this.streamer.connect();
+        this.connectStreamers();
       }
     });
 
@@ -172,18 +170,15 @@ class LiveStreamScript extends BaseScript {
       }
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
-        this.log.info("Market closed — final flush and disconnecting streamer");
+        this.log.info("Market closed — final flush and disconnecting streamers");
         this.flushToR2(true);
         this.saveAggregates();
-        if (this.streamer) { this.streamer.disconnect(); this.streamer = null; }
+        this.disconnectStreamers();
       } else if (data.status !== "Closed" && prevStatus === "Closed") {
-        this.log.info("Market opened — clearing aggregates and connecting streamer");
+        this.log.info("Market opened — clearing aggregates and connecting streamers");
         this.minuteAggregatesByInstrument.clear();
         this.broadcastToAllClients({ type: "day_reset", data: { reason: "market opened" } });
-        if (this.currentToken) {
-          this.streamer = this.createStreamer(this.currentToken);
-          this.streamer.connect();
-        }
+        this.connectStreamers();
       }
     });
 
@@ -201,13 +196,38 @@ class LiveStreamScript extends BaseScript {
     return typeof stock.securityId === "string" ? parseInt(stock.securityId, 10) : stock.securityId;
   }
 
-  private createStreamer(token: string): PaytmMoneyWebSocket {
+  private connectStreamers(): void {
+    if (!this.currentToken) return;
+    this.disconnectStreamers();
+
+    const batches: StockConfig[][] = [];
+    for (let i = 0; i < this.trackedStocks.length; i += MAX_STOCKS_PER_SOCKET) {
+      batches.push(this.trackedStocks.slice(i, i + MAX_STOCKS_PER_SOCKET));
+    }
+
+    this.log.info(`Creating ${batches.length} streamer(s) for ${this.trackedStocks.length} stocks`);
+
+    for (const batch of batches) {
+      const s = this.createStreamer(this.currentToken, batch);
+      this.streamers.push(s);
+      s.connect();
+    }
+  }
+
+  private disconnectStreamers(): void {
+    for (const s of this.streamers) {
+      s.disconnect();
+    }
+    this.streamers = [];
+  }
+
+  private createStreamer(token: string, stocks: StockConfig[]): PaytmMoneyWebSocket {
     const { modeType } = this.config;
     const s = new PaytmMoneyWebSocket(token);
 
     s.on("connected", () => {
-      this.log.info(`WebSocket connected — subscribing to ${this.trackedStocks.length} stocks`);
-      s.subscribe(this.trackedStocks.map((c) => ({
+      this.log.info(`WebSocket connected — subscribing to ${stocks.length} stocks`);
+      s.subscribe(stocks.map((c) => ({
         scripType: "EQUITY",
         exchangeType: c.exchange,
         scripId: String(this.getScripId(c)),
