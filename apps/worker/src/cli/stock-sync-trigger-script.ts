@@ -21,7 +21,6 @@ class StockSyncTriggerScript extends BaseScript {
     });
 
     this.log.info("Done");
-    process.exit(0);
   }
 }
 

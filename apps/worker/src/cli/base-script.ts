@@ -47,6 +47,8 @@ export default abstract class BaseScript {
     try {
       await this.reportStatus("running");
       await this.run();
+      this.stopHeartbeat();
+      await this.reportStatus("stopped");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.lastError = message;
