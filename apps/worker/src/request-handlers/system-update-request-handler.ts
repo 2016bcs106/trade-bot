@@ -55,25 +55,38 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     this.log.info("Step 2: Pulling latest code...");
     this.exec("git pull --rebase origin master", PROJECT_ROOT);
 
-    // ─── Step 3: Deploy frontend ─────────────────────────────────────
-    this.log.info("Step 3: Deploying frontend...");
-    try {
-      const frontendDir = resolve(PROJECT_ROOT, "apps", "frontend");
-      this.exec("pnpm --filter frontend build", PROJECT_ROOT);
-      this.exec("firebase deploy --only hosting", frontendDir);
-      this.log.info("  ✓ Frontend deployed");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.log.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
+    // ─── Step 3: Detect what changed ──────────────────────────────────
+    this.log.info("Step 3: Detecting changes...");
+    const changedFiles = this.exec("git diff-tree --name-only -r HEAD", PROJECT_ROOT).trim();
+    const hasFrontendChanges = changedFiles.split("\n").some((f) => f.includes("frontend"));
+    const hasWorkerChanges = changedFiles.split("\n").some((f) => f.includes("worker"));
+    this.log.info(`  Frontend changes: ${hasFrontendChanges}, Worker changes: ${hasWorkerChanges}`);
+
+    // ─── Step 4: Deploy frontend (if changed) ────────────────────────
+    if (hasFrontendChanges) {
+      this.log.info("Step 4: Deploying frontend...");
+      try {
+        const frontendDir = resolve(PROJECT_ROOT, "apps", "frontend");
+        this.exec("pnpm --filter frontend build", PROJECT_ROOT);
+        this.exec("firebase deploy --only hosting", frontendDir);
+        this.log.info("  ✓ Frontend deployed");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log.warn(`  ⚠ Frontend deploy failed (non-fatal): ${msg}`);
+      }
+    } else {
+      this.log.info("Step 4: Skipping frontend deploy (no changes)");
     }
 
-    // ─── Step 5: Remove all trade-bot crons ──────────────────────────
-    this.log.info("Step 5: Removing existing trade-bot crons...");
-    this.removeTradeBotCrons();
-
-    // ─── Step 6: Install new crons from config ───────────────────────
-    this.log.info("Step 6: Installing new crons from cron-config.json...");
-    this.installCronsFromConfig();
+    // ─── Step 5: Reinstall crons (if worker changed) ─────────────────
+    if (hasWorkerChanges) {
+      this.log.info("Step 5: Removing existing trade-bot crons...");
+      this.removeTradeBotCrons();
+      this.log.info("Step 6: Installing new crons from cron-config.json...");
+      this.installCronsFromConfig();
+    } else {
+      this.log.info("Step 5-6: Skipping cron reinstall (no worker changes)");
+    }
 
     // ─── Step 7: Remove this request from Firebase before killing ────
     if (_request._key) {
@@ -81,28 +94,29 @@ export class SystemUpdateRequestHandler implements RequestHandler {
       await _ctx.firebase.removeRequest(_request._key);
     }
 
-    // ─── Step 8: Wait until XX:XX:55 then kill processes ─────────────
-    // Cron fires at :00, so killing at :55 gives ~5 seconds of downtime
-    await this.waitUntilSecond55();
+    // ─── Step 8: Restart worker processes (only if worker changed) ───
+    if (hasWorkerChanges) {
+      await this.waitUntilSecond55();
 
-    this.log.info("Step 8: Killing all running trade-bot processes...");
-    this.log.info("=== SYSTEM UPDATE COMPLETE — restarting via cron ===");
+      this.log.info("Step 8: Killing all running trade-bot processes...");
+      this.log.info("=== SYSTEM UPDATE COMPLETE — restarting via cron ===");
 
-    // Small delay to ensure logs flush
-    await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
 
-    // Kill all trade-bot processes (including self)
-    try {
-      execSync(
-        `ps aux | grep "[t]rade-bot" | awk '{print $2}' | xargs kill 2>/dev/null || true`,
-        { stdio: "ignore" },
-      );
-    } catch {
-      // Expected to fail when killing self
+      try {
+        execSync(
+          `ps aux | grep "[t]rade-bot" | awk '{print $2}' | xargs kill 2>/dev/null || true`,
+          { stdio: "ignore" },
+        );
+      } catch {
+        // Expected to fail when killing self
+      }
+
+      process.exit(0);
+    } else {
+      this.log.info("Step 8: Skipping restart (no worker changes)");
+      this.log.info("=== SYSTEM UPDATE COMPLETE ===");
     }
-
-    // If somehow we survive, exit
-    process.exit(0);
   }
 
   /**
