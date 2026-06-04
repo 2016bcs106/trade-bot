@@ -88,7 +88,7 @@ export class StockSyncRequestHandler implements RequestHandler {
 
     const csv = await response.text();
     const lines = csv.trim().split("\n");
-    const header = lines[0].split("\t");
+    const header = this.parseCsvLine(lines[0]);
 
     const instrumentIdx = header.indexOf("instrument_type");
     const seriesIdx = header.indexOf("series");
@@ -100,7 +100,7 @@ export class StockSyncRequestHandler implements RequestHandler {
 
     const symbols = new Set<string>();
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split("\t");
+      const cols = this.parseCsvLine(lines[i]);
       if (cols[instrumentIdx] === "ES" && cols[seriesIdx] === "EQ") {
         const sym = cols[symbolIdx]?.trim();
         if (sym) symbols.add(sym);
@@ -172,6 +172,19 @@ export class StockSyncRequestHandler implements RequestHandler {
 
   private saveSymbols(symbols: string[]): void {
     writeFileSync(SYMBOLS_FILE, JSON.stringify(symbols));
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (const ch of line) {
+      if (ch === '"') { inQuotes = !inQuotes; continue; }
+      if (ch === "," && !inQuotes) { result.push(current.trim()); current = ""; continue; }
+      current += ch;
+    }
+    result.push(current.trim());
+    return result;
   }
 
   private delay(ms: number): Promise<void> {
