@@ -1,0 +1,17 @@
+[Unit]
+Description=Trade Bot - Request Handler
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/trade-bot/apps/worker
+ExecStart=/home/ec2-user/.nvm/versions/node/v24.15.0/bin/npx tsx src/cli/request-orchestration-script.ts
+Restart=always
+RestartSec=1
+Environment=PATH=/home/ec2-user/.nvm/versions/node/v24.15.0/bin:/usr/bin:/bin
+StandardOutput=append:/var/log/trade-bot.log
+StandardError=append:/var/log/trade-bot.log
+
+[Install]
+WantedBy=multi-user.target
