@@ -8,11 +8,14 @@ import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
 import { CardList } from '../components/Card'
 import ListItem from '../components/ListItem'
+import BottomSheet from '../components/BottomSheet'
 
 export default function Settings() {
   const [updateQueued, setUpdateQueued] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const handleSystemUpdate = async () => {
+    setConfirmOpen(false)
     await push(ref(db, 'request_queue'), {
       type: 'system_update',
       payload: {},
@@ -46,10 +49,59 @@ export default function Settings() {
           iconColor={updateQueued ? 'var(--color-success)' : '#8e8e93'}
           title="System Update"
           subtitle={updateQueued ? 'Queued — worker will pull & restart' : 'Pull latest code, deploy, restart'}
-          onClick={!updateQueued ? handleSystemUpdate : undefined}
+          onClick={!updateQueued ? () => setConfirmOpen(true) : undefined}
           isLast
         />
       </CardList>
+
+      <BottomSheet title="System Update" isOpen={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <div style={styles.confirmBody}>
+          <p style={styles.confirmText}>This will pull the latest code, deploy frontend changes, and restart backend services.</p>
+          <p style={styles.confirmText}>Proceed?</p>
+          <div style={styles.confirmActions}>
+            <button style={styles.cancelBtn} onClick={() => setConfirmOpen(false)}>Cancel</button>
+            <button style={styles.confirmBtn} onClick={handleSystemUpdate}>Update</button>
+          </div>
+        </div>
+      </BottomSheet>
     </Page>
   )
+}
+
+const styles = {
+  confirmBody: {
+    padding: 'var(--space-lg) var(--space-xl)',
+  },
+  confirmText: {
+    fontSize: 'var(--font-body)',
+    color: 'var(--color-text-muted)',
+    marginBottom: 'var(--space-md)',
+  },
+  confirmActions: {
+    display: 'flex',
+    gap: 'var(--space-sm)',
+    marginTop: 'var(--space-xl)',
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: '14px',
+    background: 'var(--color-bg)',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--font-body)',
+    fontWeight: 500,
+    color: 'var(--color-text)',
+    cursor: 'pointer',
+  },
+  confirmBtn: {
+    flex: 1,
+    padding: '14px',
+    background: 'var(--color-primary)',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--font-body)',
+    fontWeight: 600,
+    color: '#fff',
+    cursor: 'pointer',
+  },
 }
