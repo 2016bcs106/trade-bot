@@ -31,9 +31,6 @@ function StockRow({ stock, bordered, info, onTap, onLongPress, onToggleFavorite 
       style={{ ...styles.stockRow, ...(bordered ? styles.bordered : {}) }}
       {...handlers}
     >
-      <button style={styles.starBtn} onClick={(e) => { e.stopPropagation(); onToggleFavorite(stock.symbol) }}>
-        <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
-      </button>
       <div style={styles.stockInfo}>
         <span style={styles.symbol}>{stock.symbol}</span>
         <span style={styles.name}>{stock.displayName || '—'}</span>
@@ -47,6 +44,9 @@ function StockRow({ stock, bordered, info, onTap, onLongPress, onToggleFavorite 
         </div>
       )}
       {badge && <Badge label={badge.label} color={badge.color} />}
+      <button style={styles.starBtn} onClick={(e) => { e.stopPropagation(); onToggleFavorite(stock.symbol) }}>
+        <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+      </button>
     </div>
   )
 }

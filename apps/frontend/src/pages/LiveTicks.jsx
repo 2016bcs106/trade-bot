@@ -447,9 +447,6 @@ export default function LiveTicks() {
                   key={stock.instrumentKey}
                   style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
                 >
-                  <button style={styles.sheetStar} onClick={() => toggleFavorite(stock.symbol)}>
-                    <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
-                  </button>
                   <div style={{ flex: 1, minWidth: 0 }} onClick={() => { unsubscribeStock(selectedInstrumentKey); selectStock(stock.instrumentKey); subscribeStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}>
                     <div style={{ fontSize: 'var(--font-body)', fontWeight: 500, color: 'var(--color-text)', textAlign: 'left' }}>{stock.symbol}</div>
                     <div style={{ fontSize: 'var(--font-footnote)', color: 'var(--color-text-muted)', marginTop: '2px', textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.displayName || '—'}</div>
@@ -464,6 +461,9 @@ export default function LiveTicks() {
                       </div>
                     </div>
                   )}
+                  <button style={styles.sheetStar} onClick={() => toggleFavorite(stock.symbol)}>
+                    <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+                  </button>
                 </div>
               )
             })}
