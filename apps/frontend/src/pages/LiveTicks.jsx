@@ -13,7 +13,8 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronLeft, faChevronDown } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
+import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
 import Loader from '../components/Loader'
@@ -162,7 +163,7 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, subscribeStock, unsubscribeStock, getPriceInfo, sortBy, sortAsc, marketStatus } = useApp()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, getPriceInfo, marketStatus } = useApp()
   const isMarketOpen = () => marketStatus !== 'Closed'
   _marketOpen = marketStatus !== 'Closed'
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
@@ -400,8 +401,8 @@ export default function LiveTicks() {
             <FontAwesomeIcon icon={faChevronLeft} />
           </button>
           <div>
-            <span style={styles.stockName}>{selectedStock.displayName}</span>
-            <span style={styles.symbolText}>{selectedStock.symbol}</span>
+            <span style={styles.stockName}>{selectedStock.symbol}</span>
+            <span style={styles.symbolText}>{selectedStock.displayName || '—'}</span>
           </div>
         </div>
         <div style={styles.headerRight}>
@@ -436,37 +437,25 @@ export default function LiveTicks() {
         <>
           <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
             {[...stocks].sort((a, b) => {
-              let cmp = 0
-              if (sortBy === 'relevance') {
-                cmp = (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)
-              } else if (sortBy === 'created') {
-                cmp = (b.addedAt || '').localeCompare(a.addedAt || '')
-              } else if (sortBy === 'symbol') {
-                cmp = a.symbol.localeCompare(b.symbol)
-              } else if (sortBy === 'price') {
-                const ap = getPriceInfo(a.instrumentKey)?.price ?? 0
-                const bp = getPriceInfo(b.instrumentKey)?.price ?? 0
-                cmp = bp - ap
-              } else if (sortBy === 'change') {
-                const ac = getPriceInfo(a.instrumentKey)?.changePct ?? 0
-                const bc = getPriceInfo(b.instrumentKey)?.changePct ?? 0
-                cmp = bc - ac
-              }
-              return sortAsc ? -cmp : cmp
+              if (a.isFavorite && !b.isFavorite) return -1;
+              if (!a.isFavorite && b.isFavorite) return 1;
+              return a.symbol.localeCompare(b.symbol);
             }).map((stock) => {
               const info = getPriceInfo(stock.instrumentKey)
               return (
-                <button
+                <div
                   key={stock.instrumentKey}
-                  onClick={() => { unsubscribeStock(selectedInstrumentKey); selectStock(stock.instrumentKey); subscribeStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}
                   style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
                 >
-                  <div>
-                    <div style={{ fontSize: 'var(--font-body)', color: 'var(--color-text)', textAlign: 'left' }}>{stock.displayName}</div>
-                    <div style={{ fontSize: 'var(--font-caption)', color: 'var(--color-text-muted)', marginTop: '2px', textAlign: 'left' }}>{stock.symbol}</div>
+                  <button style={styles.sheetStar} onClick={() => toggleFavorite(stock.symbol)}>
+                    <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }} onClick={() => { unsubscribeStock(selectedInstrumentKey); selectStock(stock.instrumentKey); subscribeStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}>
+                    <div style={{ fontSize: 'var(--font-body)', fontWeight: 500, color: 'var(--color-text)', textAlign: 'left' }}>{stock.symbol}</div>
+                    <div style={{ fontSize: 'var(--font-footnote)', color: 'var(--color-text-muted)', marginTop: '2px', textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.displayName || '—'}</div>
                   </div>
                   {info && (
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right' }} onClick={() => { unsubscribeStock(selectedInstrumentKey); selectStock(stock.instrumentKey); subscribeStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}>
                       <div style={{ fontSize: 'var(--font-body)', fontWeight: 600, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' }}>
                         {info.price.toFixed(2)}
                       </div>
@@ -475,7 +464,7 @@ export default function LiveTicks() {
                       </div>
                     </div>
                   )}
-                </button>
+                </div>
               )
             })}
           </BottomSheet>
@@ -628,6 +617,19 @@ const styles = {
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 'var(--space-md)',
+  },
+  sheetStar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '28px',
+    height: '28px',
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    flexShrink: 0,
+    fontSize: '0.9rem',
+    padding: 0,
   },
 }

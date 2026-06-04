@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import moment from 'moment'
-import { db, ref, set, push } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartBar, faPlus, faArrowDownWideShort, faArrowUp, faArrowDown, faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
+import { faChartBar, faSearch, faArrowDownWideShort, faArrowUp, faArrowDown, faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
 import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
@@ -64,7 +62,7 @@ const SORT_OPTIONS = [
 export default function Stocks() {
   const navigate = useNavigate()
   const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, toggleFavorite } = useApp()
-  const [symbolInput, setSymbolInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('favorites')
@@ -75,11 +73,13 @@ export default function Stocks() {
     return getPriceInfo(stock.instrumentKey)
   }
 
-  const filteredStocks = activeTab === 'favorites'
-    ? stocks.filter((s) => s.isFavorite)
-    : stocks.filter((s) => !s.isFavorite)
+  const query = searchQuery.trim().toUpperCase()
+  const filteredStocks = stocks
+    .filter((s) => activeTab === 'favorites' ? s.isFavorite : !s.isFavorite)
+    .filter((s) => !query || s.symbol.includes(query) || (s.displayName || '').toUpperCase().includes(query))
 
   const stockList = [...filteredStocks].sort((a, b) => {
+    if (activeTab === 'others') return a.symbol.localeCompare(b.symbol)
     let cmp = 0
     if (sortBy === 'relevance') {
       cmp = (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)
@@ -103,35 +103,6 @@ export default function Stocks() {
     ? stocks.find((s) => s.symbol === detailSymbol) || null
     : null
 
-  const handleAdd = async () => {
-    const symbol = symbolInput.trim().toUpperCase()
-    if (!symbol || stocks.find((s) => s.symbol === symbol)) { setSymbolInput(''); return }
-    const now = moment().utcOffset('+05:30').toISOString()
-    await set(ref(db, `stocks/${symbol}`), {
-      symbol, name: symbol, status: 'pending_sync', enabled: true, addedAt: now, updatedAt: now,
-    })
-    await push(ref(db, 'request_queue'), {
-      type: 'stock_sync', payload: { symbol }, status: 'pending', createdAt: now,
-    })
-    setSymbolInput('')
-  }
-
-  const handleRemove = async (stock) => {
-    setDetailSymbol(null)
-    await push(ref(db, 'request_queue'), {
-      type: 'stock_sync',
-      payload: { symbol: stock.symbol, action: 'remove' },
-      status: 'pending',
-      createdAt: moment().utcOffset('+05:30').toISOString(),
-    })
-  }
-
-  const handleSync = async (symbol) => {
-    await push(ref(db, 'request_queue'), {
-      type: 'stock_sync', payload: { symbol }, status: 'pending',
-      createdAt: moment().utcOffset('+05:30').toISOString(),
-    })
-  }
 
   if (stocks.length === 0 && status === 'connecting') {
     return <Page><Loader /></Page>
@@ -150,7 +121,7 @@ export default function Stocks() {
         </button>
       </div>
 
-      {stockList.length > 0 && (
+      {stockList.length > 0 && activeTab === 'favorites' && (
         <div style={styles.sortRow}>
           <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
             <FontAwesomeIcon icon={faArrowDownWideShort} style={styles.sortIcon} />
@@ -160,7 +131,7 @@ export default function Stocks() {
       )}
 
       {stockList.length === 0 ? (
-        <EmptyState icon={faChartBar} title="No stocks tracked" subtitle="Add a symbol below to get started" />
+        <EmptyState icon={faChartBar} title={activeTab === 'favorites' ? 'No favorites yet' : 'No stocks found'} subtitle={activeTab === 'favorites' ? 'Star a stock to add it here' : 'Try a different search'} />
       ) : (
         <div style={styles.list}>
           {stockList.map((stock, i) => (
@@ -177,55 +148,32 @@ export default function Stocks() {
         </div>
       )}
 
-      {/* Add stock bar */}
-      <div style={styles.addBar}>
+      {/* Search bar */}
+      <div style={styles.searchBar}>
+        <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
         <input
-          style={styles.addInput}
-          placeholder="Symbol (e.g. RELIANCE)"
-          value={symbolInput}
-          onChange={(e) => setSymbolInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          style={styles.searchInput}
+          placeholder="Search stocks..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <button style={styles.addBtn} onClick={handleAdd} disabled={!symbolInput.trim()}>
-          <FontAwesomeIcon icon={faPlus} />
-        </button>
       </div>
 
       {/* Detail sheet */}
       <BottomSheet title={selectedStock?.symbol} isOpen={!!selectedStock} onClose={() => setDetailSymbol(null)}>
         {selectedStock && (
           <div style={styles.sheetBody}>
-            {selectedStock.status === 'pending_sync' ? (
-              <div style={styles.statusMsg}>Syncing with exchange...</div>
-            ) : selectedStock.status === 'sync_failed' ? (
-              <div style={{ ...styles.statusMsg, color: 'var(--color-danger)' }}>Symbol not found on NSE</div>
-            ) : (
-              <>
-                <DetailRow label="Live Price" value={(() => {
-                  const info = getLivePriceInfo(selectedStock.symbol)
-                  if (!info) return undefined
-                  const sign = info.change >= 0 ? '+' : ''
-                  return `${info.price.toFixed(2)} (${sign}${info.change.toFixed(2)})`
-                })()} />
-                <DetailRow label="Name" value={selectedStock.displayName} />
-                <DetailRow label="Exchange" value={selectedStock.exchangeType} />
-                <DetailRow label="Security ID" value={selectedStock.scripId} />
-                <DetailRow label="ISIN" value={selectedStock.isin} />
-                <DetailRow label="Industry" value={selectedStock.industryName} />
-                <DetailRow label="Market Cap" value={selectedStock.mcap ? `${selectedStock.mcap.toLocaleString('en-IN')} Cr` : undefined} />
-                <DetailRow label="Added" value={selectedStock.addedAt ? moment(selectedStock.addedAt).format('D MMM YYYY') : undefined} />
-
-              </>
-            )}
-
-            <div style={styles.actions}>
-              <button style={styles.actionBtn} onClick={() => handleSync(selectedStock.symbol)}>
-                Re-sync Stock
-              </button>
-              <button style={{ ...styles.actionBtn, ...styles.actionBtnDanger }} onClick={() => handleRemove(selectedStock)}>
-                Remove Stock
-              </button>
-            </div>
+            <DetailRow label="Live Price" value={(() => {
+              const info = getLivePriceInfo(selectedStock.symbol)
+              if (!info) return undefined
+              const sign = info.change >= 0 ? '+' : ''
+              return `${info.price.toFixed(2)} (${sign}${info.change.toFixed(2)})`
+            })()} />
+            <DetailRow label="Name" value={selectedStock.displayName} />
+            <DetailRow label="Exchange" value={selectedStock.exchangeType} />
+            <DetailRow label="ISIN" value={selectedStock.isin} />
+            <DetailRow label="Industry" value={selectedStock.industryName} />
+            <DetailRow label="Market Cap" value={selectedStock.mcap ? `${selectedStock.mcap.toLocaleString('en-IN')} Cr` : undefined} />
           </div>
         )}
       </BottomSheet>
@@ -408,70 +356,33 @@ const styles = {
     textOverflow: 'ellipsis',
     marginTop: '2px',
   },
-  addBar: {
+  searchBar: {
     position: 'fixed',
     bottom: '70px',
     left: 'var(--space-lg)',
     right: 'var(--space-lg)',
     display: 'flex',
-    gap: 'var(--space-sm)',
     alignItems: 'center',
+    gap: 'var(--space-sm)',
+    padding: '10px 16px',
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--color-card)',
+    boxShadow: 'var(--shadow-md)',
     zIndex: 90,
   },
-  addInput: {
+  searchIcon: {
+    fontSize: '0.9rem',
+    color: 'var(--color-text-muted)',
+  },
+  searchInput: {
     flex: 1,
-    padding: '12px 16px',
-    borderRadius: 'var(--radius-md)',
     border: 'none',
-    background: 'var(--color-card)',
+    background: 'transparent',
     color: 'var(--color-text)',
     fontSize: 'var(--font-body)',
     outline: 'none',
-    textTransform: 'uppercase',
-    boxShadow: 'var(--shadow-md)',
-  },
-  addBtn: {
-    width: '44px',
-    height: '44px',
-    borderRadius: '50%',
-    border: 'none',
-    background: 'var(--color-primary)',
-    color: '#fff',
-    fontSize: '1.1rem',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: 'var(--shadow-md)',
   },
   sheetBody: {
     padding: 'var(--space-lg) var(--space-xl)',
-  },
-  statusMsg: {
-    fontSize: 'var(--font-body)',
-    color: 'var(--color-text-muted)',
-    padding: 'var(--space-xl) 0',
-    textAlign: 'center',
-  },
-  actions: {
-    marginTop: 'var(--space-2xl)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--space-sm)',
-  },
-  actionBtn: {
-    width: '100%',
-    padding: '14px',
-    background: 'var(--color-bg)',
-    border: 'none',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-    fontSize: 'var(--font-body)',
-    fontWeight: 500,
-    color: 'var(--color-primary)',
-    textAlign: 'center',
-  },
-  actionBtnDanger: {
-    color: 'var(--color-danger)',
   },
 }
