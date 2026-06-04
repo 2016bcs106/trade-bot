@@ -81,6 +81,9 @@ class LiveStreamScript extends BaseScript {
   private relevanceScores = new Map<string, number>();
   private marketStatus: string = "Closed";
   private lastTradeDate: string | null = null;
+  private favorites = new Set<string>();
+  private clientSubscriptions = new Map<WebSocket, Set<string>>();
+  private latestPriceByInstrument = new Map<string, { price: number; change: number; changePct: number }>();
 
   get scriptName(): string {
     return "live-stream";
@@ -118,7 +121,7 @@ class LiveStreamScript extends BaseScript {
       this.initializeInstrumentMaps();
       if (this.lastTradeDate) {
         this.loadHistoricalData();
-        this.broadcastAllSnapshots();
+        this.sendSnapshotsToSubscribers();
       }
 
       this.log.info(`Stocks updated — tracking ${this.trackedStocks.length}: ${this.trackedStocks.map((s) => s.symbol).join(", ")}`);
@@ -166,7 +169,7 @@ class LiveStreamScript extends BaseScript {
       if (!prevTradeDate && data.tradeDate && this.trackedStocks.length > 0) {
         this.minuteAggregatesByInstrument.clear();
         this.loadHistoricalData();
-        this.broadcastAllSnapshots();
+        this.sendSnapshotsToSubscribers();
       }
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
@@ -179,6 +182,15 @@ class LiveStreamScript extends BaseScript {
         this.minuteAggregatesByInstrument.clear();
         this.broadcastToAllClients({ type: "day_reset", data: { reason: "market opened" } });
         this.connectStreamers();
+      }
+    });
+
+    // Listen to favorites changes
+    this.firebase.onFavoritesChange((data) => {
+      this.favorites = new Set(data ? Object.keys(data) : []);
+      this.log.info(`Favorites updated — ${this.favorites.size} stocks`);
+      for (const client of this.wsServer.clients) {
+        this.sendStockList(client);
       }
     });
 
@@ -373,13 +385,17 @@ class LiveStreamScript extends BaseScript {
       const totalClients = this.wsServer.clients.size;
       this.log.info(`Client connected — ip=${ip} clients=${totalClients}`);
 
+      this.clientSubscriptions.set(client, new Set());
       this.sendStockList(client);
       this.sendMarketStatus(client);
-      for (const key of this.instrumentByKey.keys()) {
-        this.sendMinuteSnapshot(client, key);
-      }
+      this.sendFavoritePrices(client);
+
+      client.on("message", (raw) => {
+        this.handleClientMessage(client, raw.toString());
+      });
 
       client.on("close", (code, reason) => {
+        this.clientSubscriptions.delete(client);
         const remaining = this.wsServer.clients.size;
         this.log.info(`Client disconnected — ip=${ip} code=${code} reason=${reason || "none"} clients=${remaining}`);
       });
@@ -398,11 +414,46 @@ class LiveStreamScript extends BaseScript {
     const aggregate = this.upsertMinuteAggregate(tick);
     if (!aggregate) return;
 
-    this.broadcastToAllClients({
+    const { instrumentKey, symbol } = aggregate;
+
+    // Update latest price cache
+    const allMinutes = this.minuteAggregatesByInstrument.get(instrumentKey);
+    if (allMinutes) {
+      const sorted = Array.from(allMinutes.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+      const price = sorted[sorted.length - 1].close;
+      let open: number | null = null;
+      for (const r of sorted) {
+        const time = r.minute.split("T")[1]?.slice(0, 5) || "";
+        if (time >= "09:00") { open = r.close; break; }
+      }
+      if (open == null) open = sorted[0].close;
+      const change = price - open;
+      const changePct = open !== 0 ? (change / open) * 100 : 0;
+      this.latestPriceByInstrument.set(instrumentKey, { price, change, changePct });
+    }
+
+    // Send lightweight price_update to all clients for favorites
+    if (this.favorites.has(symbol)) {
+      const priceInfo = this.latestPriceByInstrument.get(instrumentKey);
+      if (priceInfo) {
+        this.broadcastToAllClients({
+          type: "price_update",
+          data: { instrumentKey, symbol, ...priceInfo },
+        });
+      }
+    }
+
+    // Send minute_update only to clients subscribed to this instrument
+    const message = JSON.stringify({
       type: "minute_update",
       data: aggregate,
-      meta: { instrumentKey: aggregate.instrumentKey },
+      meta: { instrumentKey },
     });
+    for (const [client, subs] of this.clientSubscriptions.entries()) {
+      if (subs.has(instrumentKey) && client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
   }
 
   private upsertMinuteAggregate(tick: Record<string, unknown>): MinuteAggregatePayload | null {
@@ -472,10 +523,10 @@ class LiveStreamScript extends BaseScript {
     return Array.from(map.values()).sort((a, b) => a.minute.localeCompare(b.minute));
   }
 
-  private broadcastAllSnapshots(): void {
-    for (const client of this.wsServer.clients) {
-      for (const key of this.instrumentByKey.keys()) {
-        this.sendMinuteSnapshot(client, key);
+  private sendSnapshotsToSubscribers(): void {
+    for (const [client, subs] of this.clientSubscriptions.entries()) {
+      for (const instrumentKey of subs) {
+        this.sendMinuteSnapshot(client, instrumentKey);
       }
     }
   }
@@ -499,6 +550,58 @@ class LiveStreamScript extends BaseScript {
     }
   }
 
+
+  private handleClientMessage(client: WebSocket, raw: string): void {
+    try {
+      const msg = JSON.parse(raw) as { type?: string; instrumentKey?: string; symbol?: string };
+
+      if (msg.type === "subscribe" && msg.instrumentKey) {
+        const subs = this.clientSubscriptions.get(client);
+        if (subs) {
+          subs.add(msg.instrumentKey);
+          this.sendMinuteSnapshot(client, msg.instrumentKey);
+          this.log.info(`Client subscribed to ${msg.instrumentKey}`);
+        }
+        return;
+      }
+
+      if (msg.type === "unsubscribe" && msg.instrumentKey) {
+        const subs = this.clientSubscriptions.get(client);
+        if (subs) {
+          subs.delete(msg.instrumentKey);
+          this.log.info(`Client unsubscribed from ${msg.instrumentKey}`);
+        }
+        return;
+      }
+
+      if (msg.type === "toggle_favorite" && msg.symbol) {
+        if (this.favorites.has(msg.symbol)) {
+          this.firebase.setValue(`favorites/${msg.symbol}`, null);
+        } else {
+          this.firebase.setValue(`favorites/${msg.symbol}`, true);
+        }
+        return;
+      }
+    } catch {
+      // ignore invalid messages
+    }
+  }
+
+  private sendFavoritePrices(client: WebSocket): void {
+    if (client.readyState !== WebSocket.OPEN) return;
+    const prices: { instrumentKey: string; symbol: string; price: number; change: number; changePct: number }[] = [];
+    for (const stock of this.trackedStocks) {
+      if (!this.favorites.has(stock.symbol)) continue;
+      const instrumentKey = this.getInstrumentKey(stock);
+      const priceInfo = this.latestPriceByInstrument.get(instrumentKey);
+      if (priceInfo) {
+        prices.push({ instrumentKey, symbol: stock.symbol, ...priceInfo });
+      }
+    }
+    if (prices.length > 0) {
+      client.send(JSON.stringify({ type: "favorite_prices", data: prices }));
+    }
+  }
 
   private sendMarketStatus(client: WebSocket): void {
     if (client.readyState !== WebSocket.OPEN) return;
@@ -525,6 +628,7 @@ class LiveStreamScript extends BaseScript {
         addedAt: stock.addedAt,
         updatedAt: stock.updatedAt,
         status: stock.status,
+        isFavorite: this.favorites.has(stock.symbol),
         relevanceScore: this.relevanceScores.get(stock.symbol) ?? 0,
       })),
     }));

@@ -162,7 +162,7 @@ for (let t = MARKET_START; t <= MARKET_END; t++) {
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, getPriceInfo, sortBy, sortAsc, marketStatus } = useApp()
+  const { status, stocks, selectedInstrumentKey, rowsByMinute, selectStock, subscribeStock, unsubscribeStock, getPriceInfo, sortBy, sortAsc, marketStatus } = useApp()
   const isMarketOpen = () => marketStatus !== 'Closed'
   _marketOpen = marketStatus !== 'Closed'
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
@@ -174,7 +174,16 @@ export default function LiveTicks() {
   useEffect(() => {
     if (symbol && stocks.length > 0) {
       const match = stocks.find((s) => s.symbol === symbol)
-      if (match) selectStock(match.instrumentKey)
+      if (match) {
+        selectStock(match.instrumentKey)
+        subscribeStock(match.instrumentKey)
+      }
+    }
+    return () => {
+      if (symbol && stocks.length > 0) {
+        const match = stocks.find((s) => s.symbol === symbol)
+        if (match) unsubscribeStock(match.instrumentKey)
+      }
     }
   }, [symbol, stocks])
 
@@ -449,7 +458,7 @@ export default function LiveTicks() {
               return (
                 <button
                   key={stock.instrumentKey}
-                  onClick={() => { selectStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}
+                  onClick={() => { unsubscribeStock(selectedInstrumentKey); selectStock(stock.instrumentKey); subscribeStock(stock.instrumentKey); navigate(`/live/${stock.symbol}`, { replace: true }); setSheetOpen(false) }}
                   style={{ ...styles.sheetItem, background: stock.instrumentKey === selectedInstrumentKey ? 'var(--color-primary-light)' : 'transparent' }}
                 >
                   <div>

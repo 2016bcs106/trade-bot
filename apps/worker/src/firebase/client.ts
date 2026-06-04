@@ -129,6 +129,12 @@ export default class FirebaseClient {
     });
   }
 
+  onFavoritesChange(callback: (data: Record<string, boolean> | null) => void): Unsubscribe {
+    return this._onChange("favorites", (value) => {
+      callback(value as Record<string, boolean> | null);
+    });
+  }
+
   // ─── Private Helpers ──────────────────────────────────────────────
 
   private async _getValue(path: string): Promise<unknown> {

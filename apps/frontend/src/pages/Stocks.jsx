@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import moment from 'moment'
 import { db, ref, set, push } from '../utils/firebase'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartBar, faPlus, faArrowDownWideShort, faArrowUp, faArrowDown } from '@fortawesome/free-solid-svg-icons'
+import { faChartBar, faPlus, faArrowDownWideShort, faArrowUp, faArrowDown, faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
+import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
@@ -20,7 +21,7 @@ function getStatusBadge(stock) {
   return null
 }
 
-function StockRow({ stock, bordered, info, onTap, onLongPress }) {
+function StockRow({ stock, bordered, info, onTap, onLongPress, onToggleFavorite }) {
   const handlers = useLongPress(
     () => onLongPress(stock.symbol),
     () => onTap(stock.symbol),
@@ -32,6 +33,9 @@ function StockRow({ stock, bordered, info, onTap, onLongPress }) {
       style={{ ...styles.stockRow, ...(bordered ? styles.bordered : {}) }}
       {...handlers}
     >
+      <button style={styles.starBtn} onClick={(e) => { e.stopPropagation(); onToggleFavorite(stock.symbol) }}>
+        <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+      </button>
       <div style={styles.stockInfo}>
         <span style={styles.symbol}>{stock.symbol}</span>
         <span style={styles.name}>{stock.displayName || '—'}</span>
@@ -59,10 +63,11 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc } = useApp()
+  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, toggleFavorite } = useApp()
   const [symbolInput, setSymbolInput] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('favorites')
 
   const getLivePriceInfo = (symbol) => {
     const stock = stocks.find((s) => s.symbol === symbol)
@@ -70,7 +75,11 @@ export default function Stocks() {
     return getPriceInfo(stock.instrumentKey)
   }
 
-  const stockList = [...stocks].sort((a, b) => {
+  const filteredStocks = activeTab === 'favorites'
+    ? stocks.filter((s) => s.isFavorite)
+    : stocks.filter((s) => !s.isFavorite)
+
+  const stockList = [...filteredStocks].sort((a, b) => {
     let cmp = 0
     if (sortBy === 'relevance') {
       cmp = (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)
@@ -132,6 +141,15 @@ export default function Stocks() {
     <Page>
       <PageHeader title="Stocks" />
 
+      <div style={styles.tabRow}>
+        <button style={{ ...styles.tab, ...(activeTab === 'favorites' ? styles.tabActive : {}) }} onClick={() => setActiveTab('favorites')}>
+          Favorites
+        </button>
+        <button style={{ ...styles.tab, ...(activeTab === 'others' ? styles.tabActive : {}) }} onClick={() => setActiveTab('others')}>
+          Others
+        </button>
+      </div>
+
       {stockList.length > 0 && (
         <div style={styles.sortRow}>
           <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
@@ -153,6 +171,7 @@ export default function Stocks() {
               info={getLivePriceInfo(stock.symbol)}
               onTap={(symbol) => navigate(`/live/${symbol}`)}
               onLongPress={(symbol) => setDetailSymbol(symbol)}
+              onToggleFavorite={toggleFavorite}
             />
           ))}
         </div>
@@ -244,6 +263,42 @@ export default function Stocks() {
 }
 
 const styles = {
+  tabRow: {
+    display: 'flex',
+    gap: '0',
+    padding: '0 var(--space-lg)',
+    marginBottom: 'var(--space-md)',
+  },
+  tab: {
+    flex: 1,
+    padding: '10px',
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 500,
+    color: 'var(--color-text-muted)',
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  tabActive: {
+    color: 'var(--color-primary)',
+    fontWeight: 600,
+    boxShadow: 'inset 0 -2px 0 var(--color-primary)',
+  },
+  starBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '28px',
+    height: '28px',
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    flexShrink: 0,
+    fontSize: '0.9rem',
+    padding: 0,
+  },
   sortRow: {
     padding: '0 var(--space-lg)',
     marginBottom: 'var(--space-sm)',

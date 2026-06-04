@@ -10,6 +10,7 @@ export function AppProvider({ children }) {
   const [stocks, setStocks] = useState([])
   const [selectedInstrumentKey, setSelectedInstrumentKey] = useState('')
   const [dataByInstrument, setDataByInstrument] = useState({})
+  const [priceByInstrument, setPriceByInstrument] = useState({})
   const [marketStatus, setMarketStatus] = useState('Closed')
   const [sortBy, setSortBy] = useState('relevance')
   const [sortAsc, setSortAsc] = useState(false)
@@ -65,11 +66,27 @@ export function AppProvider({ children }) {
             }))
             return
           }
+          if (msg.type === 'price_update' && msg.data) {
+            const { instrumentKey, price, change, changePct } = msg.data
+            setPriceByInstrument((prev) => ({ ...prev, [instrumentKey]: { price, change, changePct } }))
+            return
+          }
+          if (msg.type === 'favorite_prices' && Array.isArray(msg.data)) {
+            const next = {}
+            for (const item of msg.data) {
+              next[item.instrumentKey] = { price: item.price, change: item.change, changePct: item.changePct }
+            }
+            setPriceByInstrument((prev) => ({ ...prev, ...next }))
+            return
+          }
           if (msg.type === 'market_status' && msg.data) {
             setMarketStatus(msg.data.status)
             return
           }
-          if (msg.type === 'day_reset') setDataByInstrument({})
+          if (msg.type === 'day_reset') {
+            setDataByInstrument({})
+            setPriceByInstrument({})
+          }
         } catch {}
       }
     }
@@ -95,6 +112,24 @@ export function AppProvider({ children }) {
     setSelectedInstrumentKey(instrumentKey)
   }
 
+  const subscribeStock = (instrumentKey) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'subscribe', instrumentKey }))
+    }
+  }
+
+  const unsubscribeStock = (instrumentKey) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'unsubscribe', instrumentKey }))
+    }
+  }
+
+  const toggleFavorite = (symbol) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'toggle_favorite', symbol }))
+    }
+  }
+
   const rowsByMinute = useMemo(
     () => dataByInstrument[selectedInstrumentKey] || {},
     [dataByInstrument, selectedInstrumentKey],
@@ -107,24 +142,29 @@ export function AppProvider({ children }) {
 
   const getPriceInfo = (instrumentKey) => {
     const data = dataByInstrument[instrumentKey]
-    if (!data) return null
-    const minutes = Object.values(data)
-    if (minutes.length === 0) return null
-    const sorted = minutes.sort((a, b) => String(a.minute).localeCompare(String(b.minute)))
-    const price = sorted[sorted.length - 1].close
-    let open = null
-    for (const r of sorted) {
-      const time = String(r.minute).split('T')[1]?.slice(0, 5) || ''
-      if (time >= '09:00') { open = r.close; break }
+    if (data) {
+      const minutes = Object.values(data)
+      if (minutes.length > 0) {
+        const sorted = minutes.sort((a, b) => String(a.minute).localeCompare(String(b.minute)))
+        const price = sorted[sorted.length - 1].close
+        let open = null
+        for (const r of sorted) {
+          const time = String(r.minute).split('T')[1]?.slice(0, 5) || ''
+          if (time >= '09:00') { open = r.close; break }
+        }
+        if (open == null) open = sorted[0].close
+        const change = price - open
+        const changePct = open !== 0 ? (change / open) * 100 : 0
+        return { price, open, change, changePct }
+      }
     }
-    if (open == null) open = sorted[0].close
-    const change = price - open
-    const changePct = open !== 0 ? (change / open) * 100 : 0
-    return { price, open, change, changePct }
+    const cached = priceByInstrument[instrumentKey]
+    if (cached) return cached
+    return null
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy, sortAsc, setSortAsc, scripts, requestQueue, failedRequests, selectStock, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy, sortAsc, setSortAsc, scripts, requestQueue, failedRequests, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )
