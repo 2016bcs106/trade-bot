@@ -49,6 +49,7 @@ export default abstract class BaseScript {
       await this.run();
       this.stopHeartbeat();
       await this.reportStatus("stopped");
+      await this.firebase.destroy();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.lastError = message;

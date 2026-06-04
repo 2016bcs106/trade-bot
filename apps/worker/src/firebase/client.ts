@@ -1,6 +1,6 @@
 import "../config/env.ts";
 import { nowISO } from "../utils/time.ts";
-import { initializeApp } from "firebase/app";
+import { initializeApp, deleteApp } from "firebase/app";
 import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
 import { TickData } from "../types/market-data/tick-data.ts";
@@ -133,6 +133,10 @@ export default class FirebaseClient {
     return this._onChange("favorites", (value) => {
       callback(value as Record<string, boolean> | null);
     });
+  }
+
+  async destroy(): Promise<void> {
+    await deleteApp(app);
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────
