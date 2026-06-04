@@ -121,14 +121,22 @@ export default function Stocks() {
         </button>
       </div>
 
-      {stockList.length > 0 && activeTab === 'favorites' && (
-        <div style={styles.sortRow}>
-          <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
-            <FontAwesomeIcon icon={faArrowDownWideShort} style={styles.sortIcon} />
-            <span>{SORT_OPTIONS.find((o) => o.key === sortBy)?.label}</span>
-          </button>
-        </div>
-      )}
+      <div style={styles.searchBar}>
+        <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
+        <input
+          style={styles.searchInput}
+          placeholder="Search stocks..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <button
+          style={{ ...styles.sortBtn, ...(activeTab === 'others' ? styles.sortBtnDisabled : {}) }}
+          onClick={() => activeTab === 'favorites' && setSortSheetOpen(true)}
+          disabled={activeTab === 'others'}
+        >
+          <FontAwesomeIcon icon={faArrowDownWideShort} />
+        </button>
+      </div>
 
       {stockList.length === 0 ? (
         <EmptyState icon={faChartBar} title={activeTab === 'favorites' ? 'No favorites yet' : 'No stocks found'} subtitle={activeTab === 'favorites' ? 'Star a stock to add it here' : 'Try a different search'} />
@@ -147,17 +155,6 @@ export default function Stocks() {
           ))}
         </div>
       )}
-
-      {/* Search bar */}
-      <div style={styles.searchBar}>
-        <FontAwesomeIcon icon={faSearch} style={styles.searchIcon} />
-        <input
-          style={styles.searchInput}
-          placeholder="Search stocks..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
 
       {/* Detail sheet */}
       <BottomSheet title={selectedStock?.symbol} isOpen={!!selectedStock} onClose={() => setDetailSymbol(null)}>
@@ -214,7 +211,6 @@ const styles = {
   tabRow: {
     display: 'flex',
     gap: '0',
-    padding: '0 var(--space-lg)',
     marginBottom: 'var(--space-md)',
   },
   tab: {
@@ -247,24 +243,21 @@ const styles = {
     fontSize: '0.9rem',
     padding: 0,
   },
-  sortRow: {
-    padding: '0 var(--space-lg)',
-    marginBottom: 'var(--space-sm)',
-  },
   sortBtn: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    justifyContent: 'center',
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: '8px 0',
-    fontSize: 'var(--font-footnote)',
-    fontWeight: 500,
+    padding: '4px',
+    fontSize: '1rem',
     color: 'var(--color-primary)',
+    flexShrink: 0,
   },
-  sortIcon: {
-    fontSize: '0.9rem',
+  sortBtnDisabled: {
+    color: 'var(--color-text-tertiary)',
+    cursor: 'default',
   },
   sortList: {
     padding: 'var(--space-sm) 0',
@@ -357,18 +350,13 @@ const styles = {
     marginTop: '2px',
   },
   searchBar: {
-    position: 'fixed',
-    bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))',
-    left: 'var(--space-lg)',
-    right: 'var(--space-lg)',
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-sm)',
+    marginBottom: 'var(--space-md)',
     padding: '10px 16px',
     borderRadius: 'var(--radius-md)',
     background: 'var(--color-card)',
-    boxShadow: 'var(--shadow-md)',
-    zIndex: 90,
   },
   searchIcon: {
     fontSize: '0.9rem',
