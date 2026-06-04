@@ -13,5 +13,15 @@
     "name": "market-status",
     "schedule": "* * * * *",
     "command": "src/cli/market-status-script.ts"
+  },
+  {
+    "name": "stock-sync-daily",
+    "schedule": "30 0 2-31 * *",
+    "command": "src/cli/stock-sync-trigger-script.ts"
+  },
+  {
+    "name": "stock-sync-monthly",
+    "schedule": "30 0 1 * *",
+    "command": "src/cli/stock-sync-trigger-script.ts --force"
   }
 ]

@@ -1,69 +1,131 @@
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import fetch from "node-fetch";
 import { nowISO } from "../utils/time.ts";
 import { QueuedRequest } from "../firebase/client.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { RequestHandler, ServiceContext } from "./request-handler.ts";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "data");
+const SYMBOLS_FILE = resolve(DATA_DIR, "stock-symbols.json");
+const SECURITY_MASTER_URL = "https://developer.paytmmoney.com/data/v1/scrips/nse_security_master.csv";
+const DELAY_BETWEEN_REQUESTS_MS = 500;
+
 /**
- * Handles "stock_sync" requests — resolves a stock symbol via Paytm Money API,
- * saves the full StockConfig to Firebase.
+ * Handles "stock_sync" requests — fetches NSE security master,
+ * finds new symbols, and syncs them to Firebase.
  *
- * Also handles stock removal when action: "remove" is specified.
+ * Payload (optional):
+ * - force: boolean (force update all stocks)
  *
- * Expected payload:
- * - symbol: string (stock symbol, e.g. "ADANIENT")
- * - action: "sync" | "remove" (default "sync")
+ * Also accepts --force as CLI arg for cron-based monthly full sync.
  */
 export class StockSyncRequestHandler implements RequestHandler {
   async handle(request: QueuedRequest, ctx: ServiceContext): Promise<void> {
-    const {
-      symbol,
-      action = "sync",
-    } = request.payload as {
-      symbol: string;
-      action?: "sync" | "remove";
-    };
+    mkdirSync(DATA_DIR, { recursive: true });
 
-    if (!symbol) {
-      throw new Error("stock_sync requires payload: { symbol }");
+    const payloadForce = (request.payload as { force?: boolean })?.force ?? false;
+    const cliForce = process.argv.includes("--force");
+    const forceAll = payloadForce || cliForce;
+
+    ctx.log.info(`Stock master sync started (force=${forceAll})`);
+
+    const masterSymbols = await this.fetchSecurityMaster(ctx);
+    ctx.log.info(`Security master: ${masterSymbols.length} symbols`);
+
+    const existingSymbols = this.loadExistingSymbols();
+    ctx.log.info(`Existing symbols: ${existingSymbols.length}`);
+
+    let toSync: string[];
+    if (forceAll) {
+      toSync = masterSymbols;
+      ctx.log.info(`Force sync: processing all ${toSync.length} symbols`);
+    } else {
+      toSync = masterSymbols.filter((s) => !existingSymbols.includes(s));
+      ctx.log.info(`New symbols to sync: ${toSync.length}`);
     }
 
-    const { firebase, paytm: client } = ctx;
-
-    // ─── Handle stock removal ──────────────────────────────────────────
-    if (action === "remove") {
-      await this.handleRemove(symbol, ctx);
+    if (toSync.length === 0) {
+      ctx.log.info("Nothing to sync");
+      this.saveSymbols(masterSymbols);
       return;
     }
 
-    // ─── Step 1: Sync stock metadata ──────────────────────────────────
+    let syncedCount = 0;
+    let failedCount = 0;
 
-    ctx.log.info(`Syncing: ${symbol}`);
-
-    const existingStock = await firebase.getStock(symbol);
-    const isResync = !!existingStock;
-
-    const result = await client.searchStock(symbol);
-
-    if (!result) {
-      ctx.log.error(`No exact NSE match for symbol: ${symbol} — marking as sync_failed`);
-      if (isResync) {
-        await firebase.updateStock(symbol, { status: "sync_failed", updatedAt: nowISO() });
-      } else {
-        await firebase.setStock(symbol, {
-          symbol,
-          name: symbol,
-          securityId: 0,
-          pmlId: "",
-          exchange: "NSE",
-          addedAt: nowISO(),
-          updatedAt: nowISO(),
-          status: "sync_failed",
-        });
+    for (const symbol of toSync) {
+      try {
+        const synced = await this.syncStock(symbol, forceAll, ctx);
+        if (synced) {
+          syncedCount++;
+          ctx.log.info(`✓ ${symbol}`);
+        } else {
+          ctx.log.info(`— ${symbol} (skipped)`);
+        }
+      } catch (err) {
+        failedCount++;
+        const msg = err instanceof Error ? err.message : String(err);
+        ctx.log.error(`✗ ${symbol}: ${msg}`);
       }
-      throw new Error(`No exact NSE equity match for symbol: ${symbol}`);
+      await this.delay(DELAY_BETWEEN_REQUESTS_MS);
     }
 
-    if (isResync) {
+    this.saveSymbols(masterSymbols);
+    ctx.log.info(`Stock master sync complete — synced=${syncedCount} failed=${failedCount}`);
+  }
+
+  private async fetchSecurityMaster(ctx: ServiceContext): Promise<string[]> {
+    ctx.log.info("Fetching security master CSV...");
+
+    const response = await fetch(SECURITY_MASTER_URL);
+
+    if (!response.ok) {
+      throw new Error(`Security master fetch failed: ${response.status}`);
+    }
+
+    const csv = await response.text();
+    const lines = csv.trim().split("\n");
+    const header = lines[0].split("\t");
+
+    const instrumentIdx = header.indexOf("instrument_type");
+    const seriesIdx = header.indexOf("series");
+    const symbolIdx = header.indexOf("symbol");
+
+    if (instrumentIdx === -1 || seriesIdx === -1 || symbolIdx === -1) {
+      throw new Error(`Unexpected CSV headers: ${header.join(", ")}`);
+    }
+
+    const symbols = new Set<string>();
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split("\t");
+      if (cols[instrumentIdx] === "ES" && cols[seriesIdx] === "EQ") {
+        const sym = cols[symbolIdx]?.trim();
+        if (sym) symbols.add(sym);
+      }
+    }
+
+    return Array.from(symbols).sort();
+  }
+
+  private async syncStock(symbol: string, isUpdate: boolean, ctx: ServiceContext): Promise<boolean> {
+    const { firebase, paytm: client } = ctx;
+
+    const result = await client.searchStock(symbol);
+    if (!result) {
+      ctx.log.warn(`No match for ${symbol}`);
+      return false;
+    }
+
+    const existing = await firebase.getStock(symbol);
+
+    if (existing && !isUpdate) {
+      return false;
+    }
+
+    if (existing) {
       await firebase.updateStock(symbol, {
         name: result.name,
         securityId: result.security_id,
@@ -95,17 +157,24 @@ export class StockSyncRequestHandler implements RequestHandler {
       };
       await firebase.setStock(symbol, config);
     }
-    ctx.log.info(`✓ Synced: ${symbol} → ${result.name} (${result.exchange}, ID: ${result.security_id})`);
+
+    return true;
   }
 
-  private async handleRemove(symbol: string, ctx: ServiceContext): Promise<void> {
-    const { firebase } = ctx;
+  private loadExistingSymbols(): string[] {
+    if (!existsSync(SYMBOLS_FILE)) return [];
+    try {
+      return JSON.parse(readFileSync(SYMBOLS_FILE, "utf-8"));
+    } catch {
+      return [];
+    }
+  }
 
-    ctx.log.info(`Removing stock: ${symbol}`);
+  private saveSymbols(symbols: string[]): void {
+    writeFileSync(SYMBOLS_FILE, JSON.stringify(symbols));
+  }
 
-    await firebase.removeStock(symbol);
-    ctx.log.info(`  🗑️  Removed stocks/${symbol}`);
-
-    ctx.log.info(`✓ Stock ${symbol} fully removed`);
+  private delay(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
   }
 }
