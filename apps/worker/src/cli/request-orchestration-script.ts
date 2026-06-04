@@ -44,10 +44,10 @@ class RequestOrchestrationScript extends BaseScript {
 
   protected getMetadata(): Record<string, unknown> {
     return {
-      processedCount: this.processedCount,
-      failedCount: this.failedCount,
-      currentRequest: this.currentRequest,
-      queueLength: this.pendingKeys.length,
+      "Processed": this.processedCount,
+      "Failed": this.failedCount,
+      "Current request": this.currentRequest,
+      "Queue length": this.pendingKeys.length,
     };
   }
 

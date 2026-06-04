@@ -6,6 +6,7 @@ import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
 import Badge from '../components/Badge'
+import DetailRow from '../components/DetailRow'
 import Loader from '../components/Loader'
 import BottomSheet from '../components/BottomSheet'
 import { useApp } from '../context/AppContext'
@@ -101,12 +102,40 @@ export default function Monitor() {
       <BottomSheet title={sheetData?.title} isOpen={!!sheetData} onClose={() => setSheetData(null)}>
         {sheetData && (
           <div style={styles.sheetBody}>
-            <pre style={styles.jsonBlock}>{JSON.stringify(sheetData.data, null, 2)}</pre>
-            {sheetData.type === 'request' && sheetData.data._source === 'failed' && (
-              <button style={styles.deleteBtn} onClick={() => handleDeleteFailed(sheetData.data._key)}>
-                Delete Failed Request
-              </button>
-            )}
+            {sheetData.type === 'script' && (() => {
+              const d = sheetData.data
+              const meta = d.metadata || {}
+              return (
+                <>
+                  <DetailRow label="Status" value={d.status} />
+                  <DetailRow label="Last Heartbeat" value={d.lastHeartbeat ? moment(d.lastHeartbeat).fromNow() : undefined} />
+                  <DetailRow label="Started" value={d.startedAt ? moment(d.startedAt).fromNow() : undefined} />
+                  {d.error && <DetailRow label="Error" value={d.error} />}
+                  {Object.entries(meta).map(([key, val]) => (
+                    <DetailRow key={key} label={key} value={val != null ? String(val) : undefined} />
+                  ))}
+                </>
+              )
+            })()}
+            {sheetData.type === 'request' && (() => {
+              const d = sheetData.data
+              return (
+                <>
+                  <DetailRow label="Type" value={d.type} />
+                  <DetailRow label="Status" value={d.status} />
+                  <DetailRow label="Created" value={d.createdAt ? moment(d.createdAt).fromNow() : undefined} />
+                  {d.payload && Object.entries(d.payload).map(([key, val]) => (
+                    <DetailRow key={key} label={key} value={val != null ? String(val) : undefined} />
+                  ))}
+                  {d.error && <DetailRow label="Error" value={d.error} />}
+                  {d._source === 'failed' && (
+                    <button style={styles.deleteBtn} onClick={() => handleDeleteFailed(d._key)}>
+                      Delete Failed Request
+                    </button>
+                  )}
+                </>
+              )
+            })()}
           </div>
         )}
       </BottomSheet>
@@ -162,20 +191,6 @@ const styles = {
   },
   sheetBody: {
     padding: 'var(--space-lg) var(--space-xl)',
-  },
-  jsonBlock: {
-    fontSize: 'var(--font-caption)',
-    fontFamily: 'SF Mono, Menlo, monospace',
-    background: 'var(--color-bg)',
-    borderRadius: 'var(--radius-sm)',
-    padding: 'var(--space-lg)',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-    color: 'var(--color-text-secondary)',
-    overflowX: 'auto',
-    maxHeight: '40vh',
-    overflowY: 'auto',
-    WebkitOverflowScrolling: 'touch',
   },
   deleteBtn: {
     width: '100%',

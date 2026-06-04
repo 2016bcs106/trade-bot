@@ -31,11 +31,11 @@ class MarketStatusScript extends BaseScript {
 
   protected getMetadata(): Record<string, unknown> {
     return {
-      lastFetchedAt: this.lastFetchedAt,
-      fetchCount: this.fetchCount,
-      errorCount: this.errorCount,
-      status: this.lastStatus,
-      tradeDate: this.lastTradeDate,
+      "Last fetched": this.lastFetchedAt,
+      "Fetch count": this.fetchCount,
+      "Error count": this.errorCount,
+      "Market status": this.lastStatus,
+      "Trade date": this.lastTradeDate,
     };
   }
 

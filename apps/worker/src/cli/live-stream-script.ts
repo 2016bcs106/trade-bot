@@ -36,13 +36,14 @@ class LiveStreamScript extends BaseScript {
   protected getMetadata(): Record<string, unknown> {
     const stats = this.tickBuffer?.getStats();
     return {
-      tickCount: this.tickCount,
-      totalFlushed: stats?.totalFlushed ?? 0,
-      totalFlushedToday: stats?.totalFlushedToday ?? 0,
-      bufferSize: stats?.bufferSize ?? 0,
-      uptimeMinutes: Math.round((nowMs() - this.startTime) / 1000 / 60),
-      trackedStocks: this.registry.stocks.length,
-      config: this.config.toJSON(),
+      "Tick count": this.tickCount,
+      "Total flushed": `${stats?.totalFlushed ?? 0} ticks`,
+      "Flushed today": `${stats?.totalFlushedToday ?? 0} ticks`,
+      "Buffer size": `${stats?.bufferSize ?? 0} ticks`,
+      "Uptime": `${Math.round((nowMs() - this.startTime) / 1000 / 60)} min`,
+      "Tracked stocks": this.registry.stocks.length,
+      "Mode": this.config.modeType,
+      "Stats interval": `${this.config.statsInterval}s`,
     };
   }
 
