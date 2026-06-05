@@ -39,7 +39,7 @@ class LiveStreamScript extends BaseScript {
       "Tick count": this.tickCount,
       "Ticks today": stats?.ticksToday ?? 0,
       "Raw size today": `${(stats?.rawSizeMB ?? 0).toFixed(1)} MB`,
-      "Est. compressed": `${(stats?.estimatedCompressedMB ?? 0).toFixed(1)} MB`,
+      "Est compressed": `${(stats?.estimatedCompressedMB ?? 0).toFixed(1)} MB`,
       "Total flushed to R2": `${stats?.totalFlushed ?? 0} ticks`,
       "Uptime": `${Math.round((nowMs() - this.startTime) / 1000 / 60)} min`,
       "Tracked stocks": this.registry.stocks.length,
