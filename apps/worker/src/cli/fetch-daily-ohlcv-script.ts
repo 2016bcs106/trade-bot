@@ -38,6 +38,18 @@ class FetchDailyOhlcvScript extends BaseScript {
     const toDate = moment().utcOffset("+05:30").format("YYYY-MM-DD");
     const fromDate = moment().utcOffset("+05:30").subtract(lookbackDays, "days").format("YYYY-MM-DD");
 
+    const pmlIdArg = process.argv.find((a) => a.startsWith("--pmlId="));
+    const symbolArg = process.argv.find((a) => a.startsWith("--symbol="));
+
+    if (pmlIdArg && symbolArg) {
+      const pmlId = pmlIdArg.split("=")[1];
+      const symbol = symbolArg.split("=")[1];
+      this.log.info(`Fetching ${symbol} (pmlId=${pmlId}) from ${fromDate} to ${toDate}`);
+      await this.fetchStock({ symbol, pmlId } as StockConfig, fromDate, toDate);
+      this.log.info(`Done — fetched=${this.fetchedCount} skipped=${this.skippedCount} errors=${this.errorCount}`);
+      return;
+    }
+
     this.log.info(`Fetching daily OHLCV from ${fromDate} to ${toDate} (${lookbackDays} days)`);
 
     const stocks = await this.firebase.getAllStocks();
