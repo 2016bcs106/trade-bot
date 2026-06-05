@@ -1,4 +1,7 @@
-import { gzipSync } from "zlib";
+import { resolve } from "path";
+import { appendFileSync, readdirSync, unlinkSync, mkdirSync, statSync } from "fs";
+import { execSync } from "child_process";
+import { createReadStream } from "fs";
 import moment from "moment";
 // @ts-ignore — installed on server
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -9,16 +12,12 @@ const R2_ENDPOINT = process.env.R2_ENDPOINT || "";
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
 const R2_BUCKET = process.env.R2_BUCKET || "";
-const MEMORY_THRESHOLD_BYTES = 100 * 1024 * 1024;
-const FLUSH_TOP_PERCENT = 0.1;
 
 export default class TickBuffer {
-  private bufferByInstrument = new Map<string, Record<string, unknown>[]>();
-  private bufferBytesByInstrument = new Map<string, number>();
-  private bufferBytesTotal = 0;
+  private ticksDir: string;
   private totalFlushed = 0;
   private totalFlushedToday = 0;
-  private lastFlushDate: string;
+  private tickCount = 0;
   private s3 = new S3Client({
     region: "auto",
     endpoint: R2_ENDPOINT,
@@ -30,98 +29,105 @@ export default class TickBuffer {
     private getDateIST: () => string,
     private getScripId: (stock: StockConfig) => number,
     private instrumentByKey: Map<string, StockConfig>,
-    private getMarketStatus: () => string,
-    private onCleanup: () => void,
   ) {
-    this.lastFlushDate = getDateIST();
+    this.ticksDir = resolve(process.cwd(), "..", "..", "data", "ticks");
+    mkdirSync(this.ticksDir, { recursive: true });
   }
 
   push(tick: Record<string, unknown>, instrumentKey: string): void {
-    const list = this.bufferByInstrument.get(instrumentKey) ?? [];
-    const bytes = JSON.stringify(tick).length;
-    list.push(tick);
-    this.bufferByInstrument.set(instrumentKey, list);
-    this.bufferBytesTotal += bytes;
-    this.bufferBytesByInstrument.set(instrumentKey, (this.bufferBytesByInstrument.get(instrumentKey) ?? 0) + bytes);
+    const stock = this.instrumentByKey.get(instrumentKey);
+    if (!stock) return;
+
+    const date = this.getDateIST();
+    const filePath = this.getFilePath(stock, date);
+    appendFileSync(filePath, JSON.stringify(tick) + "\n");
+    this.tickCount++;
   }
 
-  flush(force = false): void {
-    if (this.getTotalTicks() === 0) return;
+  flushToR2(): void {
+    const date = this.getDateIST();
+    const files = readdirSync(this.ticksDir).filter((f) => f.endsWith(".ndjson") && f.includes(date));
 
-    if (!force && this.getMarketStatus() === "Closed") {
-      this.log.info(`Discarding ${this.getTotalTicks()} off-market ticks`);
-      this.clear();
+    if (files.length === 0) {
+      this.log.info("No tick files to flush");
       return;
     }
 
-    if (!force && this.bufferBytesTotal < MEMORY_THRESHOLD_BYTES) return;
+    this.log.info(`Archiving ${files.length} tick files...`);
 
-    const today = this.getDateIST();
-    if (today !== this.lastFlushDate) {
-      this.log.info(`New trading day: ${today}`);
-      this.totalFlushedToday = 0;
-      this.lastFlushDate = today;
-      this.onCleanup();
-    }
+    const archivePath = resolve(this.ticksDir, `${date}.tar.gz`);
+    execSync(`tar czf ${archivePath} -C ${this.ticksDir} ${files.join(" ")}`, { timeout: 300_000 });
 
-    const entries = Array.from(this.bufferBytesByInstrument.entries())
-      .filter(([key]) => (this.bufferByInstrument.get(key)?.length ?? 0) > 0)
-      .sort((a, b) => b[1] - a[1]);
+    const archiveSize = statSync(archivePath).size;
+    this.log.info(`Archive created: ${(archiveSize / 1024 / 1024).toFixed(1)} MB`);
 
-    const count = force ? entries.length : Math.max(1, Math.ceil(entries.length * FLUSH_TOP_PERCENT));
-    const toFlush = entries.slice(0, count);
-    const timestamp = moment().utcOffset("+05:30").format("HH-mm-ss");
+    const key = `${date}.tar.gz`;
 
-    let flushedCount = 0;
-    let flushedBytes = 0;
-    for (const [instrumentKey] of toFlush) {
-      const ticks = this.bufferByInstrument.get(instrumentKey);
-      if (!ticks || ticks.length === 0) continue;
-      const stock = this.instrumentByKey.get(instrumentKey);
-      if (!stock) continue;
+    this.s3.send(new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: createReadStream(archivePath),
+      ContentLength: archiveSize,
+      ContentType: "application/gzip",
+    })).then(() => {
+      unlinkSync(archivePath);
+      this.log.info(`Uploaded to R2: ${key}`);
+    }).catch((err: Error) => {
+      this.log.error(`R2 upload failed for ${key}`, err);
+    });
 
-      const lines = ticks.map((tick) => JSON.stringify(tick)).join("\n") + "\n";
-      const compressed = gzipSync(Buffer.from(lines), { level: 9 });
-      const key = `${today}/${stock.exchange}_${this.getScripId(stock)}/${timestamp}.ndjson.gz`;
-
-      this.s3.send(new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: key,
-        Body: compressed,
-        ContentType: "application/gzip",
-      })).catch((err: Error) => this.log.error(`R2 upload failed for ${key}`, err));
-
-      flushedCount += ticks.length;
-      const instrumentBytes = this.bufferBytesByInstrument.get(instrumentKey) ?? 0;
-      flushedBytes += instrumentBytes;
-      this.bufferByInstrument.set(instrumentKey, []);
-      this.bufferBytesByInstrument.set(instrumentKey, 0);
-    }
-
-    this.bufferBytesTotal -= flushedBytes;
-    this.totalFlushed += flushedCount;
-    this.totalFlushedToday += flushedCount;
-    this.log.info(`Flushed ${flushedCount} ticks to R2 (${toFlush.length} instruments, ${(flushedBytes / 1024 / 1024).toFixed(1)}MB) — total=${this.totalFlushed}`);
+    this.totalFlushed += this.tickCount;
+    this.totalFlushedToday = this.tickCount;
+    this.log.info(`Flushed ${files.length} files (${this.tickCount} ticks) to R2 as ${key}`);
   }
 
-  getTotalTicks(): number {
-    let total = 0;
-    for (const arr of this.bufferByInstrument.values()) total += arr.length;
-    return total;
+  cleanupOldFiles(): void {
+    const keepDates = new Set<string>();
+    for (let i = 0; i < 7; i++) {
+      keepDates.add(moment().utcOffset("+05:30").subtract(i, "days").format("YYYY-MM-DD"));
+    }
+
+    for (const fileName of readdirSync(this.ticksDir)) {
+      if (!fileName.endsWith(".ndjson")) continue;
+      const match = fileName.match(/_(\d{4}-\d{2}-\d{2})\.ndjson$/);
+      if (!match) continue;
+      if (keepDates.has(match[1])) continue;
+      try {
+        unlinkSync(resolve(this.ticksDir, fileName));
+        this.log.info(`Cleaned up old tick file: ${fileName}`);
+      } catch {}
+    }
+  }
+
+  resetDailyCount(): void {
+    this.tickCount = 0;
+    this.totalFlushedToday = 0;
   }
 
   getStats() {
+    const rawSizeMB = this.getTodayRawSize() / (1024 * 1024);
     return {
       totalFlushed: this.totalFlushed,
       totalFlushedToday: this.totalFlushedToday,
-      bufferSize: this.getTotalTicks(),
-      bufferMB: this.bufferBytesTotal / 1024 / 1024,
+      ticksToday: this.tickCount,
+      rawSizeMB,
+      estimatedCompressedMB: rawSizeMB * 0.07,
     };
   }
 
-  private clear(): void {
-    this.bufferByInstrument.clear();
-    this.bufferBytesByInstrument.clear();
-    this.bufferBytesTotal = 0;
+  private getTodayRawSize(): number {
+    const date = this.getDateIST();
+    let total = 0;
+    for (const fileName of readdirSync(this.ticksDir)) {
+      if (!fileName.endsWith(".ndjson") || !fileName.includes(date)) continue;
+      try {
+        total += statSync(resolve(this.ticksDir, fileName)).size;
+      } catch {}
+    }
+    return total;
+  }
+
+  private getFilePath(stock: StockConfig, date: string): string {
+    return resolve(this.ticksDir, `${stock.exchange}_${this.getScripId(stock)}_${date}.ndjson`);
   }
 }

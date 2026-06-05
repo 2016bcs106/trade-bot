@@ -37,9 +37,10 @@ class LiveStreamScript extends BaseScript {
     const stats = this.tickBuffer?.getStats();
     return {
       "Tick count": this.tickCount,
-      "Total flushed": `${stats?.totalFlushed ?? 0} ticks`,
-      "Flushed today": `${stats?.totalFlushedToday ?? 0} ticks`,
-      "Buffer size": `${stats?.bufferSize ?? 0} ticks`,
+      "Ticks today": stats?.ticksToday ?? 0,
+      "Raw size today": `${(stats?.rawSizeMB ?? 0).toFixed(1)} MB`,
+      "Est. compressed": `${(stats?.estimatedCompressedMB ?? 0).toFixed(1)} MB`,
+      "Total flushed to R2": `${stats?.totalFlushed ?? 0} ticks`,
       "Uptime": `${Math.round((nowMs() - this.startTime) / 1000 / 60)} min`,
       "Tracked stocks": this.registry.stocks.length,
       "Mode": this.config.modeType,
@@ -59,8 +60,6 @@ class LiveStreamScript extends BaseScript {
       () => todayDate(),
       (s) => this.registry.getScripId(s),
       this.registry.instrumentByKey,
-      () => this.marketStatus,
-      () => this.aggregateStore.cleanupOldFiles(),
     );
 
     this.streamerManager = new StreamerManager(
@@ -69,7 +68,7 @@ class LiveStreamScript extends BaseScript {
       (s) => this.registry.getScripId(s),
       () => this.marketStatus,
       (tick) => this.handleTick(tick),
-      () => this.tickBuffer.flush(true),
+      () => {},
     );
 
     this.broadcaster = new ClientBroadcaster(
@@ -83,6 +82,7 @@ class LiveStreamScript extends BaseScript {
     );
 
     this.aggregateStore.cleanupOldFiles();
+    this.tickBuffer.cleanupOldFiles();
     this.broadcaster.start();
     this.log.info("Starting live market data recorder");
 
@@ -111,7 +111,6 @@ class LiveStreamScript extends BaseScript {
         this.log.info("Public access token loaded from Firebase");
       } else {
         this.log.info("Public access token updated — reconnecting");
-        this.tickBuffer.flush(true);
         this.streamerManager.disconnect();
       }
 
@@ -137,12 +136,13 @@ class LiveStreamScript extends BaseScript {
       }
 
       if (data.status === "Closed" && prevStatus !== "Closed") {
-        this.log.info("Market closed — final flush and disconnecting streamers");
-        this.tickBuffer.flush(true);
+        this.log.info("Market closed — flushing to R2 and disconnecting streamers");
+        this.tickBuffer.flushToR2();
         this.aggregateStore.save(this.registry.instrumentByKey);
         this.streamerManager.disconnect();
       } else if (data.status !== "Closed" && prevStatus === "Closed") {
         this.log.info("Market opened — clearing aggregates and connecting streamers");
+        this.tickBuffer.resetDailyCount();
         this.aggregateStore.clear();
         this.broadcaster.broadcastAll({ type: "day_reset", data: { reason: "market opened" } });
         if (this.currentToken) {
@@ -157,7 +157,6 @@ class LiveStreamScript extends BaseScript {
       this.broadcaster.broadcastStockList();
     });
 
-    setInterval(() => this.tickBuffer.flush(), 10_000);
     setInterval(() => this.aggregateStore.save(this.registry.instrumentByKey), 60_000);
     setInterval(() => this.logStats(), this.config.statsInterval * 1000);
     setInterval(() => this.publishStockList(), 60_000);
@@ -202,9 +201,8 @@ class LiveStreamScript extends BaseScript {
     const bufferStats = this.tickBuffer.getStats();
 
     this.log.info(
-      `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${bufferStats.totalFlushedToday} ` +
-      `rate=${ticksPerSec}/s buffer=${bufferStats.bufferSize}/${bufferStats.bufferMB.toFixed(1)}MB ` +
-      `tracked=${this.aggregateStore.size} clients=${this.broadcaster.clientCount} mem=${memUsageMB}MB`,
+      `Stats — uptime=${uptimeMin}m ticks=${this.tickCount} today=${bufferStats.ticksToday} ` +
+      `rate=${ticksPerSec}/s tracked=${this.aggregateStore.size} clients=${this.broadcaster.clientCount} mem=${memUsageMB}MB`,
     );
     this.tickCountAtLastStats = this.tickCount;
   }
