@@ -34,12 +34,12 @@ class FetchDailyOhlcvScript extends BaseScript {
   protected async run(): Promise<void> {
     mkdirSync(OUTPUT_DIR, { recursive: true });
 
-    const lookbackDays = parseInt(process.argv[2] || String(DEFAULT_LOOKBACK_DAYS), 10);
-    const toDate = moment().utcOffset("+05:30").format("YYYY-MM-DD");
-    const fromDate = moment().utcOffset("+05:30").subtract(lookbackDays, "days").format("YYYY-MM-DD");
-
     const pmlIdArg = process.argv.find((a) => a.startsWith("--pmlId="));
     const symbolArg = process.argv.find((a) => a.startsWith("--symbol="));
+    const daysArg = process.argv.find((a) => /^\d+$/.test(a));
+    const lookbackDays = daysArg ? parseInt(daysArg, 10) : DEFAULT_LOOKBACK_DAYS;
+    const toDate = moment().utcOffset("+05:30").format("YYYY-MM-DD");
+    const fromDate = moment().utcOffset("+05:30").subtract(lookbackDays, "days").format("YYYY-MM-DD");
 
     if (pmlIdArg && symbolArg) {
       const pmlId = pmlIdArg.split("=")[1];
