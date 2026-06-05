@@ -13,5 +13,10 @@
     "name": "fetch-daily-ohlcv",
     "schedule": "30 10 * * 1-5",
     "command": "src/cli/fetch-daily-ohlcv-script.ts"
+  },
+  {
+    "name": "swing-scanner",
+    "schedule": "0 12 * * 1-5",
+    "command": "src/cli/swing-scanner-script.ts"
   }
 ]
