@@ -8,5 +8,10 @@
     "name": "stock-sync-monthly",
     "schedule": "30 0 1 * *",
     "command": "src/cli/stock-sync-trigger-script.ts --force"
+  },
+  {
+    "name": "fetch-daily-ohlcv",
+    "schedule": "30 10 * * 1-5",
+    "command": "src/cli/fetch-daily-ohlcv-script.ts"
   }
 ]
