@@ -14,8 +14,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "daily-ohlcv")
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "models", "signal-lstm")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data", "daily-ohlcv")
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data", "models", "signal-lstm")
 
 SEQUENCE_LENGTH = 60
 PREDICTION_HORIZON = 10
@@ -29,13 +29,13 @@ NUM_FEATURES = 14
 
 class LSTMModel(nn.Module):
     """Predicts max upside % and max downside % over the prediction horizon."""
-    def __init__(self, input_size=NUM_FEATURES, hidden_size=64, num_layers=2, dropout=0.3):
+    def __init__(self, input_size=NUM_FEATURES, hidden_size=24, num_layers=2, dropout=0.2):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
-        self.fc1 = nn.Linear(hidden_size, 32)
+        self.fc1 = nn.Linear(hidden_size, 8)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(32, 2)  # [max_upside_pct, max_downside_pct]
+        self.fc2 = nn.Linear(8, 2)  # [max_upside_pct, max_downside_pct]
 
     def forward(self, x):
         _, (h_n, _) = self.lstm(x)
