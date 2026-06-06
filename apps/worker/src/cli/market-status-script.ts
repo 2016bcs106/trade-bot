@@ -72,15 +72,18 @@ class MarketStatusScript extends BaseScript {
         return;
       }
 
-      this.lastStatus = capitalMarket.marketStatus;
+      const rawStatus = capitalMarket.marketStatus;
+      const status = rawStatus === "Close" ? "Closed" : rawStatus;
+
+      this.lastStatus = status;
       this.lastTradeDate = capitalMarket.tradeDate;
       this.lastFetchedAt = nowISO();
       this.fetchCount++;
 
-      this.log.info(`${capitalMarket.marketStatus} | tradeDate=${capitalMarket.tradeDate}`);
+      this.log.info(`${status} | tradeDate=${capitalMarket.tradeDate}`);
 
       await this.firebase.setValue("market_status", {
-        status: capitalMarket.marketStatus,
+        status,
         tradeDate: capitalMarket.tradeDate,
         updatedAt: this.lastFetchedAt,
       });
