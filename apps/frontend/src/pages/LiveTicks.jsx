@@ -13,7 +13,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid, faSliders } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid, faSliders, faCircleQuestion } from '@fortawesome/free-solid-svg-icons'
 import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
@@ -147,8 +147,61 @@ const pressureChartOptions = {
   },
 }
 
-// ─── Sub-components ──────────────────────────────────────────────
+const rsiChartOptions = {
+  ...baseChartOptions,
+  scales: {
+    ...baseChartOptions.scales,
+    y: { display: false, min: 0, max: 100 },
+  },
+}
 
+const rsiZonePlugin = {
+  id: 'rsiZones',
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea: { left, right, top, bottom }, scales: { y } } = chart
+    if (!y) return
+    const y70 = y.getPixelForValue(70)
+    const y30 = y.getPixelForValue(30)
+    ctx.save()
+    ctx.fillStyle = 'rgba(255, 59, 48, 0.04)'
+    ctx.fillRect(left, top, right - left, y70 - top)
+    ctx.fillStyle = 'rgba(52, 199, 89, 0.04)'
+    ctx.fillRect(left, y30, right - left, bottom - y30)
+    ctx.setLineDash([4, 3])
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = 'rgba(60, 60, 67, 0.2)'
+    ctx.beginPath()
+    ctx.moveTo(left, y70); ctx.lineTo(right, y70)
+    ctx.moveTo(left, y30); ctx.lineTo(right, y30)
+    ctx.stroke()
+    ctx.restore()
+  },
+}
+
+const ratioChartOptions = {
+  ...baseChartOptions,
+  scales: {
+    ...baseChartOptions.scales,
+    y: { display: false },
+  },
+}
+
+const ratioOneLinePlugin = {
+  id: 'ratioOneLine',
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea: { left, right }, scales: { y } } = chart
+    if (!y) return
+    const yPos = y.getPixelForValue(1)
+    ctx.save()
+    ctx.setLineDash([4, 3])
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = 'rgba(60, 60, 67, 0.2)'
+    ctx.beginPath()
+    ctx.moveTo(left, yPos); ctx.lineTo(right, yPos)
+    ctx.stroke()
+    ctx.restore()
+  },
+}
 
 // ─── Main Component ──────────────────────────────────────────────
 
@@ -169,12 +222,15 @@ export default function LiveTicks() {
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
+  const rsiChartRef = useRef(null)
+  const ratioChartRef = useRef(null)
   const [visibleCharts, setVisibleCharts] = useState(() => {
     try {
       const saved = localStorage.getItem('liveTicksVisibleCharts')
       if (saved) return JSON.parse(saved)
     } catch {}
-    return { price: true, pressure: true, volume: true }
+    return { price: true, rsi: true, ratio: true, pressure: true, volume: true }
   })
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
@@ -239,23 +295,69 @@ export default function LiveTicks() {
     const lineColor = !marketOpen ? '#8e8e93' : openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
     const fillRgb = !marketOpen ? '142, 142, 147' : (isPositive ? '52, 199, 89' : '255, 59, 48')
 
+    const bbPeriod = 20
+    const multiplier = 2
+    const closes = rows.map((r) => r ? r.close : null)
+    const upper = new Array(closes.length).fill(null)
+    const lower = new Array(closes.length).fill(null)
+
+    const window = []
+    for (let i = 0; i < closes.length; i++) {
+      if (closes[i] != null) window.push(closes[i])
+      if (window.length > bbPeriod) window.shift()
+      if (window.length === bbPeriod) {
+        const mean = window.reduce((a, b) => a + b, 0) / bbPeriod
+        const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / bbPeriod
+        const std = Math.sqrt(variance)
+        upper[i] = mean + multiplier * std
+        lower[i] = mean - multiplier * std
+      }
+    }
+
+    const bandColor = marketOpen ? 'rgba(0, 122, 255, 0.3)' : 'rgba(142, 142, 147, 0.3)'
+
     return {
       labels: FIXED_LABELS,
-      datasets: [{
-        label: 'Close Price',
-        data: rows.map((r) => r ? r.close : null),
-        borderColor: lineColor,
-        backgroundColor: (ctx) => {
-          if (!ctx.chart) return 'transparent'
-          const { top, bottom } = ctx.chart.chartArea || { top: 0, bottom: ctx.chart.height }
-          const gradient = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
-          gradient.addColorStop(0, `rgba(${fillRgb}, 0.2)`)
-          gradient.addColorStop(1, `rgba(${fillRgb}, 0)`)
-          return gradient
+      datasets: [
+        {
+          label: 'Upper Band',
+          data: upper,
+          borderColor: bandColor,
+          borderWidth: 0.5,
+          borderDash: [3, 3],
+          pointRadius: 0,
+          fill: false,
+          spanGaps: true,
+          skipPulsingDot: true,
         },
-        fill: true,
-        spanGaps: true,
-      }],
+        {
+          label: 'Lower Band',
+          data: lower,
+          borderColor: bandColor,
+          borderWidth: 0.5,
+          borderDash: [3, 3],
+          pointRadius: 0,
+          fill: '-1',
+          backgroundColor: marketOpen ? 'rgba(0, 122, 255, 0.04)' : 'rgba(142, 142, 147, 0.04)',
+          spanGaps: true,
+          skipPulsingDot: true,
+        },
+        {
+          label: 'Close Price',
+          data: closes,
+          borderColor: lineColor,
+          backgroundColor: (ctx) => {
+            if (!ctx.chart) return 'transparent'
+            const { top, bottom } = ctx.chart.chartArea || { top: 0, bottom: ctx.chart.height }
+            const gradient = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
+            gradient.addColorStop(0, `rgba(${fillRgb}, 0.2)`)
+            gradient.addColorStop(1, `rgba(${fillRgb}, 0)`)
+            return gradient
+          },
+          fill: true,
+          spanGaps: true,
+        },
+      ],
     }
   }, [rows, openPrice, latestPrice])
 
@@ -363,8 +465,102 @@ export default function LiveTicks() {
     }
   }, [rows])
 
+  const rsiChartData = useMemo(() => {
+    const period = 14
+    const marketOpen = isMarketOpen()
+
+    const ratios = rows.map((r) => {
+      if (!r) return null
+      const sell = r.sellQtySum || 0
+      return sell > 0 ? r.buyQtySum / sell : 1
+    })
+
+    const rsi = new Array(ratios.length).fill(null)
+    let avgGain = 0, avgLoss = 0
+    let count = 0, startIdx = -1
+    for (let i = 0; i < ratios.length && count <= period; i++) {
+      if (ratios[i] == null) continue
+      if (startIdx === -1) { startIdx = i; count++; continue }
+      const diff = ratios[i] - (ratios[i - 1] ?? ratios[i])
+      let prevIdx = i - 1
+      while (prevIdx >= 0 && ratios[prevIdx] == null) prevIdx--
+      if (prevIdx < 0) { count++; continue }
+      const change = ratios[i] - ratios[prevIdx]
+      if (change > 0) avgGain += change; else avgLoss -= change
+      count++
+    }
+
+    let seedEnd = -1
+    count = 0
+    for (let i = 0; i < ratios.length; i++) {
+      if (ratios[i] != null) count++
+      if (count === period + 1) { seedEnd = i; break }
+    }
+
+    if (seedEnd === -1) return { labels: FIXED_LABELS, datasets: [] }
+
+    avgGain /= period
+    avgLoss /= period
+    rsi[seedEnd] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+
+    let prevVal = ratios[seedEnd]
+    for (let i = seedEnd + 1; i < ratios.length; i++) {
+      if (ratios[i] == null) continue
+      const change = ratios[i] - prevVal
+      const gain = change > 0 ? change : 0
+      const loss = change < 0 ? -change : 0
+      avgGain = (avgGain * (period - 1) + gain) / period
+      avgLoss = (avgLoss * (period - 1) + loss) / period
+      rsi[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+      prevVal = ratios[i]
+    }
+
+    const rsiMapped = rows.map((r, i) => r ? rsi[i] : null)
+    const lineColor = marketOpen ? '#007aff' : '#8e8e93'
+
+    return {
+      labels: FIXED_LABELS,
+      datasets: [
+        { label: 'B/S Ratio RSI', data: rsiMapped, borderColor: lineColor, borderWidth: 1.5, pointRadius: 0, spanGaps: true, fill: false },
+      ],
+    }
+  }, [rows])
+
+  const ratioChartData = useMemo(() => {
+    const marketOpen = isMarketOpen()
+    const data = rows.map((r) => {
+      if (!r) return null
+      const sell = r.sellQtySum || 0
+      return sell > 0 ? r.buyQtySum / sell : null
+    })
+
+    const lineColor = marketOpen ? '#007aff' : '#8e8e93'
+    const fillRgb = marketOpen ? '0, 122, 255' : '142, 142, 147'
+
+    return {
+      labels: FIXED_LABELS,
+      datasets: [{
+        label: 'Buy/Sell Ratio',
+        data,
+        borderColor: lineColor,
+        backgroundColor: (ctx) => {
+          if (!ctx.chart?.chartArea) return 'transparent'
+          const { top, bottom } = ctx.chart.chartArea
+          const g = ctx.chart.ctx.createLinearGradient(0, top, 0, bottom)
+          g.addColorStop(0, `rgba(${fillRgb}, 0.12)`)
+          g.addColorStop(1, `rgba(${fillRgb}, 0)`)
+          return g
+        },
+        fill: true,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        spanGaps: true,
+      }],
+    }
+  }, [rows])
+
   const syncChartsAtIndex = (sourceChart, index) => {
-    const charts = [priceChartRef.current, pressureChartRef.current, qtyChartRef.current].filter(Boolean)
+    const charts = [priceChartRef.current, pressureChartRef.current, qtyChartRef.current, rsiChartRef.current, ratioChartRef.current].filter(Boolean)
     const sourceLabel = sourceChart?.data?.labels?.[index]
     charts.forEach((target) => {
       if (sourceLabel == null) { target.setActiveElements([]); target.tooltip?.setActiveElements([], { x: 0, y: 0 }); target.update('none'); return }
@@ -376,7 +572,7 @@ export default function LiveTicks() {
   }
 
   const clearSyncedHover = () => {
-    [priceChartRef.current, pressureChartRef.current, qtyChartRef.current].filter(Boolean).forEach((chart) => {
+    [priceChartRef.current, pressureChartRef.current, qtyChartRef.current, rsiChartRef.current, ratioChartRef.current].filter(Boolean).forEach((chart) => {
       chart.setActiveElements([]); chart.tooltip?.setActiveElements([], { x: 0, y: 0 }); chart.update('none')
     })
   }
@@ -432,9 +628,14 @@ export default function LiveTicks() {
               </span>
             )}
           </div>
-          <button style={styles.chartSettingsBtn} onClick={() => setChartSettingsOpen(true)}>
-            <FontAwesomeIcon icon={faSliders} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={styles.chartSettingsBtn} onClick={() => setGuideOpen(true)}>
+              <FontAwesomeIcon icon={faCircleQuestion} />
+            </button>
+            <button style={styles.chartSettingsBtn} onClick={() => setChartSettingsOpen(true)}>
+              <FontAwesomeIcon icon={faSliders} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -487,6 +688,8 @@ export default function LiveTicks() {
               { key: 'price', label: 'Price Chart' },
               { key: 'pressure', label: 'Sell Pressure' },
               { key: 'volume', label: 'Buy vs Sell Volume' },
+              { key: 'rsi', label: 'B/S Ratio RSI' },
+              { key: 'ratio', label: 'Buy / Sell Ratio' },
             ].map(({ key, label }) => (
               <div key={key} style={styles.toggleRow} onClick={() => setVisibleCharts((prev) => { const next = { ...prev, [key]: !prev[key] }; localStorage.setItem('liveTicksVisibleCharts', JSON.stringify(next)); return next })}>
                 <span style={styles.toggleLabel}>{label}</span>
@@ -497,12 +700,69 @@ export default function LiveTicks() {
             ))}
           </BottomSheet>
 
+          <BottomSheet title="Trading Guide" isOpen={guideOpen} onClose={() => setGuideOpen(false)}>
+            <div style={styles.guideContent}>
+              <div style={styles.guideSection}>
+                <div style={styles.guideSectionTitle}>When to BUY (Go Long)</div>
+                <div style={styles.guideItem}>Price drops to the lower Bollinger Band AND RSI is below 30 — buyers stepping in, bounce likely</div>
+                <div style={styles.guideItem}>Bands get very narrow (squeeze), then price pops upward AND RSI is above 50 — new uptrend starting</div>
+              </div>
+              <div style={styles.guideSection}>
+                <div style={styles.guideSectionTitle}>When to SELL (Go Short)</div>
+                <div style={styles.guideItem}>Price rises to the upper Bollinger Band AND RSI is above 70 — sellers stepping in, drop likely</div>
+                <div style={styles.guideItem}>Bands get very narrow (squeeze), then price drops AND RSI is below 50 — new downtrend starting</div>
+              </div>
+              <div style={styles.guideSection}>
+                <div style={styles.guideSectionTitle}>When to EXIT</div>
+                <div style={styles.guideItem}>Long position: exit when price reaches the middle band (SMA). Stop loss if price falls below the lower band.</div>
+                <div style={styles.guideItem}>Short position: exit when price reaches the middle band. Stop loss if price rises above the upper band.</div>
+              </div>
+              <div style={styles.guideSection}>
+                <div style={styles.guideSectionTitle}>When to do NOTHING</div>
+                <div style={styles.guideItem}>Price is in the middle of the bands, RSI is between 40-60 — no clear direction, wait for a setup</div>
+              </div>
+              <div style={styles.guideSection}>
+                <div style={styles.guideSectionTitle}>High Conviction: Squeeze Breakout</div>
+                <div style={styles.guideItem}>1. Bands become very tight (low volatility)</div>
+                <div style={styles.guideItem}>2. Price moves sharply in one direction</div>
+                <div style={styles.guideItem}>3. RSI confirms (above 50 for up, below 50 for down)</div>
+                <div style={styles.guideItem}>4. B/S ratio confirms (above 1 for up, below 1 for down)</div>
+              </div>
+              <div style={styles.guideSection}>
+                <div style={styles.guideSectionTitle}>Time Filters</div>
+                <div style={styles.guideItem}>Avoid 9:00-9:20 — opening noise, bands unstable</div>
+                <div style={styles.guideItem}>Best setups: 9:30-11:30 — volume is real</div>
+                <div style={styles.guideItem}>Avoid 2:30-3:15 — institutional squaring off</div>
+              </div>
+            </div>
+          </BottomSheet>
+
           {/* Price chart */}
           {visibleCharts.price && (
             <div style={styles.chartSection}>
               <div style={styles.chartLabel}>Live</div>
               <div style={styles.chartViewport}>
                 <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+              </div>
+            </div>
+          )}
+
+          {/* B/S Ratio RSI chart */}
+          {visibleCharts.rsi && (
+            <div style={styles.chartSection}>
+              <div style={styles.chartLabel}>B/S Ratio RSI (14)</div>
+              <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
+                <Line ref={rsiChartRef} data={rsiChartData} options={buildOptions(rsiChartOptions)} plugins={[syncCrosshairPlugin, rsiZonePlugin, pulsingDotPlugin]} />
+              </div>
+            </div>
+          )}
+
+          {/* B/S Ratio chart */}
+          {visibleCharts.ratio && (
+            <div style={styles.chartSection}>
+              <div style={styles.chartLabel}>Buy / Sell Ratio</div>
+              <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
+                <Line ref={ratioChartRef} data={ratioChartData} options={buildOptions(ratioChartOptions)} plugins={[syncCrosshairPlugin, ratioOneLinePlugin, pulsingDotPlugin]} />
               </div>
             </div>
           )}
@@ -707,5 +967,25 @@ const styles = {
     background: '#fff',
     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
     transition: 'transform 0.2s',
+  },
+  guideContent: {
+    padding: '8px var(--space-xl) 24px',
+  },
+  guideSection: {
+    marginBottom: '20px',
+  },
+  guideSectionTitle: {
+    fontSize: 'var(--font-subhead)',
+    fontWeight: 700,
+    color: 'var(--color-text)',
+    marginBottom: '8px',
+  },
+  guideItem: {
+    fontSize: 'var(--font-footnote)',
+    color: 'var(--color-text-muted)',
+    lineHeight: 1.5,
+    paddingLeft: '12px',
+    borderLeft: '2px solid var(--color-border)',
+    marginBottom: '6px',
   },
 }
