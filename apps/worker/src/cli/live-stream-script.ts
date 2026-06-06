@@ -121,13 +121,14 @@ class LiveStreamScript extends BaseScript {
 
     this.firebase.onMarketStatusChange((data) => {
       if (!data) return;
+      const status = data.status === "Close" ? "Closed" : data.status;
       const prevStatus = this.marketStatus;
       const prevTradeDate = this.lastTradeDate;
-      this.marketStatus = data.status;
+      this.marketStatus = status;
       this.lastTradeDate = data.tradeDate;
 
-      this.log.info(`Market status: ${data.status} | tradeDate=${data.tradeDate}`);
-      this.broadcaster.broadcastAll({ type: "market_status", data: { status: data.status, tradeDate: data.tradeDate } });
+      this.log.info(`Market status: ${status} | tradeDate=${data.tradeDate}`);
+      this.broadcaster.broadcastAll({ type: "market_status", data: { status, tradeDate: data.tradeDate } });
 
       if (!prevTradeDate && data.tradeDate && this.registry.stocks.length > 0) {
         this.aggregateStore.clear();
@@ -135,12 +136,12 @@ class LiveStreamScript extends BaseScript {
         this.broadcaster.sendSnapshotsToSubscribers();
       }
 
-      if (data.status === "Closed" && prevStatus !== "Closed") {
+      if (status === "Closed" && prevStatus !== "Closed") {
         this.log.info("Market closed — flushing to R2 and disconnecting streamers");
         this.tickBuffer.flushToR2();
         this.aggregateStore.save(this.registry.instrumentByKey);
         this.streamerManager.disconnect();
-      } else if (data.status !== "Closed" && prevStatus === "Closed") {
+      } else if (status !== "Closed" && prevStatus === "Closed") {
         this.log.info("Market opened — clearing aggregates and connecting streamers");
         this.tickBuffer.resetDailyCount();
         this.aggregateStore.clear();
