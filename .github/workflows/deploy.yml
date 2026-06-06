@@ -1,0 +1,16 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger system update via Firebase
+        run: |
+          curl -s -X POST \
+            "${{ secrets.FIREBASE_DATABASE_URL }}/request_queue.json?auth=${{ secrets.FIREBASE_DATABASE_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"type":"system_update","payload":{},"status":"pending","createdAt":"'"$(date -u +%Y-%m-%dT%H:%M:%S%z)"'"}'
