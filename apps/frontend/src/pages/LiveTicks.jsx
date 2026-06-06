@@ -127,6 +127,17 @@ const baseChartOptions = {
   },
 }
 
+const priceChartOptions = {
+  ...baseChartOptions,
+  plugins: {
+    ...baseChartOptions.plugins,
+    tooltip: {
+      ...baseChartOptions.plugins.tooltip,
+      filter: (item) => item.dataset.label === 'Close Price',
+    },
+  },
+}
+
 const pressureChartOptions = {
   ...baseChartOptions,
   plugins: {
@@ -221,6 +232,7 @@ export default function LiveTicks() {
   _marketOpen = marketStatus !== 'Closed'
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheetSearch, setSheetSearch] = useState('')
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const rsiChartRef = useRef(null)
@@ -298,6 +310,7 @@ export default function LiveTicks() {
     const bbPeriod = 20
     const multiplier = 2
     const closes = rows.map((r) => r ? r.close : null)
+    const sma = new Array(closes.length).fill(null)
     const upper = new Array(closes.length).fill(null)
     const lower = new Array(closes.length).fill(null)
 
@@ -309,12 +322,14 @@ export default function LiveTicks() {
         const mean = window.reduce((a, b) => a + b, 0) / bbPeriod
         const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / bbPeriod
         const std = Math.sqrt(variance)
+        sma[i] = mean
         upper[i] = mean + multiplier * std
         lower[i] = mean - multiplier * std
       }
     }
 
     const bandColor = marketOpen ? 'rgba(0, 122, 255, 0.3)' : 'rgba(142, 142, 147, 0.3)'
+    const smaColor = marketOpen ? 'rgba(0, 122, 255, 0.5)' : 'rgba(142, 142, 147, 0.5)'
 
     return {
       labels: FIXED_LABELS,
@@ -339,6 +354,17 @@ export default function LiveTicks() {
           pointRadius: 0,
           fill: '-1',
           backgroundColor: marketOpen ? 'rgba(0, 122, 255, 0.04)' : 'rgba(142, 142, 147, 0.04)',
+          spanGaps: true,
+          skipPulsingDot: true,
+        },
+        {
+          label: 'SMA (20)',
+          data: sma,
+          borderColor: smaColor,
+          borderWidth: 1,
+          borderDash: [2, 2],
+          pointRadius: 0,
+          fill: false,
           spanGaps: true,
           skipPulsingDot: true,
         },
@@ -649,8 +675,22 @@ export default function LiveTicks() {
 
       {!isDisconnected && (
         <>
-          <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => setSheetOpen(false)}>
-            {[...stocks].sort((a, b) => {
+          <BottomSheet title="Select Stock" isOpen={sheetOpen} onClose={() => { setSheetOpen(false); setSheetSearch('') }}>
+            <div style={styles.sheetSearchWrap}>
+              <input
+                style={styles.sheetSearchInput}
+                type="text"
+                placeholder="Search stocks..."
+                value={sheetSearch}
+                onChange={(e) => setSheetSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            {[...stocks].filter((s) => {
+              if (!sheetSearch) return true
+              const q = sheetSearch.toLowerCase()
+              return s.symbol.toLowerCase().includes(q) || (s.displayName || '').toLowerCase().includes(q)
+            }).sort((a, b) => {
               if (a.isFavorite && !b.isFavorite) return -1;
               if (!a.isFavorite && b.isFavorite) return 1;
               return a.symbol.localeCompare(b.symbol);
@@ -728,12 +768,6 @@ export default function LiveTicks() {
                 <div style={styles.guideItem}>3. RSI confirms (above 50 for up, below 50 for down)</div>
                 <div style={styles.guideItem}>4. B/S ratio confirms (above 1 for up, below 1 for down)</div>
               </div>
-              <div style={styles.guideSection}>
-                <div style={styles.guideSectionTitle}>Time Filters</div>
-                <div style={styles.guideItem}>Avoid 9:00-9:20 — opening noise, bands unstable</div>
-                <div style={styles.guideItem}>Best setups: 9:30-11:30 — volume is real</div>
-                <div style={styles.guideItem}>Avoid 2:30-3:15 — institutional squaring off</div>
-              </div>
             </div>
           </BottomSheet>
 
@@ -742,7 +776,7 @@ export default function LiveTicks() {
             <div style={styles.chartSection}>
               <div style={styles.chartLabel}>Live</div>
               <div style={styles.chartViewport}>
-                <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+                <Line ref={priceChartRef} data={priceChartData} options={buildOptions(priceChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
               </div>
             </div>
           )}
@@ -750,7 +784,10 @@ export default function LiveTicks() {
           {/* B/S Ratio RSI chart */}
           {visibleCharts.rsi && (
             <div style={styles.chartSection}>
-              <div style={styles.chartLabel}>B/S Ratio RSI (14)</div>
+              <div style={styles.chartLabelRow}>
+                <div style={styles.chartLabel}>B/S Ratio RSI (14)</div>
+                {(() => { const d = rsiChartData.datasets?.[0]?.data; const v = d && d.findLast((x) => x != null); return v != null ? <span style={{ ...styles.chartValue, color: v > 70 ? 'var(--color-danger)' : v < 30 ? 'var(--color-success)' : 'var(--color-text-muted)' }}>{v.toFixed(1)}</span> : null })()}
+              </div>
               <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
                 <Line ref={rsiChartRef} data={rsiChartData} options={buildOptions(rsiChartOptions)} plugins={[syncCrosshairPlugin, rsiZonePlugin, pulsingDotPlugin]} />
               </div>
@@ -760,7 +797,10 @@ export default function LiveTicks() {
           {/* B/S Ratio chart */}
           {visibleCharts.ratio && (
             <div style={styles.chartSection}>
-              <div style={styles.chartLabel}>Buy / Sell Ratio</div>
+              <div style={styles.chartLabelRow}>
+                <div style={styles.chartLabel}>Buy / Sell Ratio</div>
+                {(() => { const d = ratioChartData.datasets?.[0]?.data; const v = d && d.findLast((x) => x != null); return v != null ? <span style={{ ...styles.chartValue, color: v > 1 ? 'var(--color-success)' : v < 1 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>{v.toFixed(3)}</span> : null })()}
+              </div>
               <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
                 <Line ref={ratioChartRef} data={ratioChartData} options={buildOptions(ratioChartOptions)} plugins={[syncCrosshairPlugin, ratioOneLinePlugin, pulsingDotPlugin]} />
               </div>
@@ -902,13 +942,23 @@ const styles = {
     marginRight: 'var(--space-lg)',
     padding: 'var(--space-lg) var(--space-md)',
   },
+  chartLabelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 'var(--space-sm)',
+  },
   chartLabel: {
     fontSize: 'var(--font-caption)',
     fontWeight: 600,
     color: 'var(--color-text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
-    marginBottom: 'var(--space-sm)',
+  },
+  chartValue: {
+    fontSize: 'var(--font-caption)',
+    fontWeight: 700,
+    fontVariantNumeric: 'tabular-nums',
   },
   chartViewport: {
     position: 'relative',
@@ -967,6 +1017,24 @@ const styles = {
     background: '#fff',
     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
     transition: 'transform 0.2s',
+  },
+  sheetSearchWrap: {
+    padding: '0 var(--space-xl) 12px',
+    position: 'sticky',
+    top: 0,
+    background: 'var(--color-card)',
+    zIndex: 1,
+  },
+  sheetSearchInput: {
+    width: '100%',
+    padding: '10px 14px',
+    fontSize: 'var(--font-body)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--color-border)',
+    background: 'var(--color-bg)',
+    color: 'var(--color-text)',
+    outline: 'none',
+    boxSizing: 'border-box',
   },
   guideContent: {
     padding: '8px var(--space-xl) 24px',
