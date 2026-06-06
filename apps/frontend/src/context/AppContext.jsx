@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, useMemo } from 'react'
+import { createContext, useContext, useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { db, ref, onValue } from '../utils/firebase'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
@@ -12,8 +12,12 @@ export function AppProvider({ children }) {
   const [dataByInstrument, setDataByInstrument] = useState({})
   const [priceByInstrument, setPriceByInstrument] = useState({})
   const [marketStatus, setMarketStatus] = useState('Closed')
-  const [sortBy, setSortBy] = useState('relevance')
-  const [sortAsc, setSortAsc] = useState(false)
+  const [sortBy, setSortBy] = useState(() => {
+    try { return localStorage.getItem('stockSortBy') || 'relevance' } catch { return 'relevance' }
+  })
+  const [sortAsc, setSortAsc] = useState(() => {
+    try { return localStorage.getItem('stockSortAsc') === 'true' } catch { return false }
+  })
   const [scripts, setScripts] = useState(undefined)
   const [requestQueue, setRequestQueue] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
@@ -130,6 +134,16 @@ export function AppProvider({ children }) {
     }
   }
 
+  const persistedSetSortBy = useCallback((val) => {
+    setSortBy(val)
+    try { localStorage.setItem('stockSortBy', val) } catch {}
+  }, [])
+
+  const persistedSetSortAsc = useCallback((val) => {
+    setSortAsc(val)
+    try { localStorage.setItem('stockSortAsc', String(val)) } catch {}
+  }, [])
+
   const rowsByMinute = useMemo(
     () => dataByInstrument[selectedInstrumentKey] || {},
     [dataByInstrument, selectedInstrumentKey],
@@ -164,7 +178,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy, sortAsc, setSortAsc, scripts, requestQueue, failedRequests, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, scripts, requestQueue, failedRequests, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )

@@ -169,7 +169,13 @@ export default function LiveTicks() {
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false)
-  const [visibleCharts, setVisibleCharts] = useState({ price: true, pressure: true, volume: true })
+  const [visibleCharts, setVisibleCharts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('liveTicksVisibleCharts')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return { price: true, pressure: true, volume: true }
+  })
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
@@ -482,7 +488,7 @@ export default function LiveTicks() {
               { key: 'pressure', label: 'Sell Pressure' },
               { key: 'volume', label: 'Buy vs Sell Volume' },
             ].map(({ key, label }) => (
-              <div key={key} style={styles.toggleRow} onClick={() => setVisibleCharts((prev) => ({ ...prev, [key]: !prev[key] }))}>
+              <div key={key} style={styles.toggleRow} onClick={() => setVisibleCharts((prev) => { const next = { ...prev, [key]: !prev[key] }; localStorage.setItem('liveTicksVisibleCharts', JSON.stringify(next)); return next })}>
                 <span style={styles.toggleLabel}>{label}</span>
                 <div style={{ ...styles.toggle, background: visibleCharts[key] ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
                   <div style={{ ...styles.toggleKnob, transform: visibleCharts[key] ? 'translateX(16px)' : 'translateX(0)' }} />
