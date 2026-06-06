@@ -110,8 +110,8 @@ const baseChartOptions = {
     x: {
       ticks: {
         autoSkip: false,
-        callback: function (value, index) {
-          const label = this.getLabelForValue(index)
+        callback: function (value) {
+          const label = this.getLabelForValue(value)
           if (!label) return null
           const [h, m] = label.split(':').map(Number)
           return (h * 60 + m) % 60 === 0 ? label : null
@@ -621,7 +621,21 @@ export default function LiveTicks() {
     plugins: { ...base.plugins, syncCrosshair: true },
     scales: {
       ...base.scales,
-      x: { ...base.scales.x, min: xRange?.min, max: xRange?.max },
+      x: {
+        ...base.scales.x,
+        min: xRange?.min,
+        max: xRange?.max,
+        ticks: {
+          ...base.scales.x.ticks,
+          callback: function (value) {
+            const label = this.getLabelForValue(value)
+            if (!label) return null
+            const [h, m] = label.split(':').map(Number)
+            const interval = xRange ? 30 : 60
+            return (h * 60 + m) % interval === 0 ? label : null
+          },
+        },
+      },
       y: base.scales.y,
     },
     onHover: (event, elements, chart) => {
