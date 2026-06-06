@@ -13,7 +13,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid, faSliders } from '@fortawesome/free-solid-svg-icons'
 import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
@@ -168,6 +168,8 @@ export default function LiveTicks() {
   _marketOpen = marketStatus !== 'Closed'
   const [secondsElapsed, setSecondsElapsed] = useState(moment().seconds())
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [chartSettingsOpen, setChartSettingsOpen] = useState(false)
+  const [visibleCharts, setVisibleCharts] = useState({ price: true, pressure: true, volume: true })
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
@@ -416,12 +418,17 @@ export default function LiveTicks() {
       {/* Price display */}
       {latestPrice != null && (
         <div style={styles.priceSection}>
-          <span style={styles.price}>{latestPrice.toFixed(2)}</span>
-          {priceChange != null && (
-            <span style={{ ...styles.priceChange, color: isPositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
-              {isPositive ? '+' : ''}{priceChange.toFixed(2)}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-sm)' }}>
+            <span style={styles.price}>{latestPrice.toFixed(2)}</span>
+            {priceChange != null && (
+              <span style={{ ...styles.priceChange, color: isPositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {isPositive ? '+' : ''}{priceChange.toFixed(2)}
+              </span>
+            )}
+          </div>
+          <button style={styles.chartSettingsBtn} onClick={() => setChartSettingsOpen(true)}>
+            <FontAwesomeIcon icon={faSliders} />
+          </button>
         </div>
       )}
 
@@ -469,29 +476,50 @@ export default function LiveTicks() {
             })}
           </BottomSheet>
 
+          <BottomSheet title="Charts" isOpen={chartSettingsOpen} onClose={() => setChartSettingsOpen(false)}>
+            {[
+              { key: 'price', label: 'Price Chart' },
+              { key: 'pressure', label: 'Sell Pressure' },
+              { key: 'volume', label: 'Buy vs Sell Volume' },
+            ].map(({ key, label }) => (
+              <div key={key} style={styles.toggleRow} onClick={() => setVisibleCharts((prev) => ({ ...prev, [key]: !prev[key] }))}>
+                <span style={styles.toggleLabel}>{label}</span>
+                <div style={{ ...styles.toggle, background: visibleCharts[key] ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
+                  <div style={{ ...styles.toggleKnob, transform: visibleCharts[key] ? 'translateX(16px)' : 'translateX(0)' }} />
+                </div>
+              </div>
+            ))}
+          </BottomSheet>
+
           {/* Price chart */}
-          <div style={styles.chartSection}>
-            <div style={styles.chartLabel}>Live</div>
-            <div style={styles.chartViewport}>
-              <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+          {visibleCharts.price && (
+            <div style={styles.chartSection}>
+              <div style={styles.chartLabel}>Live</div>
+              <div style={styles.chartViewport}>
+                <Line ref={priceChartRef} data={priceChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Pressure chart */}
-          <div style={styles.chartSection}>
-            <div style={styles.chartLabel}>Sell Pressure</div>
-            <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
-              <Line ref={pressureChartRef} data={pressureChartData} options={buildOptions(pressureChartOptions)} plugins={[syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin]} />
+          {visibleCharts.pressure && (
+            <div style={styles.chartSection}>
+              <div style={styles.chartLabel}>Sell Pressure</div>
+              <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
+                <Line ref={pressureChartRef} data={pressureChartData} options={buildOptions(pressureChartOptions)} plugins={[syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin]} />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Qty chart */}
-          <div style={styles.chartSection}>
-            <div style={styles.chartLabel}>Buy vs Sell Volume</div>
-            <div style={styles.chartViewport}>
-              <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+          {visibleCharts.volume && (
+            <div style={styles.chartSection}>
+              <div style={styles.chartLabel}>Buy vs Sell Volume</div>
+              <div style={styles.chartViewport}>
+                <Line ref={qtyChartRef} data={qtyChartData} options={buildOptions(baseChartOptions)} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </div>
@@ -566,8 +594,22 @@ const styles = {
     padding: '0 var(--space-xl)',
     marginBottom: 'var(--space-lg)',
     display: 'flex',
-    alignItems: 'baseline',
-    gap: 'var(--space-sm)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chartSettingsBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    border: 'none',
+    background: 'var(--color-primary-light)',
+    color: 'var(--color-primary)',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    padding: 0,
   },
   price: {
     fontSize: 'var(--font-title1)',
@@ -631,5 +673,33 @@ const styles = {
     flexShrink: 0,
     fontSize: '0.9rem',
     padding: 0,
+  },
+  toggleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px var(--space-xl)',
+    borderBottom: '1px solid var(--color-border)',
+    cursor: 'pointer',
+  },
+  toggleLabel: {
+    fontSize: 'var(--font-body)',
+    fontWeight: 500,
+    color: 'var(--color-text)',
+  },
+  toggle: {
+    width: '40px',
+    height: '24px',
+    borderRadius: '12px',
+    padding: '2px',
+    transition: 'background 0.2s',
+  },
+  toggleKnob: {
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    background: '#fff',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+    transition: 'transform 0.2s',
   },
 }
