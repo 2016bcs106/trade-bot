@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Chart as ChartJS,
@@ -248,6 +248,39 @@ export default function LiveTicks() {
   const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const MAX_ZOOM_WINDOW = 180
+  const [zoomRange, setZoomRange] = useState(null)
+  const zoomInitialized = useRef(false)
+  const pinchRef = useRef(null)
+
+  const handlePinch = useCallback((e) => {
+    if (!isMobile || !zoomRange) return
+    const touches = e.touches
+    if (touches.length !== 2) return
+    const dist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
+
+    if (!pinchRef.current) {
+      pinchRef.current = { startDist: dist, startRange: { ...zoomRange } }
+      return
+    }
+
+    const scale = pinchRef.current.startDist / dist
+    const { startRange } = pinchRef.current
+    const startWidth = startRange.end - startRange.start
+    const newWidth = Math.max(20, Math.min(MAX_ZOOM_WINDOW, Math.round(startWidth * scale)))
+    const mid = Math.round((startRange.start + startRange.end) / 2)
+    const halfNew = Math.round(newWidth / 2)
+    let newStart = mid - halfNew
+    let newEnd = mid + (newWidth - halfNew)
+    if (newStart < 0) { newEnd -= newStart; newStart = 0 }
+    if (newEnd > FIXED_LABELS.length - 1) { newStart -= (newEnd - FIXED_LABELS.length + 1); newEnd = FIXED_LABELS.length - 1 }
+    newStart = Math.max(0, newStart)
+    setZoomRange({ start: newStart, end: newEnd })
+  }, [isMobile, zoomRange])
+
+  const handlePinchEnd = useCallback(() => { pinchRef.current = null }, [])
+
   useEffect(() => {
     if (symbol && stocks.length > 0) {
       const match = stocks.find((s) => s.symbol === symbol)
@@ -282,6 +315,19 @@ export default function LiveTicks() {
     () => FIXED_LABELS.map((t) => rowsByTime[t] || null),
     [rowsByTime],
   )
+
+  useEffect(() => {
+    if (!isMobile || zoomInitialized.current) return
+    let lastIdx = -1
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i]) { lastIdx = i; break }
+    }
+    if (lastIdx >= 0) {
+      zoomInitialized.current = true
+      const end = Math.min(lastIdx + 5, FIXED_LABELS.length - 1)
+      setZoomRange({ start: Math.max(0, end - MAX_ZOOM_WINDOW), end })
+    }
+  }, [rows, isMobile])
 
   const latestPrice = useMemo(() => {
     const minutes = Object.values(rowsByMinute)
@@ -600,6 +646,15 @@ export default function LiveTicks() {
   const buildOptions = (base) => ({
     ...base,
     plugins: { ...base.plugins, syncCrosshair: true },
+    scales: {
+      ...base.scales,
+      x: {
+        ...base.scales.x,
+        min: zoomRange ? zoomRange.start : undefined,
+        max: zoomRange ? zoomRange.end : undefined,
+      },
+      y: base.scales.y,
+    },
     onHover: (event, elements, chart) => {
       if (!elements.length) { clearSyncedHover(); return }
       syncChartsAtIndex(chart, elements[0].index)
@@ -765,6 +820,7 @@ export default function LiveTicks() {
             </div>
           </BottomSheet>
 
+          <div onTouchMove={handlePinch} onTouchEnd={handlePinchEnd} onTouchCancel={handlePinchEnd}>
           {/* Price chart */}
           {visibleCharts.price && (
             <div style={styles.chartSection}>
@@ -820,6 +876,7 @@ export default function LiveTicks() {
               </div>
             </div>
           )}
+          </div>
         </>
       )}
     </div>
