@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Chart as ChartJS,
@@ -13,7 +13,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid, faSliders, faCircleQuestion } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown, faStar as faStarSolid, faSliders, faCircleQuestion, faMaximize, faMinimize } from '@fortawesome/free-solid-svg-icons'
 import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import moment from 'moment'
 import BottomSheet from '../components/BottomSheet'
@@ -247,39 +247,7 @@ export default function LiveTicks() {
   const priceChartRef = useRef(null)
   const pressureChartRef = useRef(null)
   const qtyChartRef = useRef(null)
-
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
-  const MAX_ZOOM_WINDOW = 180
-  const [zoomRange, setZoomRange] = useState(null)
-  const zoomInitialized = useRef(false)
-  const pinchRef = useRef(null)
-
-  const handlePinch = useCallback((e) => {
-    if (!isMobile || !zoomRange) return
-    const touches = e.touches
-    if (touches.length !== 2) return
-    const dist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
-
-    if (!pinchRef.current) {
-      pinchRef.current = { startDist: dist, startRange: { ...zoomRange } }
-      return
-    }
-
-    const scale = pinchRef.current.startDist / dist
-    const { startRange } = pinchRef.current
-    const startWidth = startRange.end - startRange.start
-    const newWidth = Math.max(20, Math.min(MAX_ZOOM_WINDOW, Math.round(startWidth * scale)))
-    const mid = Math.round((startRange.start + startRange.end) / 2)
-    const halfNew = Math.round(newWidth / 2)
-    let newStart = mid - halfNew
-    let newEnd = mid + (newWidth - halfNew)
-    if (newStart < 0) { newEnd -= newStart; newStart = 0 }
-    if (newEnd > FIXED_LABELS.length - 1) { newStart -= (newEnd - FIXED_LABELS.length + 1); newEnd = FIXED_LABELS.length - 1 }
-    newStart = Math.max(0, newStart)
-    setZoomRange({ start: newStart, end: newEnd })
-  }, [isMobile, zoomRange])
-
-  const handlePinchEnd = useCallback(() => { pinchRef.current = null }, [])
+  const [zoomedIn, setZoomedIn] = useState(true)
 
   useEffect(() => {
     if (symbol && stocks.length > 0) {
@@ -316,18 +284,16 @@ export default function LiveTicks() {
     [rowsByTime],
   )
 
-  useEffect(() => {
-    if (!isMobile || zoomInitialized.current) return
+  const xRange = useMemo(() => {
+    if (!zoomedIn) return null
     let lastIdx = -1
     for (let i = rows.length - 1; i >= 0; i--) {
       if (rows[i]) { lastIdx = i; break }
     }
-    if (lastIdx >= 0) {
-      zoomInitialized.current = true
-      const end = Math.min(lastIdx + 5, FIXED_LABELS.length - 1)
-      setZoomRange({ start: Math.max(0, end - MAX_ZOOM_WINDOW), end })
-    }
-  }, [rows, isMobile])
+    if (lastIdx < 0) return null
+    const end = Math.min(lastIdx + 5, FIXED_LABELS.length - 1)
+    return { min: Math.max(0, end - 180), max: end }
+  }, [rows, zoomedIn])
 
   const latestPrice = useMemo(() => {
     const minutes = Object.values(rowsByMinute)
@@ -626,20 +592,27 @@ export default function LiveTicks() {
   }, [rows])
 
   const syncChartsAtIndex = (sourceChart, index) => {
-    const charts = [priceChartRef.current, pressureChartRef.current, qtyChartRef.current, rsiChartRef.current, ratioChartRef.current].filter(Boolean)
+    const charts = [priceChartRef.current, pressureChartRef.current, qtyChartRef.current, rsiChartRef.current, ratioChartRef.current].filter((c) => c && c.ctx)
     const sourceLabel = sourceChart?.data?.labels?.[index]
     charts.forEach((target) => {
-      if (sourceLabel == null) { target.setActiveElements([]); target.tooltip?.setActiveElements([], { x: 0, y: 0 }); target.update('none'); return }
-      const mappedIndex = target.data.labels.indexOf(sourceLabel)
-      if (mappedIndex >= 0) { target.setActiveElements([{ datasetIndex: 0, index: mappedIndex }]); target.tooltip?.setActiveElements([{ datasetIndex: 0, index: mappedIndex }], { x: 0, y: 0 }) }
-      else { target.setActiveElements([]); target.tooltip?.setActiveElements([], { x: 0, y: 0 }) }
-      target.update('none')
+      try {
+        if (sourceLabel == null) { target.setActiveElements([]); target.tooltip?.setActiveElements([], { x: 0, y: 0 }); target.update('none'); return }
+        const mappedIndex = target.data.labels.indexOf(sourceLabel)
+        if (mappedIndex >= 0) {
+          const elements = target.data.datasets.map((_, di) => ({ datasetIndex: di, index: mappedIndex }))
+          target.setActiveElements(elements)
+          target.tooltip?.setActiveElements(elements, { x: 0, y: 0 })
+        } else {
+          target.setActiveElements([]); target.tooltip?.setActiveElements([], { x: 0, y: 0 })
+        }
+        target.update('none')
+      } catch {}
     })
   }
 
   const clearSyncedHover = () => {
-    [priceChartRef.current, pressureChartRef.current, qtyChartRef.current, rsiChartRef.current, ratioChartRef.current].filter(Boolean).forEach((chart) => {
-      chart.setActiveElements([]); chart.tooltip?.setActiveElements([], { x: 0, y: 0 }); chart.update('none')
+    [priceChartRef.current, pressureChartRef.current, qtyChartRef.current, rsiChartRef.current, ratioChartRef.current].filter((c) => c && c.ctx).forEach((chart) => {
+      try { chart.setActiveElements([]); chart.tooltip?.setActiveElements([], { x: 0, y: 0 }); chart.update('none') } catch {}
     })
   }
 
@@ -648,11 +621,7 @@ export default function LiveTicks() {
     plugins: { ...base.plugins, syncCrosshair: true },
     scales: {
       ...base.scales,
-      x: {
-        ...base.scales.x,
-        min: zoomRange ? zoomRange.start : undefined,
-        max: zoomRange ? zoomRange.end : undefined,
-      },
+      x: { ...base.scales.x, min: xRange?.min, max: xRange?.max },
       y: base.scales.y,
     },
     onHover: (event, elements, chart) => {
@@ -704,6 +673,9 @@ export default function LiveTicks() {
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={styles.chartSettingsBtn} onClick={() => setZoomedIn((v) => !v)}>
+              <FontAwesomeIcon icon={zoomedIn ? faMaximize : faMinimize} />
+            </button>
             <button style={styles.chartSettingsBtn} onClick={() => setGuideOpen(true)}>
               <FontAwesomeIcon icon={faCircleQuestion} />
             </button>
@@ -729,10 +701,12 @@ export default function LiveTicks() {
               <input
                 style={styles.sheetSearchInput}
                 type="text"
+                inputMode="none"
                 placeholder="Search stocks..."
                 value={sheetSearch}
                 onChange={(e) => setSheetSearch(e.target.value)}
-                autoFocus
+                onFocus={(e) => { e.target.inputMode = 'text' }}
+                onBlur={(e) => { e.target.inputMode = 'none' }}
               />
             </div>
             {[...stocks].filter((s) => {
@@ -820,7 +794,7 @@ export default function LiveTicks() {
             </div>
           </BottomSheet>
 
-          <div onTouchMove={handlePinch} onTouchEnd={handlePinchEnd} onTouchCancel={handlePinchEnd}>
+          <div>
           {/* Price chart */}
           {visibleCharts.price && (
             <div style={styles.chartSection}>
