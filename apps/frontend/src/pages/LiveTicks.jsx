@@ -302,10 +302,9 @@ export default function LiveTicks() {
   }, [rowsByMinute])
 
   const priceChartData = useMemo(() => {
-    const marketOpen = isMarketOpen()
     const isPositive = openPrice != null && latestPrice != null && latestPrice >= openPrice
-    const lineColor = !marketOpen ? '#8e8e93' : openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
-    const fillRgb = !marketOpen ? '142, 142, 147' : (isPositive ? '52, 199, 89' : '255, 59, 48')
+    const lineColor = openPrice == null ? '#007aff' : (isPositive ? '#34c759' : '#ff3b30')
+    const fillRgb = isPositive ? '52, 199, 89' : '255, 59, 48'
 
     const bbPeriod = 20
     const multiplier = 2
@@ -328,8 +327,8 @@ export default function LiveTicks() {
       }
     }
 
-    const bandColor = marketOpen ? 'rgba(0, 122, 255, 0.3)' : 'rgba(142, 142, 147, 0.3)'
-    const smaColor = marketOpen ? 'rgba(0, 122, 255, 0.5)' : 'rgba(142, 142, 147, 0.5)'
+    const bandColor = 'rgba(0, 122, 255, 0.3)'
+    const smaColor = 'rgba(0, 122, 255, 0.5)'
 
     return {
       labels: FIXED_LABELS,
@@ -353,7 +352,7 @@ export default function LiveTicks() {
           borderDash: [3, 3],
           pointRadius: 0,
           fill: '-1',
-          backgroundColor: marketOpen ? 'rgba(0, 122, 255, 0.04)' : 'rgba(142, 142, 147, 0.04)',
+          backgroundColor: 'rgba(0, 122, 255, 0.04)',
           spanGaps: true,
           skipPulsingDot: true,
         },
@@ -437,11 +436,10 @@ export default function LiveTicks() {
       return g
     }
 
-    const marketOpen = isMarketOpen()
-    const buyColor = marketOpen ? '#34c759' : '#8e8e93'
-    const sellColor = marketOpen ? '#ff3b30' : '#8e8e93'
-    const buyRgb = marketOpen ? '52, 199, 89' : '142, 142, 147'
-    const sellRgb = marketOpen ? '255, 59, 48' : '142, 142, 147'
+    const buyColor = '#34c759'
+    const sellColor = '#ff3b30'
+    const buyRgb = '52, 199, 89'
+    const sellRgb = '255, 59, 48'
 
     return {
       labels: FIXED_LABELS,
@@ -455,14 +453,13 @@ export default function LiveTicks() {
   }, [rows, secondsElapsed])
 
   const pressureChartData = useMemo(() => {
-    const marketOpen = isMarketOpen()
     const diffs = rows.map((r) => r ? (r.sellQtySum || 0) - (r.buyQtySum || 0) : null)
     const validDiffs = diffs.filter((d) => d != null)
     const maxAbs = Math.max(1, ...validDiffs.map(Math.abs))
     const tanhValues = diffs.map((d) => d != null ? Math.tanh(d / (maxAbs * 0.05)) : null)
 
-    const sellC = marketOpen ? 'rgba(255, 59, 48' : 'rgba(142, 142, 147'
-    const buyC = marketOpen ? 'rgba(52, 199, 89' : 'rgba(142, 142, 147'
+    const sellC = 'rgba(255, 59, 48'
+    const buyC = 'rgba(52, 199, 89'
 
     return {
       labels: FIXED_LABELS,
@@ -470,8 +467,8 @@ export default function LiveTicks() {
         label: 'tanh(S−B)',
         data: tanhValues,
         rawDiffs: diffs,
-        segment: { borderColor: (ctx) => marketOpen ? (ctx.p0.parsed.y >= 0 ? '#ff3b30' : '#34c759') : '#8e8e93' },
-        borderColor: marketOpen ? '#ff3b30' : '#8e8e93',
+        segment: { borderColor: (ctx) => ctx.p0.parsed.y >= 0 ? '#ff3b30' : '#34c759' },
+        borderColor: '#ff3b30',
         backgroundColor: (context) => {
           const chart = context.chart
           if (!chart.chartArea || !chart.scales?.y) return `${sellC}, 0.08)`
@@ -493,7 +490,6 @@ export default function LiveTicks() {
 
   const rsiChartData = useMemo(() => {
     const period = 14
-    const marketOpen = isMarketOpen()
 
     const ratios = rows.map((r) => {
       if (!r) return null
@@ -542,26 +538,24 @@ export default function LiveTicks() {
     }
 
     const rsiMapped = rows.map((r, i) => r ? rsi[i] : null)
-    const lineColor = marketOpen ? '#007aff' : '#8e8e93'
 
     return {
       labels: FIXED_LABELS,
       datasets: [
-        { label: 'B/S Ratio RSI', data: rsiMapped, borderColor: lineColor, borderWidth: 1.5, pointRadius: 0, spanGaps: true, fill: false },
+        { label: 'B/S Ratio RSI', data: rsiMapped, borderColor: '#007aff', borderWidth: 1.5, pointRadius: 0, spanGaps: true, fill: false },
       ],
     }
   }, [rows])
 
   const ratioChartData = useMemo(() => {
-    const marketOpen = isMarketOpen()
     const data = rows.map((r) => {
       if (!r) return null
       const sell = r.sellQtySum || 0
       return sell > 0 ? r.buyQtySum / sell : null
     })
 
-    const lineColor = marketOpen ? '#007aff' : '#8e8e93'
-    const fillRgb = marketOpen ? '0, 122, 255' : '142, 142, 147'
+    const lineColor = '#007aff'
+    const fillRgb = '0, 122, 255'
 
     return {
       labels: FIXED_LABELS,
