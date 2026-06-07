@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, unlinkSync, readFileSync, existsSync, writeFile
 import moment from "moment";
 import { StockConfig } from "../../types/stocks/stock-config.ts";
 import { nowISO } from "../../utils/time.ts";
-import { MinuteAggregatePayload, PriceInfo, Signal } from "./types.ts";
+import { MinuteAggregatePayload, PriceInfo } from "./types.ts";
 import { Logger } from "../../types/logger.ts";
 import { RsiState, createRsiState, computeFullRsi, computeIncrementalRsi } from "./compute-rsi.ts";
 import { SignalState, createSignalState, computeFullSignals, computeIncrementalSignal } from "./compute-signals.ts";
@@ -88,7 +88,6 @@ export default class AggregateStore {
         lastUpdatedAt: receivedAt,
       };
       first.rsi = this.computeTentativeRsi(instrumentKey, buyQty, sellQty);
-      first.signal = this.computeTentativeSignal(instrumentKey, first);
       perInstrument.set(minuteKey, first);
       this.updatePriceCache(instrumentKey);
       return first;
@@ -102,7 +101,6 @@ export default class AggregateStore {
     existing.sellQtySum += sellQty;
     existing.buySellRatio = existing.sellQtySum > 0 ? Number((existing.buyQtySum / existing.sellQtySum).toFixed(6)) : null;
     existing.rsi = this.computeTentativeRsi(instrumentKey, existing.buyQtySum, existing.sellQtySum);
-    existing.signal = this.computeTentativeSignal(instrumentKey, existing);
     existing.lastUpdatedAt = receivedAt;
     this.updatePriceCache(instrumentKey);
     return existing;
@@ -162,15 +160,7 @@ export default class AggregateStore {
     return { sma: mean, upper: mean + 2 * std, lower: mean - 2 * std };
   }
 
-  private computeTentativeSignal(instrumentKey: string, agg: MinuteAggregatePayload): Signal {
-    const signalState = this.signalStateByInstrument.get(instrumentKey);
-    if (!signalState) return null;
-    const { sma, upper, lower } = this.computeBollingerAt(instrumentKey, agg.minute);
-    // Use a copy of state so tentative computation doesn't mutate actual state
-    const tempState: SignalState = { ...signalState };
-    const signal = computeIncrementalSignal(tempState, agg, sma, upper, lower);
-    return signal;
-  }
+
 
   getPrice(instrumentKey: string): PriceInfo | undefined {
     return this.latestPriceByInstrument.get(instrumentKey);

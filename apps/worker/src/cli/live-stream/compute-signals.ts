@@ -60,6 +60,16 @@ export function computeFullSignals(aggregates: MinuteAggregatePayload[]): Signal
         state.position = "short";
         state.entryPrice = agg.close;
       }
+      // If entry would also trigger an immediate exit on the same bar, cancel it
+      if (signal === "buy" && sma[i] != null && agg.close < sma[i]!) {
+        state.position = null;
+        state.entryPrice = null;
+        signal = null;
+      } else if (signal === "sell" && sma[i] != null && agg.close > sma[i]!) {
+        state.position = null;
+        state.entryPrice = null;
+        signal = null;
+      }
     }
 
     agg.signal = signal;
@@ -99,6 +109,15 @@ export function computeIncrementalSignal(
       signal = "sell";
       state.position = "short";
       state.entryPrice = agg.close;
+    }
+    if (signal === "buy" && sma != null && agg.close < sma) {
+      state.position = null;
+      state.entryPrice = null;
+      signal = null;
+    } else if (signal === "sell" && sma != null && agg.close > sma) {
+      state.position = null;
+      state.entryPrice = null;
+      signal = null;
     }
   }
 
