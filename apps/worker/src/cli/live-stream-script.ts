@@ -5,6 +5,7 @@ import moment from "moment";
 import BaseScript from "./base-script.ts";
 import { nowMs, todayDate } from "../utils/time.ts";
 import { sendSlackMessage } from "../utils/slack.ts";
+import { formatSignalTable } from "../utils/format-signals.ts";
 import TradingConfig from "../config/trading-config.ts";
 import TickBuffer from "./live-stream/tick-buffer.ts";
 import AggregateStore from "./live-stream/aggregate-store.ts";
@@ -23,6 +24,9 @@ class LiveStreamScript extends BaseScript {
   private currentToken: string | null = null;
   private marketStatus = "Closed";
   private lastTradeDate: string | null = null;
+  private historicalNotified = false;
+  private pendingSignals: { time: string; symbol: string; signal: string; price: number; rsi: number | null }[] = [];
+  private signalFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   private registry = new StockRegistry();
   private aggregateStore!: AggregateStore;
@@ -186,8 +190,11 @@ class LiveStreamScript extends BaseScript {
     }
 
     if (aggregate.signal && stock.notifySignals) {
-      const label = aggregate.signal.toUpperCase();
-      sendSlackMessage(`${stock.symbol} ${label} @ ₹${aggregate.close.toFixed(2)} (RSI: ${aggregate.rsi?.toFixed(1) ?? '-'})`);
+      const time = aggregate.minute.split("T")[1] || aggregate.minute;
+      this.pendingSignals.push({ time, symbol: stock.symbol, signal: aggregate.signal, price: aggregate.close, rsi: aggregate.rsi });
+      if (!this.signalFlushTimer) {
+        this.signalFlushTimer = setTimeout(() => this.flushPendingSignals(), 2000);
+      }
     }
 
     this.broadcaster.sendMinuteUpdate(instrumentKey, aggregate);
@@ -204,24 +211,33 @@ class LiveStreamScript extends BaseScript {
   }
 
   private async notifyHistoricalSignals(): Promise<void> {
+    if (this.historicalNotified) return;
+    this.historicalNotified = true;
+
     const enabled = await this.firebase.getConfig("notifyOnRestart");
     if (!enabled) return;
 
-    const lines: string[] = [];
+    const rows: { time: string; symbol: string; signal: string; price: number; rsi: number | null }[] = [];
     for (const stock of this.registry.stocks) {
       if (!stock.notifySignals) continue;
       const instrumentKey = this.registry.getInstrumentKey(stock);
       const data = this.aggregateStore.getSnapshotData(instrumentKey);
       for (const agg of data) {
         if (agg.signal) {
-          const time = agg.minute.split("T")[1] || agg.minute;
-          lines.push(`${stock.symbol} ${agg.signal.toUpperCase()} @ ₹${agg.close.toFixed(2)} (RSI: ${agg.rsi?.toFixed(1) ?? '-'}) at ${time}`);
+          rows.push({ time: agg.minute.split("T")[1] || agg.minute, symbol: stock.symbol, signal: agg.signal, price: agg.close, rsi: agg.rsi });
         }
       }
     }
-    if (lines.length > 0) {
-      sendSlackMessage(`[Historical Signals]\n${lines.join("\n")}`);
+    if (rows.length > 0) {
+      sendSlackMessage(formatSignalTable("Historical Signals", rows));
     }
+  }
+
+  private flushPendingSignals(): void {
+    this.signalFlushTimer = null;
+    if (this.pendingSignals.length === 0) return;
+    sendSlackMessage(formatSignalTable("Live Signals", this.pendingSignals));
+    this.pendingSignals = [];
   }
 
   private logStats(): void {
