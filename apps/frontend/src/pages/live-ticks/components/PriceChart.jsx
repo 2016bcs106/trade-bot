@@ -57,7 +57,27 @@ export default forwardRef(function PriceChart({ options }, ref) {
     const bandColor = 'rgba(0, 122, 255, 0.3)'
     const smaColor = 'rgba(0, 122, 255, 0.5)'
 
-    return {
+    const buySignals = rows.map((r) => r?.signal === 'buy' ? r.close : null)
+    const sellSignals = rows.map((r) => r?.signal === 'sell' ? r.close : null)
+    const exitSignals = rows.map((r) => r?.signal === 'exit' ? r.close : null)
+
+    let netProfit = 0
+    let entryPrice = null
+    let position = null
+    for (let i = 0; i < rows.length; i++) {
+      if (!rows[i]) continue
+      const sig = rows[i].signal
+      if (sig === 'buy') { position = 'long'; entryPrice = rows[i].close }
+      else if (sig === 'sell') { position = 'short'; entryPrice = rows[i].close }
+      else if (sig === 'exit' && entryPrice != null) {
+        netProfit += position === 'long' ? rows[i].close - entryPrice : entryPrice - rows[i].close
+        position = null; entryPrice = null
+      }
+    }
+    if (position === 'long' && entryPrice != null && latestPrice != null) netProfit += latestPrice - entryPrice
+    else if (position === 'short' && entryPrice != null && latestPrice != null) netProfit += entryPrice - latestPrice
+
+    return { netProfit, chartData: {
       labels: FIXED_LABELS,
       datasets: [
         { label: 'Upper Band', data: upper, borderColor: bandColor, borderWidth: 0.5, borderDash: [3, 3], pointRadius: 0, pointHoverRadius: 0, fill: false, spanGaps: true, skipPulsingDot: true },
@@ -78,8 +98,42 @@ export default forwardRef(function PriceChart({ options }, ref) {
           fill: true,
           spanGaps: true,
         },
+        {
+          label: 'Buy',
+          data: buySignals,
+          borderColor: '#34c759',
+          backgroundColor: '#34c759',
+          pointRadius: (ctx) => buySignals[ctx.dataIndex] != null ? 5 : 0,
+          pointHoverRadius: (ctx) => buySignals[ctx.dataIndex] != null ? 6 : 0,
+          pointStyle: 'triangle',
+          showLine: false,
+          skipPulsingDot: true,
+        },
+        {
+          label: 'Sell',
+          data: sellSignals,
+          borderColor: '#ff3b30',
+          backgroundColor: '#ff3b30',
+          pointRadius: (ctx) => sellSignals[ctx.dataIndex] != null ? 5 : 0,
+          pointHoverRadius: (ctx) => sellSignals[ctx.dataIndex] != null ? 6 : 0,
+          pointStyle: 'triangle',
+          pointRotation: 180,
+          showLine: false,
+          skipPulsingDot: true,
+        },
+        {
+          label: 'Exit',
+          data: exitSignals,
+          borderColor: '#ff9500',
+          backgroundColor: '#ff9500',
+          pointRadius: (ctx) => exitSignals[ctx.dataIndex] != null ? 4 : 0,
+          pointHoverRadius: (ctx) => exitSignals[ctx.dataIndex] != null ? 5 : 0,
+          pointStyle: 'circle',
+          showLine: false,
+          skipPulsingDot: true,
+        },
       ],
-    }
+    }}
   }, [rows, openPrice, latestPrice])
 
   const priceChange = openPrice != null && latestPrice != null ? latestPrice - openPrice : null
@@ -87,7 +141,14 @@ export default forwardRef(function PriceChart({ options }, ref) {
 
   return (
     <>
-      <div style={chartStyles.label}>Price</div>
+      <div style={chartStyles.labelRow}>
+        <div style={chartStyles.label}>Price</div>
+        {data.netProfit !== 0 && (
+          <span style={{ ...chartHeaderStyles.change, color: data.netProfit > 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+            P&L: {data.netProfit > 0 ? '+' : ''}{data.netProfit.toFixed(2)}
+          </span>
+        )}
+      </div>
       <div style={chartHeaderStyles.row}>
         {latestPrice != null && <span style={chartHeaderStyles.value}>{latestPrice.toFixed(2)}</span>}
         {priceChange != null && (
@@ -97,7 +158,7 @@ export default forwardRef(function PriceChart({ options }, ref) {
         )}
       </div>
       <div style={chartStyles.viewport}>
-        <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+        <Line ref={ref} data={data.chartData} options={options} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
       </div>
     </>
   )

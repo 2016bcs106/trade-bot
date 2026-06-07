@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import moment from "moment";
 import BaseScript from "./base-script.ts";
 import { nowMs, todayDate } from "../utils/time.ts";
+import { sendSlackMessage } from "../utils/slack.ts";
 import TradingConfig from "../config/trading-config.ts";
 import TickBuffer from "./live-stream/tick-buffer.ts";
 import AggregateStore from "./live-stream/aggregate-store.ts";
@@ -22,6 +23,8 @@ class LiveStreamScript extends BaseScript {
   private currentToken: string | null = null;
   private marketStatus = "Closed";
   private lastTradeDate: string | null = null;
+
+  private prevRsiByInstrument = new Map<string, number | null>();
 
   private registry = new StockRegistry();
   private aggregateStore!: AggregateStore;
@@ -183,7 +186,21 @@ class LiveStreamScript extends BaseScript {
       }
     }
 
+    this.checkRsiSignal(instrumentKey, stock.symbol, aggregate.rsi, aggregate.close);
     this.broadcaster.sendMinuteUpdate(instrumentKey, aggregate);
+  }
+
+  private checkRsiSignal(instrumentKey: string, symbol: string, rsi: number | null, price: number): void {
+    if (rsi == null) return;
+    const prevRsi = this.prevRsiByInstrument.get(instrumentKey);
+    this.prevRsiByInstrument.set(instrumentKey, rsi);
+    if (prevRsi == null) return;
+
+    if (prevRsi < 65 && rsi >= 65) {
+      sendSlackMessage(`${symbol} RSI crossed above 65 (${rsi.toFixed(1)}) @ ₹${price.toFixed(2)}`);
+    } else if (prevRsi > 35 && rsi <= 35) {
+      sendSlackMessage(`${symbol} RSI crossed below 35 (${rsi.toFixed(1)}) @ ₹${price.toFixed(2)}`);
+    }
   }
 
   private loadHistoricalData(): void {

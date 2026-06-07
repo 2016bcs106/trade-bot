@@ -1,3 +1,5 @@
+export type Signal = "buy" | "sell" | "exit" | null;
+
 export interface MinuteAggregatePayload {
   instrumentKey: string;
   symbol: string;
@@ -16,6 +18,7 @@ export interface MinuteAggregatePayload {
   sellQtySum: number;
   buySellRatio: number | null;
   rsi: number | null;
+  signal: Signal;
   lastUpdatedAt: string;
 }
 

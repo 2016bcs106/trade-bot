@@ -3,14 +3,16 @@ import { mkdirSync, readdirSync, unlinkSync, readFileSync, existsSync, writeFile
 import moment from "moment";
 import { StockConfig } from "../../types/stocks/stock-config.ts";
 import { nowISO } from "../../utils/time.ts";
-import { MinuteAggregatePayload, PriceInfo } from "./types.ts";
+import { MinuteAggregatePayload, PriceInfo, Signal } from "./types.ts";
 import { Logger } from "../../types/logger.ts";
 import { RsiState, createRsiState, computeFullRsi, computeIncrementalRsi } from "./compute-rsi.ts";
+import { SignalState, createSignalState, computeFullSignals, computeIncrementalSignal } from "./compute-signals.ts";
 
 export default class AggregateStore {
   private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
   private latestPriceByInstrument = new Map<string, PriceInfo>();
   private rsiStateByInstrument = new Map<string, RsiState>();
+  private signalStateByInstrument = new Map<string, SignalState>();
   private lastMinuteKeyByInstrument = new Map<string, string>();
   private aggregatesDir: string;
 
@@ -56,6 +58,10 @@ export default class AggregateStore {
           if (!state) { state = createRsiState(); this.rsiStateByInstrument.set(instrumentKey, state); }
           const rsiVal = computeIncrementalRsi(state, prevMinute.buyQtySum, prevMinute.sellQtySum);
           prevMinute.rsi = rsiVal != null ? Number(rsiVal.toFixed(2)) : null;
+          // Finalize signal for previous minute
+          const signalState = this.getOrCreateSignalState(instrumentKey);
+          const { sma, upper, lower } = this.computeBollingerAt(instrumentKey, lastMinuteKey);
+          prevMinute.signal = computeIncrementalSignal(signalState, prevMinute, sma, upper, lower);
         }
       }
       this.lastMinuteKeyByInstrument.set(instrumentKey, minuteKey);
@@ -78,10 +84,11 @@ export default class AggregateStore {
         sellQtySum: sellQty,
         buySellRatio: sellQty > 0 ? Number((buyQty / sellQty).toFixed(6)) : null,
         rsi: null,
+        signal: null,
         lastUpdatedAt: receivedAt,
       };
-      // Compute tentative RSI for current minute
       first.rsi = this.computeTentativeRsi(instrumentKey, buyQty, sellQty);
+      first.signal = this.computeTentativeSignal(instrumentKey, first);
       perInstrument.set(minuteKey, first);
       this.updatePriceCache(instrumentKey);
       return first;
@@ -95,6 +102,7 @@ export default class AggregateStore {
     existing.sellQtySum += sellQty;
     existing.buySellRatio = existing.sellQtySum > 0 ? Number((existing.buyQtySum / existing.sellQtySum).toFixed(6)) : null;
     existing.rsi = this.computeTentativeRsi(instrumentKey, existing.buyQtySum, existing.sellQtySum);
+    existing.signal = this.computeTentativeSignal(instrumentKey, existing);
     existing.lastUpdatedAt = receivedAt;
     this.updatePriceCache(instrumentKey);
     return existing;
@@ -130,9 +138,45 @@ export default class AggregateStore {
     return Number(rsi.toFixed(2));
   }
 
+  private getOrCreateSignalState(instrumentKey: string): SignalState {
+    let state = this.signalStateByInstrument.get(instrumentKey);
+    if (!state) { state = createSignalState(); this.signalStateByInstrument.set(instrumentKey, state); }
+    return state;
+  }
+
+  private computeBollingerAt(instrumentKey: string, targetMinuteKey: string): { sma: number | null; upper: number | null; lower: number | null } {
+    const minuteMap = this.minuteAggregatesByInstrument.get(instrumentKey);
+    if (!minuteMap) return { sma: null, upper: null, lower: null };
+    const sorted = Array.from(minuteMap.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+    const targetIdx = sorted.findIndex((a) => a.minute === targetMinuteKey);
+    if (targetIdx < 0) return { sma: null, upper: null, lower: null };
+
+    const BB_PERIOD = 20;
+    const start = Math.max(0, targetIdx - BB_PERIOD + 1);
+    const window = sorted.slice(start, targetIdx + 1).map((a) => a.close);
+    if (window.length < BB_PERIOD) return { sma: null, upper: null, lower: null };
+
+    const mean = window.reduce((a, b) => a + b, 0) / BB_PERIOD;
+    const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / BB_PERIOD;
+    const std = Math.sqrt(variance);
+    return { sma: mean, upper: mean + 2 * std, lower: mean - 2 * std };
+  }
+
+  private computeTentativeSignal(instrumentKey: string, agg: MinuteAggregatePayload): Signal {
+    const signalState = this.signalStateByInstrument.get(instrumentKey);
+    if (!signalState) return null;
+    const { sma, upper, lower } = this.computeBollingerAt(instrumentKey, agg.minute);
+    // Use a copy of state so tentative computation doesn't mutate actual state
+    const tempState: SignalState = { ...signalState };
+    const signal = computeIncrementalSignal(tempState, agg, sma, upper, lower);
+    return signal;
+  }
+
   getPrice(instrumentKey: string): PriceInfo | undefined {
     return this.latestPriceByInstrument.get(instrumentKey);
   }
+
+
 
   getSnapshotData(instrumentKey: string): MinuteAggregatePayload[] {
     const map = this.minuteAggregatesByInstrument.get(instrumentKey);
@@ -148,6 +192,7 @@ export default class AggregateStore {
     this.minuteAggregatesByInstrument.clear();
     this.latestPriceByInstrument.clear();
     this.rsiStateByInstrument.clear();
+    this.signalStateByInstrument.clear();
     this.lastMinuteKeyByInstrument.clear();
   }
 
@@ -212,6 +257,8 @@ export default class AggregateStore {
     if (sorted.length > 0) {
       this.lastMinuteKeyByInstrument.set(instrumentKey, sorted[sorted.length - 1].minute);
     }
+    const signalState = computeFullSignals(sorted);
+    this.signalStateByInstrument.set(instrumentKey, signalState);
   }
 
   loadHistorical(stocks: { stock: any; instrumentKey: string }[], marketStatus: string, dateIST: string, targetDate: string | null): number {
