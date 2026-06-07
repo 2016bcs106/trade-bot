@@ -5,10 +5,13 @@ import { StockConfig } from "../../types/stocks/stock-config.ts";
 import { nowISO } from "../../utils/time.ts";
 import { MinuteAggregatePayload, PriceInfo } from "./types.ts";
 import { Logger } from "../../types/logger.ts";
+import { RsiState, createRsiState, computeFullRsi, computeIncrementalRsi } from "./compute-rsi.ts";
 
 export default class AggregateStore {
   private minuteAggregatesByInstrument = new Map<string, Map<string, MinuteAggregatePayload>>();
   private latestPriceByInstrument = new Map<string, PriceInfo>();
+  private rsiStateByInstrument = new Map<string, RsiState>();
+  private lastMinuteKeyByInstrument = new Map<string, string>();
   private aggregatesDir: string;
 
   constructor(
@@ -42,7 +45,21 @@ export default class AggregateStore {
     }
 
     const existing = perInstrument.get(minuteKey);
+    const lastMinuteKey = this.lastMinuteKeyByInstrument.get(instrumentKey);
+
     if (!existing) {
+      // New minute: advance the RSI state with the previous minute's final values
+      if (lastMinuteKey) {
+        const prevMinute = perInstrument.get(lastMinuteKey);
+        if (prevMinute) {
+          let state = this.rsiStateByInstrument.get(instrumentKey);
+          if (!state) { state = createRsiState(); this.rsiStateByInstrument.set(instrumentKey, state); }
+          const rsiVal = computeIncrementalRsi(state, prevMinute.buyQtySum, prevMinute.sellQtySum);
+          prevMinute.rsi = rsiVal != null ? Number(rsiVal.toFixed(2)) : null;
+        }
+      }
+      this.lastMinuteKeyByInstrument.set(instrumentKey, minuteKey);
+
       const first: MinuteAggregatePayload = {
         instrumentKey,
         symbol: stock.symbol,
@@ -60,8 +77,11 @@ export default class AggregateStore {
         buyQtySum: buyQty,
         sellQtySum: sellQty,
         buySellRatio: sellQty > 0 ? Number((buyQty / sellQty).toFixed(6)) : null,
+        rsi: null,
         lastUpdatedAt: receivedAt,
       };
+      // Compute tentative RSI for current minute
+      first.rsi = this.computeTentativeRsi(instrumentKey, buyQty, sellQty);
       perInstrument.set(minuteKey, first);
       this.updatePriceCache(instrumentKey);
       return first;
@@ -74,6 +94,7 @@ export default class AggregateStore {
     existing.buyQtySum += buyQty;
     existing.sellQtySum += sellQty;
     existing.buySellRatio = existing.sellQtySum > 0 ? Number((existing.buyQtySum / existing.sellQtySum).toFixed(6)) : null;
+    existing.rsi = this.computeTentativeRsi(instrumentKey, existing.buyQtySum, existing.sellQtySum);
     existing.lastUpdatedAt = receivedAt;
     this.updatePriceCache(instrumentKey);
     return existing;
@@ -95,6 +116,20 @@ export default class AggregateStore {
     this.latestPriceByInstrument.set(instrumentKey, { price, change, changePct });
   }
 
+  private computeTentativeRsi(instrumentKey: string, buyQtySum: number, sellQtySum: number): number | null {
+    const state = this.rsiStateByInstrument.get(instrumentKey);
+    if (!state || !state.seeded) return null;
+    const sell = sellQtySum || 0;
+    const ratio = sell > 0 ? buyQtySum / sell : 1;
+    const change = ratio - state.prevRatio;
+    const gain = change > 0 ? change : 0;
+    const loss = change < 0 ? -change : 0;
+    const avgGain = (state.avgGain * 13 + gain) / 14;
+    const avgLoss = (state.avgLoss * 13 + loss) / 14;
+    const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    return Number(rsi.toFixed(2));
+  }
+
   getPrice(instrumentKey: string): PriceInfo | undefined {
     return this.latestPriceByInstrument.get(instrumentKey);
   }
@@ -112,6 +147,8 @@ export default class AggregateStore {
   clear(): void {
     this.minuteAggregatesByInstrument.clear();
     this.latestPriceByInstrument.clear();
+    this.rsiStateByInstrument.clear();
+    this.lastMinuteKeyByInstrument.clear();
   }
 
   get size(): number {
@@ -154,11 +191,26 @@ export default class AggregateStore {
       }
       this.minuteAggregatesByInstrument.set(instrumentKey, minuteMap);
       this.updatePriceCache(instrumentKey);
+      this.recomputeRsi(instrumentKey);
 
       this.log.info(`Loaded ${data.length} minutes for ${stock.symbol} from ${date}`);
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private recomputeRsi(instrumentKey: string): void {
+    const minuteMap = this.minuteAggregatesByInstrument.get(instrumentKey);
+    if (!minuteMap) return;
+    const sorted = Array.from(minuteMap.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+    const { rsiValues, state } = computeFullRsi(sorted);
+    for (let i = 0; i < sorted.length; i++) {
+      sorted[i].rsi = rsiValues[i] != null ? Number(rsiValues[i]!.toFixed(2)) : null;
+    }
+    this.rsiStateByInstrument.set(instrumentKey, state);
+    if (sorted.length > 0) {
+      this.lastMinuteKeyByInstrument.set(instrumentKey, sorted[sorted.length - 1].minute);
     }
   }
 

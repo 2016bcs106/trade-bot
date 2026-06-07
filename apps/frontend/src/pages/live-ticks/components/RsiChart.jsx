@@ -1,7 +1,6 @@
 import { useMemo, forwardRef } from 'react'
 import { Line } from 'react-chartjs-2'
 import { FIXED_LABELS } from '../utils/constants'
-import { computeBsRatioRsi } from '../utils/compute-rsi'
 import { syncCrosshairPlugin, rsiZonePlugin, pulsingDotPlugin } from '../utils/chart-plugins'
 import { chartHeaderStyles, chartStyles } from '../utils/styles'
 import useRows from '../utils/useRows'
@@ -10,12 +9,10 @@ export default forwardRef(function RsiChart({ options }, ref) {
   const rows = useRows()
 
   const data = useMemo(() => {
-    const rsi = computeBsRatioRsi(rows)
-    const rsiMapped = rows.map((r, i) => r ? rsi[i] : null)
     return {
       labels: FIXED_LABELS,
       datasets: [
-        { label: 'B/S Ratio RSI', data: rsiMapped, borderColor: '#007aff', borderWidth: 1.5, pointRadius: 0, spanGaps: true, fill: false },
+        { label: 'B/S Ratio RSI', data: rows.map((r) => r ? r.rsi : null), borderColor: '#007aff', borderWidth: 1.5, pointRadius: 0, spanGaps: true, fill: false },
       ],
     }
   }, [rows])

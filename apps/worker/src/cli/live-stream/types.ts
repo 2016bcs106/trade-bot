@@ -15,6 +15,7 @@ export interface MinuteAggregatePayload {
   buyQtySum: number;
   sellQtySum: number;
   buySellRatio: number | null;
+  rsi: number | null;
   lastUpdatedAt: string;
 }
 
