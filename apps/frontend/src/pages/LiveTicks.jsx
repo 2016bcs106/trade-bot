@@ -6,18 +6,19 @@ import { faPlugCircleXmark, faChevronLeft, faChevronDown, faSliders, faCircleQue
 import Loader from '../components/Loader'
 import StatusBadges from '../components/StatusBadges'
 import { useApp } from '../context/AppContext'
-import { FIXED_LABELS } from './live-ticks/constants'
-import { setMarketOpen } from './live-ticks/chart-plugins'
-import { baseChartOptions, priceChartOptions, pressureChartOptions, rsiChartOptions, ratioChartOptions, buildOptions } from './live-ticks/chart-options'
-import useRows from './live-ticks/useRows'
-import PriceChart from './live-ticks/PriceChart'
-import RsiChart from './live-ticks/RsiChart'
-import RatioChart from './live-ticks/RatioChart'
-import PressureChart from './live-ticks/PressureChart'
-import VolumeChart from './live-ticks/VolumeChart'
-import TradingGuide from './live-ticks/TradingGuide'
-import ChartSettingsSheet from './live-ticks/ChartSettingsSheet'
-import StockSelectorSheet from './live-ticks/StockSelectorSheet'
+import { FIXED_LABELS } from './live-ticks/utils/constants'
+import { chartStyles } from './live-ticks/utils/styles'
+import { setMarketOpen } from './live-ticks/utils/chart-plugins'
+import { baseChartOptions, priceChartOptions, pressureChartOptions, rsiChartOptions, ratioChartOptions, buildOptions } from './live-ticks/utils/chart-options'
+import useRows from './live-ticks/utils/useRows'
+import PriceChart from './live-ticks/components/PriceChart'
+import RsiChart from './live-ticks/components/RsiChart'
+import RatioChart from './live-ticks/components/RatioChart'
+import PressureChart from './live-ticks/components/PressureChart'
+import VolumeChart from './live-ticks/components/VolumeChart'
+import TradingGuide from './live-ticks/components/TradingGuide'
+import ChartSettingsSheet from './live-ticks/components/ChartSettingsSheet'
+import StockSelectorSheet from './live-ticks/components/StockSelectorSheet'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
 
@@ -131,53 +132,45 @@ export default function LiveTicks() {
           <TradingGuide isOpen={guideOpen} onClose={() => setGuideOpen(false)} />
 
           <div>
+            <div style={styles.toolbar}>
+              <button style={chartStyles.iconBtn} onClick={() => setZoomedIn((v) => !v)}>
+                <FontAwesomeIcon icon={zoomedIn ? faMaximize : faMinimize} />
+              </button>
+              <button style={chartStyles.iconBtn} onClick={() => setGuideOpen(true)}>
+                <FontAwesomeIcon icon={faCircleQuestion} />
+              </button>
+              <button style={chartStyles.iconBtn} onClick={() => setChartSettingsOpen(true)}>
+                <FontAwesomeIcon icon={faSliders} />
+              </button>
+            </div>
+
             {visibleCharts.price && (
-              <div style={styles.chartSection}>
-                <div style={styles.chartLabelRow}>
-                  <div style={styles.chartLabel}>Live</div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button style={styles.chartSettingsBtn} onClick={() => setZoomedIn((v) => !v)}>
-                      <FontAwesomeIcon icon={zoomedIn ? faMaximize : faMinimize} />
-                    </button>
-                    <button style={styles.chartSettingsBtn} onClick={() => setGuideOpen(true)}>
-                      <FontAwesomeIcon icon={faCircleQuestion} />
-                    </button>
-                    <button style={styles.chartSettingsBtn} onClick={() => setChartSettingsOpen(true)}>
-                      <FontAwesomeIcon icon={faSliders} />
-                    </button>
-                  </div>
-                </div>
+              <div style={chartStyles.section}>
                 <PriceChart ref={priceChartRef} options={opts(priceChartOptions)} />
               </div>
             )}
 
             {visibleCharts.rsi && (
-              <div style={styles.chartSection}>
+              <div style={chartStyles.section}>
                 <RsiChart ref={rsiChartRef} options={opts(rsiChartOptions)} />
               </div>
             )}
 
             {visibleCharts.ratio && (
-              <div style={styles.chartSection}>
+              <div style={chartStyles.section}>
                 <RatioChart ref={ratioChartRef} options={opts(ratioChartOptions)} />
               </div>
             )}
 
             {visibleCharts.pressure && (
-              <div style={styles.chartSection}>
-                <div style={styles.chartLabel}>Sell Pressure</div>
-                <div style={{ ...styles.chartViewport, height: '18vh', minHeight: '100px' }}>
-                  <PressureChart ref={pressureChartRef} options={opts(pressureChartOptions)} />
-                </div>
+              <div style={chartStyles.section}>
+                <PressureChart ref={pressureChartRef} options={opts(pressureChartOptions)} />
               </div>
             )}
 
             {visibleCharts.volume && (
-              <div style={styles.chartSection}>
-                <div style={styles.chartLabel}>Buy vs Sell Volume</div>
-                <div style={styles.chartViewport}>
-                  <VolumeChart ref={qtyChartRef} options={opts(baseChartOptions)} />
-                </div>
+              <div style={chartStyles.section}>
+                <VolumeChart ref={qtyChartRef} options={opts(baseChartOptions)} />
               </div>
             )}
           </div>
@@ -251,20 +244,6 @@ const styles = {
     color: 'var(--color-text-muted)',
     marginTop: '2px',
   },
-  chartSettingsBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    border: 'none',
-    background: 'var(--color-primary-light)',
-    color: 'var(--color-primary)',
-    fontSize: '0.9rem',
-    cursor: 'pointer',
-    padding: 0,
-  },
   errorCard: {
     display: 'flex',
     flexDirection: 'column',
@@ -272,32 +251,11 @@ const styles = {
     padding: '40px var(--space-xl)',
     textAlign: 'center',
   },
-  chartSection: {
-    marginBottom: 'var(--space-lg)',
-    background: 'var(--color-card)',
-    borderRadius: 'var(--radius-md)',
-    marginLeft: 'var(--space-lg)',
-    marginRight: 'var(--space-lg)',
-    padding: 'var(--space-lg) var(--space-md)',
-  },
-  chartLabelRow: {
+  toolbar: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    padding: '0 var(--space-lg)',
     marginBottom: 'var(--space-sm)',
-  },
-  chartLabel: {
-    fontSize: 'var(--font-caption)',
-    fontWeight: 600,
-    color: 'var(--color-text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    marginBottom: 'var(--space-sm)',
-  },
-  chartViewport: {
-    position: 'relative',
-    height: '28vh',
-    maxHeight: '240px',
-    minHeight: '140px',
   },
 }

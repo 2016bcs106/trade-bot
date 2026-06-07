@@ -1,10 +1,11 @@
 import { useMemo, forwardRef, useState, useEffect } from 'react'
 import { Line } from 'react-chartjs-2'
 import moment from 'moment'
-import { useApp } from '../../context/AppContext'
-import { FIXED_LABELS } from './constants'
-import { syncCrosshairPlugin, pulsingDotPlugin } from './chart-plugins'
-import useRows from './useRows'
+import { useApp } from '../../../context/AppContext'
+import { FIXED_LABELS } from '../utils/constants'
+import { syncCrosshairPlugin, pulsingDotPlugin } from '../utils/chart-plugins'
+import { chartHeaderStyles, chartStyles } from '../utils/styles'
+import useRows from '../utils/useRows'
 
 export default forwardRef(function VolumeChart({ options }, ref) {
   const { marketStatus } = useApp()
@@ -68,5 +69,27 @@ export default forwardRef(function VolumeChart({ options }, ref) {
     }
   }, [rows, secondsElapsed, isMarketOpen])
 
-  return <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+  const latestBuy = useMemo(() => {
+    const d = data.datasets?.[0]?.data
+    return d ? d.findLast((x) => x != null) : null
+  }, [data])
+
+  const latestSell = useMemo(() => {
+    const d = data.datasets?.[1]?.data
+    return d ? d.findLast((x) => x != null) : null
+  }, [data])
+
+  return (
+    <>
+      <div style={chartStyles.label}>Buy vs Sell Volume</div>
+      <div style={chartHeaderStyles.row}>
+        {latestBuy != null && <span style={{ ...chartHeaderStyles.value, color: 'var(--color-success)' }}>{latestBuy.toLocaleString()}</span>}
+        {latestBuy != null && latestSell != null && <span style={{ fontSize: 'var(--font-footnote)', color: 'var(--color-text-muted)' }}>vs</span>}
+        {latestSell != null && <span style={{ ...chartHeaderStyles.value, color: 'var(--color-danger)' }}>{latestSell.toLocaleString()}</span>}
+      </div>
+      <div style={chartStyles.viewport}>
+        <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
+      </div>
+    </>
+  )
 })

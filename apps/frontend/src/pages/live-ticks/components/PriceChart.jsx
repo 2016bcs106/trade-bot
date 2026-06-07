@@ -1,9 +1,10 @@
 import { useMemo, forwardRef } from 'react'
 import { Line } from 'react-chartjs-2'
-import { useApp } from '../../context/AppContext'
-import { FIXED_LABELS } from './constants'
-import { syncCrosshairPlugin, pulsingDotPlugin } from './chart-plugins'
-import useRows from './useRows'
+import { useApp } from '../../../context/AppContext'
+import { FIXED_LABELS } from '../utils/constants'
+import { syncCrosshairPlugin, pulsingDotPlugin } from '../utils/chart-plugins'
+import { chartHeaderStyles, chartStyles } from '../utils/styles'
+import useRows from '../utils/useRows'
 
 export default forwardRef(function PriceChart({ options }, ref) {
   const { rowsByMinute } = useApp()
@@ -86,42 +87,18 @@ export default forwardRef(function PriceChart({ options }, ref) {
 
   return (
     <>
-      <div style={styles.priceRow}>
-        {latestPrice != null && <span style={styles.price}>{latestPrice.toFixed(2)}</span>}
+      <div style={chartStyles.label}>Price</div>
+      <div style={chartHeaderStyles.row}>
+        {latestPrice != null && <span style={chartHeaderStyles.value}>{latestPrice.toFixed(2)}</span>}
         {priceChange != null && (
-          <span style={{ ...styles.change, color: isPricePositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
+          <span style={{ ...chartHeaderStyles.change, color: isPricePositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
             {isPricePositive ? '+' : ''}{priceChange.toFixed(2)}
           </span>
         )}
       </div>
-      <div style={styles.viewport}>
+      <div style={chartStyles.viewport}>
         <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, pulsingDotPlugin]} />
       </div>
     </>
   )
 })
-
-const styles = {
-  priceRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 'var(--space-sm)',
-    marginBottom: 'var(--space-sm)',
-  },
-  price: {
-    fontSize: 'var(--font-title1)',
-    fontWeight: 600,
-    color: 'var(--color-text)',
-    letterSpacing: '-0.5px',
-  },
-  change: {
-    fontSize: 'var(--font-subhead)',
-    fontWeight: 600,
-  },
-  viewport: {
-    position: 'relative',
-    height: '28vh',
-    maxHeight: '240px',
-    minHeight: '140px',
-  },
-}

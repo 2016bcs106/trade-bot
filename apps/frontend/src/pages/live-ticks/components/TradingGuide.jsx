@@ -1,4 +1,4 @@
-import BottomSheet from '../../components/BottomSheet'
+import BottomSheet from '../../../components/BottomSheet'
 
 export default function TradingGuide({ isOpen, onClose }) {
   return (

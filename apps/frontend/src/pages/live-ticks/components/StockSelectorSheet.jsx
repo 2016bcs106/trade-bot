@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
 import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
-import BottomSheet from '../../components/BottomSheet'
+import BottomSheet from '../../../components/BottomSheet'
 
 export default function StockSelectorSheet({ isOpen, onClose, stocks, selectedInstrumentKey, getPriceInfo, onSelectStock, onToggleFavorite }) {
   const [search, setSearch] = useState('')

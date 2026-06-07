@@ -1,8 +1,9 @@
 import { useMemo, forwardRef } from 'react'
 import { Line } from 'react-chartjs-2'
-import { FIXED_LABELS } from './constants'
-import { syncCrosshairPlugin, ratioOneLinePlugin, pulsingDotPlugin } from './chart-plugins'
-import useRows from './useRows'
+import { FIXED_LABELS } from '../utils/constants'
+import { syncCrosshairPlugin, ratioOneLinePlugin, pulsingDotPlugin } from '../utils/chart-plugins'
+import { chartHeaderStyles, chartStyles } from '../utils/styles'
+import useRows from '../utils/useRows'
 
 export default forwardRef(function RatioChart({ options }, ref) {
   const rows = useRows()
@@ -41,45 +42,19 @@ export default forwardRef(function RatioChart({ options }, ref) {
     return d ? d.findLast((x) => x != null) : null
   }, [data])
 
+  const valueColor = latestValue != null
+    ? (latestValue > 1 ? 'var(--color-success)' : latestValue < 1 ? 'var(--color-danger)' : 'var(--color-text)')
+    : 'var(--color-text)'
+
   return (
     <>
-      <div style={styles.labelRow}>
-        <div style={styles.label}>Buy / Sell Ratio</div>
-        {latestValue != null && (
-          <span style={{ ...styles.value, color: latestValue > 1 ? 'var(--color-success)' : latestValue < 1 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
-            {latestValue.toFixed(3)}
-          </span>
-        )}
+      <div style={chartStyles.label}>Buy / Sell Ratio</div>
+      <div style={chartHeaderStyles.row}>
+        {latestValue != null && <span style={{ ...chartHeaderStyles.value, color: valueColor }}>{latestValue.toFixed(3)}</span>}
       </div>
-      <div style={styles.viewport}>
+      <div style={chartStyles.viewportSmall}>
         <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, ratioOneLinePlugin, pulsingDotPlugin]} />
       </div>
     </>
   )
 })
-
-const styles = {
-  labelRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 'var(--space-sm)',
-  },
-  label: {
-    fontSize: 'var(--font-caption)',
-    fontWeight: 600,
-    color: 'var(--color-text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  value: {
-    fontSize: 'var(--font-caption)',
-    fontWeight: 700,
-    fontVariantNumeric: 'tabular-nums',
-  },
-  viewport: {
-    position: 'relative',
-    height: '18vh',
-    minHeight: '100px',
-  },
-}

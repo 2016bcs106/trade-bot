@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useApp } from '../../context/AppContext'
+import { useApp } from '../../../context/AppContext'
 import { FIXED_LABELS } from './constants'
 
 export default function useRows() {

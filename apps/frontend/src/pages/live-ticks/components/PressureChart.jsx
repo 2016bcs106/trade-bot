@@ -1,8 +1,9 @@
 import { useMemo, forwardRef } from 'react'
 import { Line } from 'react-chartjs-2'
-import { FIXED_LABELS } from './constants'
-import { syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin } from './chart-plugins'
-import useRows from './useRows'
+import { FIXED_LABELS } from '../utils/constants'
+import { syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin } from '../utils/chart-plugins'
+import { chartHeaderStyles, chartStyles } from '../utils/styles'
+import useRows from '../utils/useRows'
 
 export default forwardRef(function PressureChart({ options }, ref) {
   const rows = useRows()
@@ -43,5 +44,24 @@ export default forwardRef(function PressureChart({ options }, ref) {
     }
   }, [rows])
 
-  return <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin]} />
+  const latestValue = useMemo(() => {
+    const d = data.datasets?.[0]?.data
+    return d ? d.findLast((x) => x != null) : null
+  }, [data])
+
+  const valueColor = latestValue != null
+    ? (latestValue > 0 ? 'var(--color-danger)' : latestValue < 0 ? 'var(--color-success)' : 'var(--color-text)')
+    : 'var(--color-text)'
+
+  return (
+    <>
+      <div style={chartStyles.label}>Sell Pressure</div>
+      <div style={chartHeaderStyles.row}>
+        {latestValue != null && <span style={{ ...chartHeaderStyles.value, color: valueColor }}>{latestValue.toFixed(2)}</span>}
+      </div>
+      <div style={chartStyles.viewportSmall}>
+        <Line ref={ref} data={data} options={options} plugins={[syncCrosshairPlugin, zeroLinePlugin, pulsingDotPlugin]} />
+      </div>
+    </>
+  )
 })

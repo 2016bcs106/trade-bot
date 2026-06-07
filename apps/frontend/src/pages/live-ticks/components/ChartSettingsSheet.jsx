@@ -1,5 +1,5 @@
-import BottomSheet from '../../components/BottomSheet'
-import { CHART_CONFIGS } from './constants'
+import BottomSheet from '../../../components/BottomSheet'
+import { CHART_CONFIGS } from '../utils/constants'
 
 export default function ChartSettingsSheet({ isOpen, onClose, visibleCharts, setVisibleCharts }) {
   return (
