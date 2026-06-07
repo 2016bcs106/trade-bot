@@ -4,6 +4,7 @@ import { useApp } from '../../../context/AppContext'
 import { FIXED_LABELS } from '../utils/constants'
 import { syncCrosshairPlugin, pulsingDotPlugin } from '../utils/chart-plugins'
 import { chartHeaderStyles, chartStyles } from '../utils/styles'
+import { getSignalSource } from '../../Settings'
 import useRows from '../utils/useRows'
 
 export default forwardRef(function PriceChart({ options }, ref) {
@@ -57,25 +58,69 @@ export default forwardRef(function PriceChart({ options }, ref) {
     const bandColor = 'rgba(0, 122, 255, 0.3)'
     const smaColor = 'rgba(0, 122, 255, 0.5)'
 
-    const buySignals = rows.map((r) => r?.signal === 'buy' ? r.close : null)
-    const sellSignals = rows.map((r) => r?.signal === 'sell' ? r.close : null)
-    const exitSignals = rows.map((r) => r?.signal === 'exit' ? r.close : null)
+    const useBackend = getSignalSource() === 'backend'
+    let buySignals, sellSignals, exitSignals, netProfit = 0
 
-    let netProfit = 0
-    let entryPrice = null
-    let position = null
-    for (let i = 0; i < rows.length; i++) {
-      if (!rows[i]) continue
-      const sig = rows[i].signal
-      if (sig === 'buy') { position = 'long'; entryPrice = rows[i].close }
-      else if (sig === 'sell') { position = 'short'; entryPrice = rows[i].close }
-      else if (sig === 'exit' && entryPrice != null) {
-        netProfit += position === 'long' ? rows[i].close - entryPrice : entryPrice - rows[i].close
-        position = null; entryPrice = null
+    if (useBackend) {
+      buySignals = rows.map((r) => r?.signal === 'buy' ? r.close : null)
+      sellSignals = rows.map((r) => r?.signal === 'sell' ? r.close : null)
+      exitSignals = rows.map((r) => r?.signal === 'exit' ? r.close : null)
+
+      let position = null, entryPrice = null
+      for (let i = 0; i < rows.length; i++) {
+        if (!rows[i]) continue
+        const sig = rows[i].signal
+        if (sig === 'buy') { position = 'long'; entryPrice = rows[i].close }
+        else if (sig === 'sell') { position = 'short'; entryPrice = rows[i].close }
+        else if (sig === 'exit' && entryPrice != null) {
+          netProfit += position === 'long' ? rows[i].close - entryPrice : entryPrice - rows[i].close
+          position = null; entryPrice = null
+        }
       }
+      if (position === 'long' && entryPrice != null && latestPrice != null) netProfit += latestPrice - entryPrice
+      else if (position === 'short' && entryPrice != null && latestPrice != null) netProfit += entryPrice - latestPrice
+    } else {
+      buySignals = new Array(closes.length).fill(null)
+      sellSignals = new Array(closes.length).fill(null)
+      exitSignals = new Array(closes.length).fill(null)
+      let position = null, entryPrice = null
+
+      for (let i = 0; i < closes.length; i++) {
+        if (closes[i] == null) continue
+        const rsi = rows[i]?.rsi
+
+        if (position === 'long' && sma[i] != null && closes[i] < sma[i]) {
+          exitSignals[i] = closes[i]
+          netProfit += closes[i] - entryPrice
+          position = null
+          entryPrice = null
+        } else if (position === 'short' && sma[i] != null && closes[i] > sma[i]) {
+          exitSignals[i] = closes[i]
+          netProfit += entryPrice - closes[i]
+          position = null
+          entryPrice = null
+        }
+
+        if (position != null || rsi == null) continue
+
+        if (rsi > 65 && (upper[i] == null || closes[i] <= upper[i])) {
+          if (sma[i] == null || closes[i] >= sma[i]) {
+            buySignals[i] = closes[i]
+            position = 'long'
+            entryPrice = closes[i]
+          }
+        } else if (rsi < 35 && (lower[i] == null || closes[i] >= lower[i])) {
+          if (sma[i] == null || closes[i] <= sma[i]) {
+            sellSignals[i] = closes[i]
+            position = 'short'
+            entryPrice = closes[i]
+          }
+        }
+      }
+
+      if (position === 'long' && entryPrice != null && latestPrice != null) netProfit += latestPrice - entryPrice
+      else if (position === 'short' && entryPrice != null && latestPrice != null) netProfit += entryPrice - latestPrice
     }
-    if (position === 'long' && entryPrice != null && latestPrice != null) netProfit += latestPrice - entryPrice
-    else if (position === 'short' && entryPrice != null && latestPrice != null) netProfit += entryPrice - latestPrice
 
     return { netProfit, chartData: {
       labels: FIXED_LABELS,

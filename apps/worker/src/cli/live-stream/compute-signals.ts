@@ -50,25 +50,19 @@ export function computeFullSignals(aggregates: MinuteAggregatePayload[]): Signal
       state.entryPrice = null;
     }
 
-    if (state.position == null && rsi != null && signal == null) {
+    if (state.position == null && rsi != null) {
       if (rsi > 65 && (upper[i] == null || agg.close <= upper[i]!)) {
-        signal = "buy";
-        state.position = "long";
-        state.entryPrice = agg.close;
+        if (sma[i] == null || agg.close >= sma[i]!) {
+          signal = "buy";
+          state.position = "long";
+          state.entryPrice = agg.close;
+        }
       } else if (rsi < 35 && (lower[i] == null || agg.close >= lower[i]!)) {
-        signal = "sell";
-        state.position = "short";
-        state.entryPrice = agg.close;
-      }
-      // If entry would also trigger an immediate exit on the same bar, cancel it
-      if (signal === "buy" && sma[i] != null && agg.close < sma[i]!) {
-        state.position = null;
-        state.entryPrice = null;
-        signal = null;
-      } else if (signal === "sell" && sma[i] != null && agg.close > sma[i]!) {
-        state.position = null;
-        state.entryPrice = null;
-        signal = null;
+        if (sma[i] == null || agg.close <= sma[i]!) {
+          signal = "sell";
+          state.position = "short";
+          state.entryPrice = agg.close;
+        }
       }
     }
 
@@ -100,24 +94,19 @@ export function computeIncrementalSignal(
     state.entryPrice = null;
   }
 
-  if (state.position == null && rsi != null && signal == null) {
+  if (state.position == null && rsi != null) {
     if (rsi > 65 && (upper == null || agg.close <= upper)) {
-      signal = "buy";
-      state.position = "long";
-      state.entryPrice = agg.close;
+      if (sma == null || agg.close >= sma) {
+        signal = "buy";
+        state.position = "long";
+        state.entryPrice = agg.close;
+      }
     } else if (rsi < 35 && (lower == null || agg.close >= lower)) {
-      signal = "sell";
-      state.position = "short";
-      state.entryPrice = agg.close;
-    }
-    if (signal === "buy" && sma != null && agg.close < sma) {
-      state.position = null;
-      state.entryPrice = null;
-      signal = null;
-    } else if (signal === "sell" && sma != null && agg.close > sma) {
-      state.position = null;
-      state.entryPrice = null;
-      signal = null;
+      if (sma == null || agg.close <= sma) {
+        signal = "sell";
+        state.position = "short";
+        state.entryPrice = agg.close;
+      }
     }
   }
 

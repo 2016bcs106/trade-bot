@@ -1,18 +1,24 @@
 import { useState } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faArrowRotateRight, faServer, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { faArrowRotateRight, faServer, faCheck, faFlask } from '@fortawesome/free-solid-svg-icons'
 import { db, ref, push } from '../utils/firebase'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
 import { CardList } from '../components/Card'
 import ListItem from '../components/ListItem'
+import Toggle from '../components/Toggle'
 import BottomSheet from '../components/BottomSheet'
+
+export function getSignalSource() {
+  try { return localStorage.getItem('signalSource') || 'frontend' } catch { return 'frontend' }
+}
 
 export default function Settings() {
   const [updateQueued, setUpdateQueued] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [signalSource, setSignalSource] = useState(getSignalSource)
 
   const handleSystemUpdate = async () => {
     setConfirmOpen(false)
@@ -42,6 +48,21 @@ export default function Settings() {
         />
       </CardList>
 
+      <SectionHeader>Experimental</SectionHeader>
+      <CardList>
+        <div style={styles.toggleWrap}>
+          <Toggle
+            label={`Signal source: ${signalSource === 'backend' ? 'Backend' : 'Frontend'}`}
+            enabled={signalSource === 'backend'}
+            onToggle={() => {
+              const next = signalSource === 'backend' ? 'frontend' : 'backend'
+              setSignalSource(next)
+              localStorage.setItem('signalSource', next)
+            }}
+          />
+        </div>
+      </CardList>
+
       <SectionHeader>System</SectionHeader>
       <CardList>
         <ListItem
@@ -69,6 +90,9 @@ export default function Settings() {
 }
 
 const styles = {
+  toggleWrap: {
+    padding: '4px var(--space-lg)',
+  },
   confirmBody: {
     padding: 'var(--space-lg) var(--space-xl)',
   },
