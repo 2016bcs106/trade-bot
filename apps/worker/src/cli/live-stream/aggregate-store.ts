@@ -60,8 +60,8 @@ export default class AggregateStore {
           prevMinute.rsi = rsiVal != null ? Number(rsiVal.toFixed(2)) : null;
           // Finalize signal for previous minute
           const signalState = this.getOrCreateSignalState(instrumentKey);
-          const { sma, upper, lower } = this.computeBollingerAt(instrumentKey, lastMinuteKey);
-          prevMinute.signal = computeIncrementalSignal(signalState, prevMinute, sma, upper, lower);
+          const allAggregates = Array.from(perInstrument.values()).sort((a, b) => a.minute.localeCompare(b.minute));
+          prevMinute.signal = computeIncrementalSignal(signalState, prevMinute, allAggregates);
         }
       }
       this.lastMinuteKeyByInstrument.set(instrumentKey, minuteKey);
@@ -142,23 +142,7 @@ export default class AggregateStore {
     return state;
   }
 
-  private computeBollingerAt(instrumentKey: string, targetMinuteKey: string): { sma: number | null; upper: number | null; lower: number | null } {
-    const minuteMap = this.minuteAggregatesByInstrument.get(instrumentKey);
-    if (!minuteMap) return { sma: null, upper: null, lower: null };
-    const sorted = Array.from(minuteMap.values()).sort((a, b) => a.minute.localeCompare(b.minute));
-    const targetIdx = sorted.findIndex((a) => a.minute === targetMinuteKey);
-    if (targetIdx < 0) return { sma: null, upper: null, lower: null };
 
-    const BB_PERIOD = 20;
-    const start = Math.max(0, targetIdx - BB_PERIOD + 1);
-    const window = sorted.slice(start, targetIdx + 1).map((a) => a.close);
-    if (window.length < BB_PERIOD) return { sma: null, upper: null, lower: null };
-
-    const mean = window.reduce((a, b) => a + b, 0) / BB_PERIOD;
-    const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / BB_PERIOD;
-    const std = Math.sqrt(variance);
-    return { sma: mean, upper: mean + 2 * std, lower: mean - 2 * std };
-  }
 
 
 
