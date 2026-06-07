@@ -101,13 +101,17 @@ export const ratioOneLinePlugin = {
   beforeDatasetsDraw(chart) {
     const { ctx, chartArea: { left, right }, scales: { y } } = chart
     if (!y) return
-    const yPos = y.getPixelForValue(1)
+    const y55 = y.getPixelForValue(0.55)
+    const y45 = y.getPixelForValue(0.45)
     ctx.save()
+    ctx.fillStyle = 'rgba(142, 142, 147, 0.06)'
+    ctx.fillRect(left, y55, right - left, y45 - y55)
     ctx.setLineDash([4, 3])
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(60, 60, 67, 0.2)'
     ctx.beginPath()
-    ctx.moveTo(left, yPos); ctx.lineTo(right, yPos)
+    ctx.moveTo(left, y55); ctx.lineTo(right, y55)
+    ctx.moveTo(left, y45); ctx.lineTo(right, y45)
     ctx.stroke()
     ctx.restore()
   },

@@ -11,8 +11,8 @@ export default forwardRef(function RatioChart({ options }, ref) {
   const data = useMemo(() => {
     const ratioData = rows.map((r) => {
       if (!r) return null
-      const sell = r.sellQtySum || 0
-      return sell > 0 ? r.buyQtySum / sell : null
+      const total = (r.buyQtySum || 0) + (r.sellQtySum || 0)
+      return total > 0 ? r.buyQtySum / total : null
     })
 
     return {
@@ -43,12 +43,12 @@ export default forwardRef(function RatioChart({ options }, ref) {
   }, [data])
 
   const valueColor = latestValue != null
-    ? (latestValue > 1 ? 'var(--color-success)' : latestValue < 1 ? 'var(--color-danger)' : 'var(--color-text)')
+    ? (latestValue > 0.5 ? 'var(--color-success)' : latestValue < 0.5 ? 'var(--color-danger)' : 'var(--color-text)')
     : 'var(--color-text)'
 
   return (
     <>
-      <div style={chartStyles.label}>Buy / Sell Ratio</div>
+      <div style={chartStyles.label}>Buy Strength</div>
       <div style={chartHeaderStyles.row}>
         {latestValue != null && <span style={{ ...chartHeaderStyles.value, color: valueColor }}>{latestValue.toFixed(3)}</span>}
       </div>
