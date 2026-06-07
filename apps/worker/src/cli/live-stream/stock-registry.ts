@@ -78,6 +78,7 @@ export default class StockRegistry {
       updatedAt: stock.updatedAt,
       status: stock.status,
       isFavorite: this._favorites.has(stock.symbol),
+      isNotified: !!stock.notifySignals,
       relevanceScore: this._relevanceScores.get(stock.symbol) ?? 0,
     }));
   }

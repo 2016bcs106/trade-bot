@@ -135,6 +135,12 @@ export function AppProvider({ children }) {
     }
   }
 
+  const toggleNotify = (symbol) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'toggle_notify', symbol }))
+    }
+  }
+
   const persistedSetSortBy = useCallback((val) => {
     setSortBy(val)
     try { localStorage.setItem('stockSortBy', val) } catch {}
@@ -179,7 +185,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, scripts, requestQueue, failedRequests, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, scripts, requestQueue, failedRequests, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )

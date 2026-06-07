@@ -22,6 +22,7 @@ export default class ClientBroadcaster {
     private getStockList: () => Record<string, unknown>[],
     private getMarketStatus: () => { status: string; tradeDate: string | null },
     private getFavorites: () => Set<string>,
+    private isNotified: (symbol: string) => boolean,
     private getSnapshotData: (instrumentKey: string) => MinuteAggregatePayload[],
     private getFavoritePrices: () => { instrumentKey: string; symbol: string; price: number; change: number; changePct: number }[],
   ) {}
@@ -153,6 +154,11 @@ export default class ClientBroadcaster {
         } else {
           this.firebase.setValue(`favorites/${msg.symbol}`, true);
         }
+        return;
+      }
+
+      if (msg.type === "toggle_notify" && msg.symbol) {
+        this.firebase.setValue(`stocks/${msg.symbol}/notifySignals`, this.isNotified(msg.symbol) ? null : true);
         return;
       }
     } catch {}

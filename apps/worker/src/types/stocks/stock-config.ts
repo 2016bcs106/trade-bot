@@ -12,4 +12,5 @@ export interface StockConfig {
   addedAt: string;
   updatedAt: string;
   status?: "pending_sync" | "sync_failed" | "synced" | "ready";
+  notifySignals?: boolean;
 }

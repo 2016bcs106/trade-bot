@@ -24,8 +24,6 @@ class LiveStreamScript extends BaseScript {
   private marketStatus = "Closed";
   private lastTradeDate: string | null = null;
 
-  private prevRsiByInstrument = new Map<string, number | null>();
-
   private registry = new StockRegistry();
   private aggregateStore!: AggregateStore;
   private tickBuffer!: TickBuffer;
@@ -80,6 +78,7 @@ class LiveStreamScript extends BaseScript {
       () => this.registry.buildStockList(),
       () => ({ status: this.marketStatus, tradeDate: this.lastTradeDate }),
       () => this.registry.favorites,
+      (symbol) => this.registry.stocks.find((s) => s.symbol === symbol)?.notifySignals ?? false,
       (key) => this.aggregateStore.getSnapshotData(key),
       () => this.registry.buildFavoritePrices(this.aggregateStore),
     );
@@ -186,21 +185,12 @@ class LiveStreamScript extends BaseScript {
       }
     }
 
-    this.checkRsiSignal(instrumentKey, stock.symbol, aggregate.rsi, aggregate.close);
-    this.broadcaster.sendMinuteUpdate(instrumentKey, aggregate);
-  }
-
-  private checkRsiSignal(instrumentKey: string, symbol: string, rsi: number | null, price: number): void {
-    if (rsi == null) return;
-    const prevRsi = this.prevRsiByInstrument.get(instrumentKey);
-    this.prevRsiByInstrument.set(instrumentKey, rsi);
-    if (prevRsi == null) return;
-
-    if (prevRsi < 65 && rsi >= 65) {
-      sendSlackMessage(`${symbol} RSI crossed above 65 (${rsi.toFixed(1)}) @ ₹${price.toFixed(2)}`);
-    } else if (prevRsi > 35 && rsi <= 35) {
-      sendSlackMessage(`${symbol} RSI crossed below 35 (${rsi.toFixed(1)}) @ ₹${price.toFixed(2)}`);
+    if (aggregate.signal && stock.notifySignals) {
+      const label = aggregate.signal.toUpperCase();
+      sendSlackMessage(`${stock.symbol} ${label} @ ₹${aggregate.close.toFixed(2)} (RSI: ${aggregate.rsi?.toFixed(1) ?? '-'})`);
     }
+
+    this.broadcaster.sendMinuteUpdate(instrumentKey, aggregate);
   }
 
   private loadHistoricalData(): void {

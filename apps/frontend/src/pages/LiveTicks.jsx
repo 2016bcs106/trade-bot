@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend } from 'chart.js'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronLeft, faChevronDown, faSliders, faCircleQuestion, faMaximize, faMinimize } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown, faSliders, faCircleQuestion, faMaximize, faMinimize, faBell, faBellSlash } from '@fortawesome/free-solid-svg-icons'
 import Loader from '../components/Loader'
 import StatusBadges from '../components/StatusBadges'
 import { useApp } from '../context/AppContext'
@@ -25,7 +25,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 export default function LiveTicks() {
   const { symbol } = useParams()
   const navigate = useNavigate()
-  const { status, stocks, selectedInstrumentKey, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, getPriceInfo, marketStatus } = useApp()
+  const { status, stocks, selectedInstrumentKey, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getPriceInfo, marketStatus } = useApp()
   setMarketOpen(marketStatus !== 'Closed')
 
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -133,6 +133,9 @@ export default function LiveTicks() {
 
           <div>
             <div style={styles.toolbar}>
+              <button style={{ ...chartStyles.iconBtn, ...(selectedStock.isNotified ? { background: 'var(--color-primary)', color: '#fff' } : {}) }} onClick={() => toggleNotify(selectedStock.symbol)}>
+                <FontAwesomeIcon icon={selectedStock.isNotified ? faBell : faBellSlash} />
+              </button>
               <button style={chartStyles.iconBtn} onClick={() => setZoomedIn((v) => !v)}>
                 <FontAwesomeIcon icon={zoomedIn ? faMaximize : faMinimize} />
               </button>
