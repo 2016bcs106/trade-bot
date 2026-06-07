@@ -73,9 +73,6 @@ body {
   min-height: 100vh;
 }
 
-button:active {
-  transform: scale(0.92);
-}
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
