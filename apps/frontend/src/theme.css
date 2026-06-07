@@ -73,6 +73,10 @@ body {
   min-height: 100vh;
 }
 
+button:active {
+  transform: scale(0.92);
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -81,4 +85,20 @@ body {
 @keyframes slide-up {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes value-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes press {
+  0% { transform: scale(1); }
+  100% { transform: scale(0.92); }
 }

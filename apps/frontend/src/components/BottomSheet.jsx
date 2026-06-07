@@ -23,6 +23,7 @@ const styles = {
     inset: 0,
     background: 'rgba(0,0,0,0.32)',
     zIndex: 2000,
+    animation: 'fade-in 0.2s ease',
   },
   sheet: {
     position: 'fixed',

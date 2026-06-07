@@ -85,6 +85,7 @@ const styles = {
     background: 'transparent',
     cursor: 'pointer',
     minWidth: '64px',
+    transition: 'transform 0.15s ease',
   },
   label: {
     fontSize: '10px',

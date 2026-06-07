@@ -10,10 +10,12 @@ export const chartHeaderStyles = {
     fontWeight: 600,
     color: 'var(--color-text)',
     letterSpacing: '-0.5px',
+    transition: 'color 0.3s ease',
   },
   change: {
     fontSize: 'var(--font-subhead)',
     fontWeight: 600,
+    transition: 'color 0.3s ease',
   },
 }
 
@@ -25,6 +27,7 @@ export const chartStyles = {
     marginLeft: 'var(--space-lg)',
     marginRight: 'var(--space-lg)',
     padding: 'var(--space-lg) var(--space-md)',
+    animation: 'fade-in 0.4s ease both',
   },
   labelRow: {
     display: 'flex',
@@ -69,5 +72,6 @@ export const chartStyles = {
     fontSize: '0.9rem',
     cursor: 'pointer',
     padding: 0,
+    transition: 'transform 0.15s ease, background 0.2s ease',
   },
 }

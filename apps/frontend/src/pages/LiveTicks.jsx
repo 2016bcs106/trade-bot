@@ -83,7 +83,7 @@ export default function LiveTicks() {
   const isDisconnected = status === 'disconnected'
   const selectedStock = stocks.find((s) => s.instrumentKey === selectedInstrumentKey)
 
-  if (!selectedStock) {
+  if (!selectedStock || selectedStock.symbol !== symbol) {
     return <div style={styles.wrap}><Loader /></div>
   }
 
@@ -145,31 +145,31 @@ export default function LiveTicks() {
             </div>
 
             {visibleCharts.price && (
-              <div style={chartStyles.section}>
+              <div style={{ ...chartStyles.section, animationDelay: '0s' }}>
                 <PriceChart ref={priceChartRef} options={opts(priceChartOptions)} />
               </div>
             )}
 
             {visibleCharts.rsi && (
-              <div style={chartStyles.section}>
+              <div style={{ ...chartStyles.section, animationDelay: '0.05s' }}>
                 <RsiChart ref={rsiChartRef} options={opts(rsiChartOptions)} />
               </div>
             )}
 
             {visibleCharts.ratio && (
-              <div style={chartStyles.section}>
+              <div style={{ ...chartStyles.section, animationDelay: '0.1s' }}>
                 <RatioChart ref={ratioChartRef} options={opts(ratioChartOptions)} />
               </div>
             )}
 
             {visibleCharts.pressure && (
-              <div style={chartStyles.section}>
+              <div style={{ ...chartStyles.section, animationDelay: '0.15s' }}>
                 <PressureChart ref={pressureChartRef} options={opts(pressureChartOptions)} />
               </div>
             )}
 
             {visibleCharts.volume && (
-              <div style={chartStyles.section}>
+              <div style={{ ...chartStyles.section, animationDelay: '0.2s' }}>
                 <VolumeChart ref={qtyChartRef} options={opts(baseChartOptions)} />
               </div>
             )}

@@ -114,6 +114,7 @@ export function AppProvider({ children }) {
 
   const selectStock = (instrumentKey) => {
     setSelectedInstrumentKey(instrumentKey)
+    setDataByInstrument((prev) => ({ ...prev, [instrumentKey]: {} }))
   }
 
   const subscribeStock = (instrumentKey) => {

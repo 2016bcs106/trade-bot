@@ -94,6 +94,7 @@ const styles = {
     textAlign: 'left',
     cursor: 'pointer',
     display: 'flex',
+    transition: 'background 0.15s ease',
     alignItems: 'center',
     gap: 'var(--space-md)',
   },
