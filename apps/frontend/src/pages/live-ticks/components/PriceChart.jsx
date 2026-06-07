@@ -60,9 +60,9 @@ export default forwardRef(function PriceChart({ options }, ref) {
     return {
       labels: FIXED_LABELS,
       datasets: [
-        { label: 'Upper Band', data: upper, borderColor: bandColor, borderWidth: 0.5, borderDash: [3, 3], pointRadius: 0, fill: false, spanGaps: true, skipPulsingDot: true },
-        { label: 'Lower Band', data: lower, borderColor: bandColor, borderWidth: 0.5, borderDash: [3, 3], pointRadius: 0, fill: '-1', backgroundColor: 'rgba(0, 122, 255, 0.04)', spanGaps: true, skipPulsingDot: true },
-        { label: 'SMA (20)', data: sma, borderColor: smaColor, borderWidth: 1, borderDash: [2, 2], pointRadius: 0, fill: false, spanGaps: true, skipPulsingDot: true },
+        { label: 'Upper Band', data: upper, borderColor: bandColor, borderWidth: 0.5, borderDash: [3, 3], pointRadius: 0, pointHoverRadius: 0, fill: false, spanGaps: true, skipPulsingDot: true },
+        { label: 'Lower Band', data: lower, borderColor: bandColor, borderWidth: 0.5, borderDash: [3, 3], pointRadius: 0, pointHoverRadius: 0, fill: '-1', backgroundColor: 'rgba(0, 122, 255, 0.04)', spanGaps: true, skipPulsingDot: true },
+        { label: 'SMA (20)', data: sma, borderColor: smaColor, borderWidth: 1, borderDash: [2, 2], pointRadius: 0, pointHoverRadius: 0, fill: false, spanGaps: true, skipPulsingDot: true },
         {
           label: 'Close Price',
           data: closes,
