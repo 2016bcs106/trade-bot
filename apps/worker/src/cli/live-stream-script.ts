@@ -200,6 +200,28 @@ class LiveStreamScript extends BaseScript {
     }));
     const targetDate = this.getTargetDate();
     this.aggregateStore.loadHistorical(stocks, this.marketStatus, todayDate(), targetDate);
+    this.notifyHistoricalSignals();
+  }
+
+  private async notifyHistoricalSignals(): Promise<void> {
+    const enabled = await this.firebase.getConfig("notifyOnRestart");
+    if (!enabled) return;
+
+    const lines: string[] = [];
+    for (const stock of this.registry.stocks) {
+      if (!stock.notifySignals) continue;
+      const instrumentKey = this.registry.getInstrumentKey(stock);
+      const data = this.aggregateStore.getSnapshotData(instrumentKey);
+      for (const agg of data) {
+        if (agg.signal) {
+          const time = agg.minute.split("T")[1] || agg.minute;
+          lines.push(`${stock.symbol} ${agg.signal.toUpperCase()} @ ₹${agg.close.toFixed(2)} (RSI: ${agg.rsi?.toFixed(1) ?? '-'}) at ${time}`);
+        }
+      }
+    }
+    if (lines.length > 0) {
+      sendSlackMessage(`[Historical Signals]\n${lines.join("\n")}`);
+    }
   }
 
   private logStats(): void {

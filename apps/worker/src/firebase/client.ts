@@ -135,6 +135,10 @@ export default class FirebaseClient {
     });
   }
 
+  async getConfig(key: string): Promise<unknown> {
+    return this._getValue(`config/${key}`);
+  }
+
   async destroy(): Promise<void> {
     await deleteApp(app);
   }

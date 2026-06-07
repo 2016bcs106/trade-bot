@@ -1,30 +1,44 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faArrowRotateRight, faServer, faCheck, faFlask } from '@fortawesome/free-solid-svg-icons'
-import { db, ref, push } from '../utils/firebase'
+import { faArrowRotateRight, faServer, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { db, ref, push, set, onValue } from '../utils/firebase'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
 import { CardList } from '../components/Card'
 import ListItem from '../components/ListItem'
-import Toggle from '../components/Toggle'
 import BottomSheet from '../components/BottomSheet'
 
 export function getSignalSource() {
-  try { return localStorage.getItem('signalSource') || 'frontend' } catch { return 'frontend' }
+  try { return localStorage.getItem('signalSource') || 'backend' } catch { return 'backend' }
+}
+
+function InlineToggle({ enabled, onToggle }) {
+  return (
+    <div onClick={(e) => { e.stopPropagation(); onToggle() }} style={{ ...toggleStyles.track, background: enabled ? 'var(--color-success)' : 'var(--color-text-tertiary)' }}>
+      <div style={{ ...toggleStyles.thumb, transform: enabled ? 'translateX(20px)' : 'translateX(0)' }} />
+    </div>
+  )
 }
 
 export default function Settings() {
   const [updateQueued, setUpdateQueued] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [signalSource, setSignalSource] = useState(getSignalSource)
+  const [notifyOnRestart, setNotifyOnRestart] = useState(false)
+
+  useEffect(() => {
+    return onValue(ref(db, 'config/notifyOnRestart'), (snap) => {
+      setNotifyOnRestart(!!snap.val())
+    })
+  }, [])
 
   const handleSystemUpdate = async () => {
     setConfirmOpen(false)
     await push(ref(db, 'request_queue'), {
       type: 'system_update',
-      payload: {},
+      payload: { force: true },
       status: 'pending',
       createdAt: moment().utcOffset('+05:30').toISOString(),
     })
@@ -42,42 +56,43 @@ export default function Settings() {
           icon={faArrowRotateRight}
           iconColor="var(--color-primary)"
           title="Force Reload"
-          subtitle="Clear cache and reload"
+          subtitle="Clear cache and reload the app"
           onClick={() => window.location.reload(true)}
+        />
+        <ListItem
+          icon={updateQueued ? faCheck : faServer}
+          iconColor={updateQueued ? 'var(--color-success)' : '#8e8e93'}
+          title="Force System Update"
+          subtitle={updateQueued ? 'Queued — worker will pull & restart' : 'Pull, deploy frontend & backend, restart all'}
+          onClick={!updateQueued ? () => setConfirmOpen(true) : undefined}
           isLast
         />
       </CardList>
 
       <SectionHeader>Experimental</SectionHeader>
       <CardList>
-        <div style={styles.toggleWrap}>
-          <Toggle
-            label={`Signal source: ${signalSource === 'backend' ? 'Backend' : 'Frontend'}`}
-            enabled={signalSource === 'backend'}
-            onToggle={() => {
-              const next = signalSource === 'backend' ? 'frontend' : 'backend'
-              setSignalSource(next)
-              localStorage.setItem('signalSource', next)
-            }}
-          />
-        </div>
-      </CardList>
-
-      <SectionHeader>System</SectionHeader>
-      <CardList>
         <ListItem
-          icon={updateQueued ? faCheck : faServer}
-          iconColor={updateQueued ? 'var(--color-success)' : '#8e8e93'}
-          title="System Update"
-          subtitle={updateQueued ? 'Queued — worker will pull & restart' : 'Pull latest code, deploy, restart'}
-          onClick={!updateQueued ? () => setConfirmOpen(true) : undefined}
+          title="Use backend signals"
+          subtitle="When off, signals are computed in the browser instead of the server"
+          right={<InlineToggle enabled={signalSource === 'backend'} onToggle={() => {
+            const next = signalSource === 'backend' ? 'frontend' : 'backend'
+            setSignalSource(next)
+            localStorage.setItem('signalSource', next)
+          }} />}
+        />
+        <ListItem
+          title="Notify signals on restart"
+          subtitle="Send Slack notification for historical signals when server restarts"
+          right={<InlineToggle enabled={notifyOnRestart} onToggle={() => {
+            set(ref(db, 'config/notifyOnRestart'), !notifyOnRestart || null)
+          }} />}
           isLast
         />
       </CardList>
 
-      <BottomSheet title="System Update" isOpen={confirmOpen} onClose={() => setConfirmOpen(false)}>
+      <BottomSheet title="Force System Update" isOpen={confirmOpen} onClose={() => setConfirmOpen(false)}>
         <div style={styles.confirmBody}>
-          <p style={styles.confirmText}>This will pull the latest code, deploy frontend changes, and restart backend services.</p>
+          <p style={styles.confirmText}>This will force pull the latest code, deploy both frontend and backend, and restart all services regardless of changes.</p>
           <p style={styles.confirmText}>Proceed?</p>
           <div style={styles.confirmActions}>
             <button style={styles.cancelBtn} onClick={() => setConfirmOpen(false)}>Cancel</button>
@@ -89,10 +104,26 @@ export default function Settings() {
   )
 }
 
-const styles = {
-  toggleWrap: {
-    padding: '4px var(--space-lg)',
+const toggleStyles = {
+  track: {
+    width: '51px',
+    height: '31px',
+    borderRadius: '16px',
+    padding: '2px',
+    cursor: 'pointer',
+    transition: 'background 0.25s ease',
   },
+  thumb: {
+    width: '27px',
+    height: '27px',
+    borderRadius: '14px',
+    background: '#fff',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+    transition: 'transform 0.25s ease',
+  },
+}
+
+const styles = {
   confirmBody: {
     padding: 'var(--space-lg) var(--space-xl)',
   },

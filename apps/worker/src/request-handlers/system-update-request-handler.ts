@@ -38,7 +38,8 @@ export class SystemUpdateRequestHandler implements RequestHandler {
 
   async handle(_request: QueuedRequest, _ctx: ServiceContext): Promise<void> {
     this.log = _ctx.log;
-    this.log.info("=== SYSTEM UPDATE STARTED ===");
+    const force = !!_request.payload?.force;
+    this.log.info(`=== SYSTEM UPDATE STARTED ${force ? "(FORCE)" : ""} ===`);
 
     // ─── Step 1: Git stash ───────────────────────────────────────────
     this.log.info("Step 1: Stashing local changes...");
@@ -49,7 +50,7 @@ export class SystemUpdateRequestHandler implements RequestHandler {
     this.log.info("Step 2: Pulling latest code...");
     const pullOutput = this.exec("git pull --rebase origin master", PROJECT_ROOT);
 
-    if (pullOutput.includes("Already up to date") || pullOutput.includes("Current branch master is up to date")) {
+    if (!force && (pullOutput.includes("Already up to date") || pullOutput.includes("Current branch master is up to date"))) {
       this.log.info("  No new commits — nothing to deploy");
       this.log.info("=== SYSTEM UPDATE COMPLETE (no changes) ===");
       return;
@@ -57,9 +58,13 @@ export class SystemUpdateRequestHandler implements RequestHandler {
 
     // ─── Step 3: Detect what changed ──────────────────────────────────
     this.log.info("Step 3: Detecting changes...");
-    const changedFiles = this.exec("git diff-tree --name-only -r HEAD", PROJECT_ROOT).trim();
-    const hasFrontendChanges = changedFiles.split("\n").some((f) => f.includes("frontend"));
-    const hasWorkerChanges = changedFiles.split("\n").some((f) => f.includes("worker"));
+    let hasFrontendChanges = force;
+    let hasWorkerChanges = force;
+    if (!force) {
+      const changedFiles = this.exec("git diff-tree --name-only -r HEAD", PROJECT_ROOT).trim();
+      hasFrontendChanges = changedFiles.split("\n").some((f) => f.includes("frontend"));
+      hasWorkerChanges = changedFiles.split("\n").some((f) => f.includes("worker"));
+    }
     this.log.info(`  Frontend changes: ${hasFrontendChanges}, Worker changes: ${hasWorkerChanges}`);
 
     // ─── Step 4: Deploy frontend (if changed) ────────────────────────
