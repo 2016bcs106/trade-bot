@@ -15,7 +15,7 @@ const SYMBOLS_FILE = resolve(DATA_DIR, "stock-symbols.json");
 const MIN_PRICE = 50;
 const TOP_STOCK_PERCENTILE = 0.2;
 const SECURITY_MASTER_URL = "https://developer.paytmmoney.com/data/v1/scrips/nse_security_master.csv";
-const DELAY_BETWEEN_REQUESTS_MS = 500;
+const DELAY_BETWEEN_REQUESTS_MS = 100;
 
 /**
  * Handles "stock_sync" requests — fetches NSE security master,
@@ -57,12 +57,14 @@ export class StockSyncRequestHandler implements RequestHandler {
       return;
     }
 
+    const topStocks = forceAll ? this.computeTopStocks(ctx) : new Set<string>();
+
     let syncedCount = 0;
     let failedCount = 0;
 
     for (const symbol of toSync) {
       try {
-        const synced = await this.syncStock(symbol, forceAll, ctx);
+        const synced = await this.syncStock(symbol, forceAll, topStocks, ctx);
         if (synced) {
           syncedCount++;
           ctx.log.info(`✓ ${symbol}`);
@@ -79,10 +81,6 @@ export class StockSyncRequestHandler implements RequestHandler {
 
     this.saveSymbols(masterSymbols);
     ctx.log.info(`Stock master sync complete — synced=${syncedCount} failed=${failedCount}`);
-
-    if (forceAll) {
-      await this.rankTopStocks(ctx);
-    }
   }
 
   private async fetchSecurityMaster(ctx: ServiceContext): Promise<string[]> {
@@ -118,7 +116,7 @@ export class StockSyncRequestHandler implements RequestHandler {
     return Array.from(symbols).sort();
   }
 
-  private async syncStock(symbol: string, isUpdate: boolean, ctx: ServiceContext): Promise<boolean> {
+  private async syncStock(symbol: string, isUpdate: boolean, topStocks: Set<string>, ctx: ServiceContext): Promise<boolean> {
     const { firebase, paytm: client } = ctx;
 
     const result = await client.searchStock(symbol);
@@ -133,6 +131,8 @@ export class StockSyncRequestHandler implements RequestHandler {
       return false;
     }
 
+    const isTopStock = topStocks.size > 0 ? topStocks.has(symbol) : (existing?.isTopStock ?? false);
+
     if (existing) {
       await firebase.updateStock(symbol, {
         name: result.name,
@@ -146,6 +146,7 @@ export class StockSyncRequestHandler implements RequestHandler {
         exchange: "NSE",
         updatedAt: nowISO(),
         status: "ready",
+        isTopStock,
       });
     } else {
       const config: StockConfig = {
@@ -162,6 +163,7 @@ export class StockSyncRequestHandler implements RequestHandler {
         addedAt: nowISO(),
         updatedAt: nowISO(),
         status: "synced",
+        isTopStock,
       };
       await firebase.setStock(symbol, config);
     }
@@ -195,18 +197,17 @@ export class StockSyncRequestHandler implements RequestHandler {
     return result;
   }
 
-  private async rankTopStocks(ctx: ServiceContext): Promise<void> {
-    ctx.log.info("Ranking top stocks by volume...");
+  private computeTopStocks(ctx: ServiceContext): Set<string> {
+    ctx.log.info("Computing top stocks by volume...");
 
     if (!existsSync(OHLCV_DIR)) {
       ctx.log.warn("OHLCV directory not found — skipping ranking");
-      return;
+      return new Set();
     }
 
+    const RECENT_DAYS = 63;
     const files = readdirSync(OHLCV_DIR).filter((f) => f.endsWith(".json"));
     const volumes: { symbol: string; volume: number }[] = [];
-
-    const RECENT_DAYS = 63; // ~3 months of trading days
 
     for (const file of files) {
       const symbol = file.replace(".json", "");
@@ -230,19 +231,7 @@ export class StockSyncRequestHandler implements RequestHandler {
     const topSymbols = new Set(volumes.slice(0, cutoff).map((v) => v.symbol));
 
     ctx.log.info(`Top ${cutoff} stocks identified (${topSymbols.size} of ${volumes.length} qualifying)`);
-
-    const allStocks = await ctx.firebase.getAllStocks();
-    let updated = 0;
-
-    for (const [symbol, stock] of Object.entries(allStocks)) {
-      const shouldBeTop = topSymbols.has(symbol);
-      if (stock.isTopStock !== shouldBeTop) {
-        await ctx.firebase.updateStock(symbol, { isTopStock: shouldBeTop });
-        updated++;
-      }
-    }
-
-    ctx.log.info(`Updated isTopStock for ${updated} stocks`);
+    return topSymbols;
   }
 
   private delay(ms: number): Promise<void> {

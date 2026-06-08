@@ -23,7 +23,7 @@ export default function StockSelectorSheet({ isOpen, onClose, stocks, selectedIn
   })
 
   return (
-    <BottomSheet title="Select Stock" isOpen={isOpen} onClose={handleClose}>
+    <BottomSheet title={`Select Stock (${stocks.length})`} isOpen={isOpen} onClose={handleClose}>
       <div style={styles.searchWrap}>
         <input
           style={styles.searchInput}

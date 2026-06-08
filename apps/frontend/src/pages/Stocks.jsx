@@ -114,10 +114,10 @@ export default function Stocks() {
 
       <div style={styles.tabRow}>
         <button style={{ ...styles.tab, ...(activeTab === 'favorites' ? styles.tabActive : {}) }} onClick={() => setActiveTab('favorites')}>
-          Favorites
+          Favorites <Badge label={`${stocks.filter((s) => s.isFavorite).length}`} color={activeTab === 'favorites' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
         <button style={{ ...styles.tab, ...(activeTab === 'others' ? styles.tabActive : {}) }} onClick={() => setActiveTab('others')}>
-          Others
+          Others <Badge label={`${stocks.filter((s) => !s.isFavorite).length}`} color={activeTab === 'others' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
       </div>
 
