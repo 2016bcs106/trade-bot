@@ -93,7 +93,7 @@ class LiveStreamScript extends BaseScript {
     this.log.info("Starting live market data recorder");
 
     this.firebase.onStocksChange((stocks) => {
-      const active = stocks ? Object.values(stocks).filter((s) => s.securityId) : [];
+      const active = stocks ? Object.values(stocks).filter((s) => s.securityId && s.isTopStock) : [];
       this.registry.setStocks(active);
 
       if (this.lastTradeDate) {
