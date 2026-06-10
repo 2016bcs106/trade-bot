@@ -89,32 +89,61 @@ export default forwardRef(function PriceChart({ options }, ref) {
         if (closes[i] == null) continue
         const rsi = rows[i]?.rsi
 
-        if (position === 'long' && sma[i] != null && closes[i] < sma[i]) {
-          exitSignals[i] = closes[i]
-          netProfit += closes[i] - entryPrice
-          position = null
-          entryPrice = null
-        } else if (position === 'short' && sma[i] != null && closes[i] > sma[i]) {
+        const time = rows[i]?.minute.split("T")[1];
+
+        if (time < '09:45') {
+          continue;
+        } else if (time >= '14:30') {
+          console.log(time, closes[i], position);
+          if (position === 'long') {
+            exitSignals[i] = closes[i];
+            netProfit += (closes[i] - entryPrice); // Fixed: Exit - Entry
+
+            console.log(closes[i] - entryPrice);
+
+            position = null;
+            entryPrice = null;
+          } else if (position === 'short') {
+            exitSignals[i] = closes[i];
+            netProfit += (entryPrice - closes[i]); // Fixed: Entry - Exit
+
+            console.log(closes[i] - entryPrice);
+            position = null;
+            entryPrice = null;
+          }
+          continue;
+        }
+
+        if (rsi == null || sma[i] == null || upper[i] == null || lower[i] == null) {
+          continue;
+        }
+
+        const upperDiffWithSma = upper[i] - sma[i];
+        const lowerDiffWithSma = sma[i] - lower[i];
+        const closesDiffWithSma = Math.abs(closes[i] - sma[i]);
+
+        if ((position === 'short' && closes[i] < sma[i])) {
           exitSignals[i] = closes[i]
           netProfit += entryPrice - closes[i]
           position = null
           entryPrice = null
+        } else if ((position === 'long' && closes[i] > sma[i])) {
+          exitSignals[i] = closes[i]
+          netProfit += closes[i] - entryPrice
+          position = null
+          entryPrice = null
         }
 
-        if (position != null || rsi == null) continue
+        if (position != null) continue
 
-        if (rsi > 65 && (upper[i] == null || closes[i] <= upper[i])) {
-          if (sma[i] == null || closes[i] >= sma[i]) {
-            buySignals[i] = closes[i]
-            position = 'long'
-            entryPrice = closes[i]
-          }
-        } else if (rsi < 35 && (lower[i] == null || closes[i] >= lower[i])) {
-          if (sma[i] == null || closes[i] <= sma[i]) {
-            sellSignals[i] = closes[i]
-            position = 'short'
-            entryPrice = closes[i]
-          }
+        if (rsi >= 65 && closes[i] >= sma[i] && 0.9 * upperDiffWithSma <= closesDiffWithSma) {
+          sellSignals[i] = closes[i]
+          position = 'short'
+          entryPrice = closes[i]
+        } else if (rsi <= 35 && closes[i] <= sma[i] && 0.9 * lowerDiffWithSma <= closesDiffWithSma) {
+          buySignals[i] = closes[i]
+          position = 'long'
+          entryPrice = closes[i]
         }
       }
 
