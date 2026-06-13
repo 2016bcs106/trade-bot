@@ -33,3 +33,21 @@ export function sampleCategorical(probabilities: number[]): number {
 
     return -1;
 }
+
+export function sampleNextState(currentState: number, A: number[][]): number {
+    return sampleCategorical(A[currentState]);
+}
+
+export function simulateChain(A: number[][], pi: number[], T: number) {
+    const result = Array(T);
+    
+    for (let i = 0; i < T; i++) {
+        if (i === 0) {
+            result[0] = sampleCategorical(pi);
+        } else {
+            result[i] = sampleNextState(result[i-1], A);
+        }
+    }
+
+    return result;
+}
