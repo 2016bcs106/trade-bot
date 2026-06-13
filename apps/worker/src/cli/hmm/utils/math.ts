@@ -66,3 +66,24 @@ export function generateObservations(A: number[][], pi: number[], emissionParams
         })
     };
 }
+
+export function forwardLogAlpha(observations: number[], A: number[][], pi: number[], emissionParams: { mean: number, variance: number} []): number[][] {
+    const logAlpha: number[][] = [];
+    
+    for (let t = 0; t < observations.length; t++) {
+        let logAlphaTemp = [];
+        for (let j = 0; j < pi.length; j++) {
+            if (t === 0) {
+                logAlphaTemp.push(Math.log(pi[j]) + gaussianLogPdf(observations[0], emissionParams[j].mean, emissionParams[j].variance));
+            } else {
+                logAlphaTemp.push(
+                    logSumExp(Array.from({ length: pi.length }, (_, i) => logAlpha.slice(-1)[0][i] + Math.log(A[i][j])))
+                    + gaussianLogPdf(observations[t], emissionParams[j].mean, emissionParams[j].variance)
+                );
+            }
+        }
+        logAlpha.push(logAlphaTemp);
+    }
+
+    return logAlpha;
+}
