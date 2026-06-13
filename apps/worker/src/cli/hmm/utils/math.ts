@@ -167,3 +167,17 @@ export function backwardLogBeta(
 
   return logBeta;
 }
+
+export function computeLogGamma(logAlpha: number[][], logBeta: number[][]) {
+    const logGamma: number[][] = Array(logAlpha.length);
+    const logP = logSumExp(logAlpha[logAlpha.length - 1]);
+
+    for (let t = 0; t < logAlpha.length; t++) {
+        logGamma[t] = Array(logAlpha[0].length);
+        for (let i = 0; i < logAlpha[0].length; i++) {
+            logGamma[t][i] = logAlpha[t][i] + logBeta[t][i] - logP;
+        }
+    }
+
+    return logGamma;
+}
