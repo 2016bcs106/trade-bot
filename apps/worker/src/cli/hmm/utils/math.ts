@@ -191,21 +191,84 @@ export function computeLogXi(
   emissionParams: { mean: number; variance: number }[],
   logAlpha: number[][],
   logBeta: number[][],
-) {
-    const logP = logSumExp(logAlpha[logAlpha.length - 1]);
-    const logXi: number[][][] = Array(observations.length - 1);
+): number[][][] {
+  const logP = logSumExp(logAlpha[logAlpha.length - 1]);
+  const logXi: number[][][] = Array(observations.length - 1);
 
-    for (let t = 0; t < observations.length - 1; t++) {
-        logXi[t] = Array(A[0].length);
-        for (let i = 0; i < A[0].length; i++) {
-            logXi[t][i] = Array(A[0].length);
-            for (let j = 0; j < A[0].length; j++) {
-                logXi[t][i][j] = logAlpha[t][i] + Math.log(A[i][j])
-                    + gaussianLogPdf(observations[t+1], emissionParams[j].mean, emissionParams[j].variance)
-                    + logBeta[t+1][j] - logP;
-            }
+  for (let t = 0; t < observations.length - 1; t++) {
+    logXi[t] = Array(A[0].length);
+    for (let i = 0; i < A[0].length; i++) {
+      logXi[t][i] = Array(A[0].length);
+      for (let j = 0; j < A[0].length; j++) {
+        logXi[t][i][j] =
+          logAlpha[t][i] +
+          Math.log(A[i][j]) +
+          gaussianLogPdf(
+            observations[t + 1],
+            emissionParams[j].mean,
+            emissionParams[j].variance,
+          ) +
+          logBeta[t + 1][j] -
+          logP;
+      }
+    }
+  }
+
+  return logXi;
+}
+
+export function reEstimatePi(logGamma: number[][]): number[] {
+  return logGamma[0].map((value) => Math.exp(value));
+}
+
+export function reEstimateA(
+  logGamma: number[][],
+  logXi: number[][][],
+): number[][] {
+  const A: number[][] = Array(logXi[0].length);
+  for (let i = 0; i < logXi[0].length; i++) {
+    A[i] = Array(logXi[0].length);
+    for (let j = 0; j < logXi[0].length; j++) {
+      let xiSum = 0;
+      let gammaSum = 0;
+
+      for (let t = 0; t < logXi.length; t++) {
+        xiSum += Math.exp(logXi[t][i][j]);
+        gammaSum += Math.exp(logGamma[t][i]);
+      }
+
+      A[i][j] = xiSum / gammaSum;
+    }
+  }
+  return A;
+}
+
+export function reEstimateEmissions(
+  observations: number[],
+  logGamma: number[][],
+): { mean: number; variance: number }[] {
+    const emissions: { mean: number; variance: number }[] = Array(logGamma[0].length);
+
+    for (let i = 0; i < logGamma[0].length; i++) {
+        let gammaCrossObservationsSum = 0;
+        let gammaSum = 0;
+        for (let t = 0; t < logGamma.length; t++) {
+            gammaCrossObservationsSum += Math.exp(logGamma[t][i]) * observations[t];
+            gammaSum += Math.exp(logGamma[t][i]);
         }
+
+        const mean = gammaCrossObservationsSum / gammaSum;
+
+        let gammaCrossSquareOfObservationsMinusMean = 0;
+        for (let t = 0; t < logGamma.length; t++) {
+            gammaCrossSquareOfObservationsMinusMean += Math.exp(logGamma[t][i]) * Math.pow(observations[t] - mean, 2);
+        }
+
+        emissions[i] = {
+            mean,
+            variance: gammaCrossSquareOfObservationsMinusMean / gammaSum
+        };
     }
 
-    return logXi;
+    return emissions;
 }
