@@ -51,3 +51,8 @@ export function simulateChain(A: number[][], pi: number[], T: number) {
 
     return result;
 }
+
+export function sampleGaussian(mean: number, variance: number): number {
+    const z = Math.sqrt(-2 * Math.log(Math.random() + Number.EPSILON)) * Math.cos(2 * Math.PI * Math.random());
+    return mean + Math.sqrt(variance) * z;
+}
