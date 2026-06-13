@@ -168,16 +168,44 @@ export function backwardLogBeta(
   return logBeta;
 }
 
-export function computeLogGamma(logAlpha: number[][], logBeta: number[][]) {
-    const logGamma: number[][] = Array(logAlpha.length);
-    const logP = logSumExp(logAlpha[logAlpha.length - 1]);
+export function computeLogGamma(
+  logAlpha: number[][],
+  logBeta: number[][],
+): number[][] {
+  const logGamma: number[][] = Array(logAlpha.length);
+  const logP = logSumExp(logAlpha[logAlpha.length - 1]);
 
-    for (let t = 0; t < logAlpha.length; t++) {
-        logGamma[t] = Array(logAlpha[0].length);
-        for (let i = 0; i < logAlpha[0].length; i++) {
-            logGamma[t][i] = logAlpha[t][i] + logBeta[t][i] - logP;
+  for (let t = 0; t < logAlpha.length; t++) {
+    logGamma[t] = Array(logAlpha[0].length);
+    for (let i = 0; i < logAlpha[0].length; i++) {
+      logGamma[t][i] = logAlpha[t][i] + logBeta[t][i] - logP;
+    }
+  }
+
+  return logGamma;
+}
+
+export function computeLogXi(
+  observations: number[],
+  A: number[][],
+  emissionParams: { mean: number; variance: number }[],
+  logAlpha: number[][],
+  logBeta: number[][],
+) {
+    const logP = logSumExp(logAlpha[logAlpha.length - 1]);
+    const logXi: number[][][] = Array(observations.length - 1);
+
+    for (let t = 0; t < observations.length - 1; t++) {
+        logXi[t] = Array(A[0].length);
+        for (let i = 0; i < A[0].length; i++) {
+            logXi[t][i] = Array(A[0].length);
+            for (let j = 0; j < A[0].length; j++) {
+                logXi[t][i][j] = logAlpha[t][i] + Math.log(A[i][j])
+                    + gaussianLogPdf(observations[t+1], emissionParams[j].mean, emissionParams[j].variance)
+                    + logBeta[t+1][j] - logP;
+            }
         }
     }
 
-    return logGamma;
+    return logXi;
 }
