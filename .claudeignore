@@ -1,0 +1,32 @@
+# Dependencies & build output
+node_modules/
+dist/
+*.local
+
+# Frontend build/cache
+apps/frontend/dist/
+apps/frontend/.firebase/
+apps/frontend/node_modules/.vite/
+
+# Lockfiles
+pnpm-lock.yaml
+
+# Runtime data / artifacts
+data/
+models/
+reports/
+
+# Secrets
+.env
+*.env
+private.key
+certificate.crt
+
+# Logs
+*.log
+logs/
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
