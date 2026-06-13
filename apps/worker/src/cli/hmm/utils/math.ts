@@ -56,3 +56,13 @@ export function sampleGaussian(mean: number, variance: number): number {
     const z = Math.sqrt(-2 * Math.log(Math.random() + Number.EPSILON)) * Math.cos(2 * Math.PI * Math.random());
     return mean + Math.sqrt(variance) * z;
 }
+
+export function generateObservations(A: number[][], pi: number[], emissionParams: { mean: number, variance: number}[], T: number): { states: number[], observations: number[] } {
+    const states = simulateChain(A, pi, T);
+    return {
+        states: states,
+        observations: states.map(state => {
+            return sampleGaussian(emissionParams[state].mean, emissionParams[state].variance)
+        })
+    };
+}
