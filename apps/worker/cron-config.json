@@ -18,5 +18,15 @@
     "name": "signal-model",
     "schedule": "0 12 * * 1-5",
     "command": "src/cli/signal-model-script.ts"
+  },
+  {
+    "name": "hsmm-weekly-rank",
+    "schedule": "0 20 * * 6",
+    "command": "src/cli/hmm/hsmm/hsmm-weekly-rank-script.ts"
+  },
+  {
+    "name": "hsmm-daily-signal",
+    "schedule": "0 11 * * 1-5",
+    "command": "src/cli/hmm/hsmm/hsmm-daily-signal-script.ts"
   }
 ]
