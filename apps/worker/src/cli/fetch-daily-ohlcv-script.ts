@@ -10,7 +10,7 @@ import { StockConfig } from "../types/stocks/stock-config.ts";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = resolve(__dirname, "..", "..", "..", "..", "data", "daily-ohlcv");
 
-const DEFAULT_LOOKBACK_DAYS = 1095;
+const DEFAULT_LOOKBACK_DAYS = 3650;
 const DELAY_BETWEEN_REQUESTS_MS = 500;
 
 class FetchDailyOhlcvScript extends BaseScript {
