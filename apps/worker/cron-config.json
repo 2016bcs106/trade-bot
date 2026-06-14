@@ -28,5 +28,10 @@
     "name": "hsmm-daily-signal",
     "schedule": "0 11 * * 1-5",
     "command": "src/cli/hmm/hsmm/hsmm-daily-signal-script.ts"
+  },
+  {
+    "name": "check-auth-freshness",
+    "schedule": "45 18 * * *",
+    "command": "src/cli/check-auth-freshness-script.ts"
   }
 ]
