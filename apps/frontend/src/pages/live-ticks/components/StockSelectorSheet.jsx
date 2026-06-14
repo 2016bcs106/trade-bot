@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faStar as faStarSolid } from '@fortawesome/free-solid-svg-icons'
 import { faStar as faStarOutline } from '@fortawesome/free-regular-svg-icons'
 import BottomSheet from '../../../components/BottomSheet'
+import { getGroupRank } from '../../../utils/stock-grouping'
 
 export default function StockSelectorSheet({ isOpen, onClose, stocks, selectedInstrumentKey, getPriceInfo, onSelectStock, onToggleFavorite }) {
   const [search, setSearch] = useState('')
@@ -17,8 +18,8 @@ export default function StockSelectorSheet({ isOpen, onClose, stocks, selectedIn
     const q = search.toLowerCase()
     return s.symbol.toLowerCase().includes(q) || (s.displayName || '').toLowerCase().includes(q)
   }).sort((a, b) => {
-    if (a.isFavorite && !b.isFavorite) return -1
-    if (!a.isFavorite && b.isFavorite) return 1
+    const rankDiff = getGroupRank(a) - getGroupRank(b)
+    if (rankDiff !== 0) return rankDiff
     return a.symbol.localeCompare(b.symbol)
   })
 
