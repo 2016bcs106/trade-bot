@@ -2,6 +2,7 @@ import "../../../config/env.ts";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
+import { nowISO } from "../../../utils/time.ts";
 import BaseScript from "../../base-script.ts";
 import { GaussianParams } from "../types/gaussian-params.ts";
 import { OHLCV } from "../../../types/market-data/ohlcv.ts";
@@ -15,11 +16,13 @@ import { buildExpandedA, buildExpandedEmissions, buildExpandedPi, expandedIndex,
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "..", "..", "data");
 
+const STRATEGY_KEY = "HSMM_REGIME_FLIP";
 const N = 3;
 const D = 20;
 const FOLDS = 5;
 const MIN_OBSERVATIONS = 1000;
 const STAGE2_CANDIDATE_LIMIT = 100;
+const RECOMMEND_COUNT = 50;
 const ROUND_TRIP_COST = 0.002; // 0.2% round trip, approximating NSE delivery costs
 const uniformPi = Array(N).fill(1 / N);
 
@@ -83,6 +86,7 @@ class HsmmWeeklyRankScript extends BaseScript {
   private candidateCount = 0;
   private stage1Count = 0;
   private stage2Count = 0;
+  private recommendedCount = 0;
 
   get scriptName(): string {
     return "hsmm-weekly-rank";
@@ -93,6 +97,7 @@ class HsmmWeeklyRankScript extends BaseScript {
       "Candidates": this.candidateCount,
       "Stage 1 survivors": this.stage1Count,
       "Stage 2 survivors": this.stage2Count,
+      "Recommended": this.recommendedCount,
     };
   }
 
@@ -142,6 +147,46 @@ class HsmmWeeklyRankScript extends BaseScript {
     this.log.info(`Stage 2 complete — ${stage2Survivors.length}/${stage2Candidates.length} survived`);
     for (const s of stage2Survivors.slice(0, 10)) {
       this.log.info(`  ${s.symbol}: sharpe=${s.strategySharpe.toFixed(2)}, return=${(s.strategyTotalReturn * 100).toFixed(1)}%, stability=${(s.regimeStability * 100).toFixed(1)}%, trades=${s.numTrades}`);
+    }
+
+    const fittedAt = nowISO();
+    this.recommendedCount = Math.min(stage2Survivors.length, RECOMMEND_COUNT);
+
+    for (let i = 0; i < stage2Survivors.length; i++) {
+      const s = stage2Survivors[i];
+      const isRecommended = i < RECOMMEND_COUNT;
+      await this.firebase.setRecommendationData(s.symbol, STRATEGY_KEY, {
+        recommended: isRecommended,
+        rank: isRecommended ? i + 1 : null,
+        combinedScore: s.combinedScore,
+        regimeStability: s.regimeStability,
+        testDays: s.testDays,
+        numTrades: s.numTrades,
+        pctTimeInMarket: s.pctTimeInMarket,
+        strategyTotalReturn: s.strategyTotalReturn,
+        buyHoldTotalReturn: s.buyHoldTotalReturn,
+        strategySharpe: s.strategySharpe,
+        maxDrawdown: s.maxDrawdown,
+        winRate: s.winRate,
+        modelParams: s.modelParams,
+        fittedAt,
+      });
+    }
+
+    // any stock previously recommended but not re-evaluated this run loses its flag
+    const evaluated = new Set(stage2Survivors.map((s) => s.symbol));
+    const allStocks = await this.firebase.getAllStocks();
+    for (const [symbol, stock] of Object.entries(allStocks)) {
+      const existing = stock.recommendationData?.[STRATEGY_KEY];
+      if (existing?.recommended === true && !evaluated.has(symbol)) {
+        await this.firebase.setRecommendationData(symbol, STRATEGY_KEY, { ...existing, recommended: false, rank: null });
+      }
+    }
+
+    this.log.info(`Recommended ${this.recommendedCount} stocks (rank 1-${RECOMMEND_COUNT}):`);
+    for (let i = 0; i < this.recommendedCount; i++) {
+      const s = stage2Survivors[i];
+      this.log.info(`  #${i + 1} ${s.symbol}: sharpe=${s.strategySharpe.toFixed(2)}, return=${(s.strategyTotalReturn * 100).toFixed(1)}%, maxDD=${(s.maxDrawdown * 100).toFixed(1)}%, winRate=${(s.winRate * 100).toFixed(1)}%`);
     }
   }
 
