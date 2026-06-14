@@ -247,28 +247,60 @@ export function reEstimateEmissions(
   observations: number[],
   logGamma: number[][],
 ): { mean: number; variance: number }[] {
-    const emissions: { mean: number; variance: number }[] = Array(logGamma[0].length);
+  const emissions: { mean: number; variance: number }[] = Array(
+    logGamma[0].length,
+  );
 
-    for (let i = 0; i < logGamma[0].length; i++) {
-        let gammaCrossObservationsSum = 0;
-        let gammaSum = 0;
-        for (let t = 0; t < logGamma.length; t++) {
-            gammaCrossObservationsSum += Math.exp(logGamma[t][i]) * observations[t];
-            gammaSum += Math.exp(logGamma[t][i]);
-        }
-
-        const mean = gammaCrossObservationsSum / gammaSum;
-
-        let gammaCrossSquareOfObservationsMinusMean = 0;
-        for (let t = 0; t < logGamma.length; t++) {
-            gammaCrossSquareOfObservationsMinusMean += Math.exp(logGamma[t][i]) * Math.pow(observations[t] - mean, 2);
-        }
-
-        emissions[i] = {
-            mean,
-            variance: gammaCrossSquareOfObservationsMinusMean / gammaSum
-        };
+  for (let i = 0; i < logGamma[0].length; i++) {
+    let gammaCrossObservationsSum = 0;
+    let gammaSum = 0;
+    for (let t = 0; t < logGamma.length; t++) {
+      gammaCrossObservationsSum += Math.exp(logGamma[t][i]) * observations[t];
+      gammaSum += Math.exp(logGamma[t][i]);
     }
 
-    return emissions;
+    const mean = gammaCrossObservationsSum / gammaSum;
+
+    let gammaCrossSquareOfObservationsMinusMean = 0;
+    for (let t = 0; t < logGamma.length; t++) {
+      gammaCrossSquareOfObservationsMinusMean +=
+        Math.exp(logGamma[t][i]) * Math.pow(observations[t] - mean, 2);
+    }
+
+    emissions[i] = {
+      mean,
+      variance: gammaCrossSquareOfObservationsMinusMean / gammaSum,
+    };
+  }
+
+  return emissions;
+}
+
+export function trainHMM(
+  observations: number[],
+  A: number[][],
+  pi: number[],
+  emissionParams: { mean: number; variance: number }[],
+  numIterations: number,
+) {
+    const logLikelihoods = [];
+    for (let iteration = 0; iteration < numIterations; iteration++) {
+        const logAlpha = forwardLogAlpha(observations, A, pi, emissionParams);
+        const logBeta = backwardLogBeta(observations, A, emissionParams);
+        const logGamma = computeLogGamma(logAlpha, logBeta);
+        const logXi = computeLogXi(observations, A, emissionParams, logAlpha, logBeta);
+        const logLikelihood = logSumExp(logAlpha[observations.length - 1]);
+
+        pi = reEstimatePi(logGamma);
+        A = reEstimateA(logGamma, logXi);
+        emissionParams = reEstimateEmissions(observations, logGamma);
+        logLikelihoods.push(logLikelihood);
+    }
+
+    return {
+        pi,
+        A,
+        emissionParams,
+        logLikelihoods,
+    };
 }
