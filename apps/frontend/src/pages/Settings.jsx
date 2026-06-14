@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faArrowRotateRight, faServer, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { faArrowRotateRight, faServer, faCheck, faBell } from '@fortawesome/free-solid-svg-icons'
 import { db, ref, push, set, onValue } from '../utils/firebase'
+import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import Page from '../components/Page'
 import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
@@ -27,12 +28,29 @@ export default function Settings() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [signalSource, setSignalSource] = useState(getSignalSource)
   const [notifyOnRestart, setNotifyOnRestart] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
 
   useEffect(() => {
     return onValue(ref(db, 'config/notifyOnRestart'), (snap) => {
       setNotifyOnRestart(!!snap.val())
     })
   }, [])
+
+  useEffect(() => {
+    return onValue(ref(db, 'config/pushNotificationsEnabled'), (snap) => {
+      setPushEnabled(!!snap.val())
+    })
+  }, [])
+
+  const handlePushToggle = async () => {
+    try {
+      if (!pushEnabled) await subscribeToPush()
+      else await unsubscribeFromPush()
+      set(ref(db, 'config/pushNotificationsEnabled'), !pushEnabled || null)
+    } catch (err) {
+      console.error('Push toggle failed', err)
+    }
+  }
 
   const handleSystemUpdate = async () => {
     setConfirmOpen(false)
@@ -65,6 +83,18 @@ export default function Settings() {
           title="Force System Update"
           subtitle={updateQueued ? 'Queued — worker will pull & restart' : 'Pull, deploy frontend & backend, restart all'}
           onClick={!updateQueued ? () => setConfirmOpen(true) : undefined}
+          isLast
+        />
+      </CardList>
+
+      <SectionHeader>Notifications</SectionHeader>
+      <CardList>
+        <ListItem
+          icon={faBell}
+          iconColor="var(--color-primary)"
+          title="Push notifications"
+          subtitle="Get notified when your Paytm Money login expires"
+          right={<InlineToggle enabled={pushEnabled} onToggle={handlePushToggle} />}
           isLast
         />
       </CardList>
