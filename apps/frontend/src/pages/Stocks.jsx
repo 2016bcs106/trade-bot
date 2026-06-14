@@ -12,6 +12,7 @@ import BottomSheet from '../components/BottomSheet'
 import DetailRow from '../components/DetailRow'
 import useLongPress from '../hooks/useLongPress'
 import { useApp } from '../context/AppContext'
+import { isRecommended, getGroupRank } from '../utils/stock-grouping'
 
 function getStatusBadge(stock) {
   if (stock.status === 'pending_sync') return { label: 'Syncing', color: 'var(--color-warning)' }
@@ -75,11 +76,14 @@ export default function Stocks() {
 
   const query = searchQuery.trim().toUpperCase()
   const filteredStocks = stocks
-    .filter((s) => activeTab === 'favorites' ? s.isFavorite : !s.isFavorite)
+    .filter((s) => {
+      if (activeTab === 'favorites') return s.isFavorite
+      if (activeTab === 'recommended') return isRecommended(s)
+      return true
+    })
     .filter((s) => !query || s.symbol.includes(query) || (s.displayName || '').toUpperCase().includes(query))
 
-  const stockList = [...filteredStocks].sort((a, b) => {
-    if (activeTab === 'others') return a.symbol.localeCompare(b.symbol)
+  const compareBySort = (a, b) => {
     let cmp = 0
     if (sortBy === 'relevance') {
       cmp = (a.relevanceScore ?? 0) - (b.relevanceScore ?? 0)
@@ -97,6 +101,14 @@ export default function Stocks() {
       cmp = bc - ac
     }
     return sortAsc ? -cmp : cmp
+  }
+
+  const stockList = [...filteredStocks].sort((a, b) => {
+    if (activeTab === 'top') {
+      const rankDiff = getGroupRank(a) - getGroupRank(b)
+      if (rankDiff !== 0) return rankDiff
+    }
+    return compareBySort(a, b)
   })
 
   const selectedStock = detailSymbol
@@ -116,8 +128,11 @@ export default function Stocks() {
         <button style={{ ...styles.tab, ...(activeTab === 'favorites' ? styles.tabActive : {}) }} onClick={() => setActiveTab('favorites')}>
           Favorites <Badge label={`${stocks.filter((s) => s.isFavorite).length}`} color={activeTab === 'favorites' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
-        <button style={{ ...styles.tab, ...(activeTab === 'others' ? styles.tabActive : {}) }} onClick={() => setActiveTab('others')}>
-          Others <Badge label={`${stocks.filter((s) => !s.isFavorite).length}`} color={activeTab === 'others' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+        <button style={{ ...styles.tab, ...(activeTab === 'recommended' ? styles.tabActive : {}) }} onClick={() => setActiveTab('recommended')}>
+          Recommended <Badge label={`${stocks.filter(isRecommended).length}`} color={activeTab === 'recommended' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+        </button>
+        <button style={{ ...styles.tab, ...(activeTab === 'top' ? styles.tabActive : {}) }} onClick={() => setActiveTab('top')}>
+          Top stocks <Badge label={`${stocks.length}`} color={activeTab === 'top' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
       </div>
 
@@ -129,17 +144,25 @@ export default function Stocks() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <button
-          style={{ ...styles.sortBtn, ...(activeTab === 'others' ? styles.sortBtnDisabled : {}) }}
-          onClick={() => activeTab === 'favorites' && setSortSheetOpen(true)}
-          disabled={activeTab === 'others'}
-        >
+        <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
           <FontAwesomeIcon icon={faArrowDownWideShort} />
         </button>
       </div>
 
       {stockList.length === 0 ? (
-        <EmptyState icon={faChartBar} title={activeTab === 'favorites' ? 'No favorites yet' : 'No stocks found'} subtitle={activeTab === 'favorites' ? 'Star a stock to add it here' : 'Try a different search'} />
+        <EmptyState
+          icon={faChartBar}
+          title={
+            activeTab === 'favorites' ? 'No favorites yet' :
+            activeTab === 'recommended' ? 'No recommended stocks yet' :
+            'No stocks found'
+          }
+          subtitle={
+            activeTab === 'favorites' ? 'Star a stock to add it here' :
+            activeTab === 'recommended' ? 'Check back after the next signal run' :
+            'Try a different search'
+          }
+        />
       ) : (
         <div style={styles.list}>
           {stockList.map((stock, i) => (
@@ -254,10 +277,6 @@ const styles = {
     fontSize: '1rem',
     color: 'var(--color-primary)',
     flexShrink: 0,
-  },
-  sortBtnDisabled: {
-    color: 'var(--color-text-tertiary)',
-    cursor: 'default',
   },
   sortList: {
     padding: 'var(--space-sm) 0',
