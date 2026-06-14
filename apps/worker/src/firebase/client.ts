@@ -117,6 +117,14 @@ export default class FirebaseClient {
   }
 
 
+  async setRecommendationData(symbol: string, strategyKey: string, data: Record<string, unknown>): Promise<void> {
+    await this._setValue(`stocks/${symbol}/recommendationData/${strategyKey}`, data);
+  }
+
+  async setSignal(strategyKey: string, date: string, symbol: string, data: { signal: string; confidence: number }): Promise<void> {
+    await this._setValue(`signals/${strategyKey}/${date}/${symbol}`, data);
+  }
+
   onStocksChange(callback: (stocks: Record<string, StockConfig> | null) => void): Unsubscribe {
     return this._onChange("stocks", (value) => {
       callback(value as Record<string, StockConfig> | null);

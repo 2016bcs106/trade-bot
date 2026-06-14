@@ -14,4 +14,5 @@ export interface StockConfig {
   status?: "pending_sync" | "sync_failed" | "synced" | "ready";
   notifySignals?: boolean;
   isTopStock?: boolean;
+  recommendationData?: Record<string, Record<string, unknown>>;
 }
