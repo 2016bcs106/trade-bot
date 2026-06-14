@@ -7,6 +7,7 @@ import { TickData } from "../types/market-data/tick-data.ts";
 import { SignalData } from "../types/market-data/signal-data.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
+import { PushSubscriptionData } from "../types/push-subscription.ts";
 
 const app = initializeApp({
   databaseURL: process.env.FIREBASE_DATABASE_URL,
@@ -63,6 +64,21 @@ export default class FirebaseClient {
       this._setValue("auth/readAccessToken", { token: readAccessToken, timestamp: updatedOn }),
       this._setValue("auth/updatedOn", updatedOn),
     ]);
+  }
+
+  async getAuthUpdatedOn(): Promise<string | null> {
+    return (await this._getValue("auth/updatedOn")) as string | null;
+  }
+
+  // ─── Push Subscriptions ───────────────────────────────────────────
+
+  async getPushSubscriptions(): Promise<Record<string, PushSubscriptionData>> {
+    const data = await this._getValue("push_subscriptions");
+    return (data as Record<string, PushSubscriptionData>) || {};
+  }
+
+  async removePushSubscription(key: string): Promise<void> {
+    await this._remove(`push_subscriptions/${key}`);
   }
 
   // ─── Script Status ────────────────────────────────────────────────

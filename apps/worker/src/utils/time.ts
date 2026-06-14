@@ -44,4 +44,10 @@ export function parseDate(date: string, format?: string): Moment {
   return format ? moment(date, format).utcOffset(IST_OFFSET) : moment(date).utcOffset(IST_OFFSET);
 }
 
-export default { now, nowMs, nowISO, todayDate, nowFormatted, nowFilenameSafe, parseDate };
+/** Whether the given ISO timestamp falls on the current IST calendar day */
+export function isFreshToday(updatedOn: string | null): boolean {
+  if (!updatedOn) return false;
+  return parseDate(updatedOn).isSameOrAfter(now().startOf("day"));
+}
+
+export default { now, nowMs, nowISO, todayDate, nowFormatted, nowFilenameSafe, parseDate, isFreshToday };
