@@ -122,7 +122,7 @@ export default class FirebaseClient {
   }
 
   async setSignal(strategyKey: string, date: string, symbol: string, data: { signal: string; confidence: number }): Promise<void> {
-    await this._setValue(`signals/${strategyKey}/${date}/${symbol}`, data);
+    await this._setValue(`signals/${symbol}/${strategyKey}/${date}`, data);
   }
 
   onStocksChange(callback: (stocks: Record<string, StockConfig> | null) => void): Unsubscribe {
