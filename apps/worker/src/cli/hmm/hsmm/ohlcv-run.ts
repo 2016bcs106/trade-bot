@@ -11,7 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "..", "..", "data");
 
 const SYMBOL = "ADANIENT";
-const N = 2;
+const N = 3;
 const D = 20;
 
 const ohlcv = JSON.parse(readFileSync(resolve(DATA_DIR, "daily-ohlcv", `${SYMBOL}.json`), "utf-8")) as OHLCV[];
@@ -20,16 +20,15 @@ const observations = computeLogReturns(closes);
 
 const mean = observations.reduce((sum, x) => sum + x, 0) / observations.length;
 const variance = observations.reduce((sum, x) => sum + (x - mean) ** 2, 0) / observations.length;
+const std = Math.sqrt(variance);
 
-const initA = [
-  [0, 1],
-  [1, 0],
-];
-const initPi = [0.5, 0.5];
+const initA = Array.from({ length: N }, (_, i) => Array.from({ length: N }, (_, j) => (i === j ? 0 : 1 / (N - 1))));
+const initPi = Array(N).fill(1 / N);
 const initDurations = Array.from({ length: N }, () => Array(D).fill(1 / D));
 const initEmissions: GaussianParams[] = [
-  { mean, variance: variance * 0.5 },
-  { mean, variance: variance * 2 },
+  { mean: mean - std * 0.5, variance: variance * 2 }, // crash / high-vol
+  { mean, variance: variance * 0.3 }, // calm
+  { mean: mean + std * 0.5, variance }, // trending up
 ];
 
 const result = trainHSMM(observations, initA, initPi, initDurations, initEmissions, 30);
