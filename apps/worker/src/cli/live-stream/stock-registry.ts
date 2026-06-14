@@ -80,6 +80,9 @@ export default class StockRegistry {
       isFavorite: this._favorites.has(stock.symbol),
       isNotified: !!stock.notifySignals,
       relevanceScore: this._relevanceScores.get(stock.symbol) ?? 0,
+      recommendedStrategies: Object.entries(stock.recommendationData ?? {})
+        .filter(([, data]) => data?.recommended === true)
+        .map(([key]) => key),
     }));
   }
 
