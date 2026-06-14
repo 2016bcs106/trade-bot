@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend } from 'chart.js'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPlugCircleXmark, faChevronLeft, faChevronDown, faSliders, faCircleQuestion, faMaximize, faMinimize, faBell, faBellSlash } from '@fortawesome/free-solid-svg-icons'
+import { faPlugCircleXmark, faChevronLeft, faChevronDown, faSliders, faCircleQuestion, faMaximize, faMinimize, faBell, faBellSlash, faChartLine } from '@fortawesome/free-solid-svg-icons'
 import Loader from '../components/Loader'
 import StatusBadges from '../components/StatusBadges'
 import { useApp } from '../context/AppContext'
+import { isRecommended } from '../utils/stock-grouping'
 import { FIXED_LABELS } from './live-ticks/utils/constants'
 import { chartStyles } from './live-ticks/utils/styles'
 import { setMarketOpen } from './live-ticks/utils/chart-plugins'
@@ -19,6 +20,7 @@ import VolumeChart from './live-ticks/components/VolumeChart'
 import TradingGuide from './live-ticks/components/TradingGuide'
 import ChartSettingsSheet from './live-ticks/components/ChartSettingsSheet'
 import StockSelectorSheet from './live-ticks/components/StockSelectorSheet'
+import SignalsSheet from './live-ticks/components/SignalsSheet'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
 
@@ -30,6 +32,7 @@ export default function LiveTicks() {
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false)
+  const [signalsSheetOpen, setSignalsSheetOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [zoomedIn, setZoomedIn] = useState(true)
   const [visibleCharts, setVisibleCharts] = useState(() => {
@@ -129,6 +132,7 @@ export default function LiveTicks() {
           />
 
           <ChartSettingsSheet isOpen={chartSettingsOpen} onClose={() => setChartSettingsOpen(false)} visibleCharts={visibleCharts} setVisibleCharts={setVisibleCharts} />
+          <SignalsSheet isOpen={signalsSheetOpen} onClose={() => setSignalsSheetOpen(false)} symbol={selectedStock.symbol} />
           <TradingGuide isOpen={guideOpen} onClose={() => setGuideOpen(false)} />
 
           <div>
@@ -139,6 +143,11 @@ export default function LiveTicks() {
               <button style={chartStyles.iconBtn} onClick={() => setZoomedIn((v) => !v)}>
                 <FontAwesomeIcon icon={zoomedIn ? faMaximize : faMinimize} />
               </button>
+              {isRecommended(selectedStock) && (
+                <button style={chartStyles.iconBtn} onClick={() => setSignalsSheetOpen(true)}>
+                  <FontAwesomeIcon icon={faChartLine} />
+                </button>
+              )}
               <button style={chartStyles.iconBtn} onClick={() => setGuideOpen(true)}>
                 <FontAwesomeIcon icon={faCircleQuestion} />
               </button>
