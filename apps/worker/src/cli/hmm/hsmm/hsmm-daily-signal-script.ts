@@ -47,8 +47,14 @@ class HsmmDailySignalScript extends BaseScript {
   }
 
   protected async run(): Promise<void> {
+    const symbolsArg = process.argv.find((a) => a.startsWith("--symbols="));
+    const symbolsFilter = symbolsArg
+      ? new Set(symbolsArg.split("=")[1].split(",").map((s) => s.trim()).filter(Boolean))
+      : null;
+
     const stocks = await this.firebase.getAllStocks();
-    const recommended = Object.values(stocks).filter((s) => s.recommendationData?.[STRATEGY_KEY]?.recommended === true);
+    const recommended = Object.values(stocks).filter((s) =>
+      s.recommendationData?.[STRATEGY_KEY]?.recommended === true && (!symbolsFilter || symbolsFilter.has(s.symbol)));
 
     this.log.info(`Computing signals for ${recommended.length} recommended stocks`);
 
