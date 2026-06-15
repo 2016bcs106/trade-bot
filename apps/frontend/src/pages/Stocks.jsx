@@ -20,7 +20,13 @@ function getStatusBadge(stock) {
   return null
 }
 
-function StockRow({ stock, bordered, info, showEstimatedProfit, onTap, onLongPress, onToggleFavorite }) {
+function getSignalBadge(stock, signalsSummary) {
+  if (signalsSummary?.buySymbols?.includes(stock.symbol)) return { label: 'BUY', color: 'var(--color-success)' }
+  if (signalsSummary?.sellSymbols?.includes(stock.symbol)) return { label: 'SELL', color: 'var(--color-danger)' }
+  return null
+}
+
+function StockRow({ stock, bordered, info, showEstimatedProfit, signal, onTap, onLongPress, onToggleFavorite }) {
   const handlers = useLongPress(
     () => onLongPress(stock.symbol),
     () => onTap(stock.symbol),
@@ -37,14 +43,17 @@ function StockRow({ stock, bordered, info, showEstimatedProfit, onTap, onLongPre
         <span style={styles.name}>{stock.displayName || '—'}</span>
       </div>
       {showEstimatedProfit ? (
-        stock.estimatedProfitPct != null && (
-          <div style={styles.priceCol}>
-            <span style={{ ...styles.price, color: stock.estimatedProfitPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-              {stock.estimatedProfitPct >= 0 ? '+' : ''}{stock.estimatedProfitPct.toFixed(2)}%
-            </span>
-            <span style={styles.change}>Est. profit</span>
-          </div>
-        )
+        <>
+          {signal && <Badge label={signal.label} color={signal.color} />}
+          {stock.estimatedProfitPct != null && (
+            <div style={styles.priceCol}>
+              <span style={{ ...styles.price, color: stock.estimatedProfitPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {stock.estimatedProfitPct >= 0 ? '+' : ''}{stock.estimatedProfitPct.toFixed(2)}%
+              </span>
+              <span style={styles.change}>Est. profit</span>
+            </div>
+          )}
+        </>
       ) : (
         <>
           {info && (
@@ -75,7 +84,7 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, toggleFavorite } = useApp()
+  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, toggleFavorite, signalsSummary } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
@@ -189,6 +198,7 @@ export default function Stocks() {
               bordered={i < stockList.length - 1}
               info={getLivePriceInfo(stock.symbol)}
               showEstimatedProfit={activeTab === 'recommended'}
+              signal={activeTab === 'recommended' ? getSignalBadge(stock, signalsSummary) : null}
               onTap={(symbol) => navigate(`/live/${symbol}`)}
               onLongPress={(symbol) => setDetailSymbol(symbol)}
               onToggleFavorite={toggleFavorite}
