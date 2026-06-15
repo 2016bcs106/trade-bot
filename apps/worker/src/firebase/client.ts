@@ -3,8 +3,6 @@ import { nowISO } from "../utils/time.ts";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
-import { TickData } from "../types/market-data/tick-data.ts";
-import { SignalData } from "../types/market-data/signal-data.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { PushSubscriptionData } from "../types/push-subscription.ts";
@@ -87,24 +85,6 @@ export default class FirebaseClient {
     await this._setValue(`scripts/${scriptName}`, status);
   }
 
-
-  // ─── Ticks & Signals ──────────────────────────────────────────────
-
-  async storeTick(symbol: string, _date: string, data: TickData): Promise<void> {
-    await push(ref(this.db, `prices/${symbol}`), data);
-  }
-
-  async storeSignal(symbol: string, _date: string, data: SignalData): Promise<void> {
-    await push(ref(this.db, `signals/${symbol}`), data);
-  }
-
-  async clearTicks(symbol?: string): Promise<void> {
-    await this._remove(symbol ? `prices/${symbol}` : "prices");
-  }
-
-  async clearSignals(symbol?: string): Promise<void> {
-    await this._remove(symbol ? `signals/${symbol}` : "signals");
-  }
 
   // ─── Stocks ────────────────────────────────────────────────────────
 
