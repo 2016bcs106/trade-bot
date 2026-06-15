@@ -1,27 +1,26 @@
-import { formatCurrency, formatSignedCurrency, formatSigned, changeColor } from '../utils'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faCaretUp, faCaretDown } from '@fortawesome/free-solid-svg-icons'
+import { formatCurrency, formatSignedCurrency, formatSigned, changeColor, changeBgColor } from '../utils'
 
 export default function HoldingRow({ item, change, isLast }) {
   return (
     <div style={{ ...styles.row, ...(isLast ? {} : styles.bordered) }}>
       <div style={styles.avatar}>{item.symbol.slice(0, 2)}</div>
-      <div style={styles.left}>
-        <span style={styles.symbol}>{item.symbol}</span>
-        <span style={styles.subtitle}>{item.quantity} @ {formatCurrency(item.avgPrice)}</span>
-      </div>
-      <div style={styles.col}>
-        <span style={styles.value}>{formatCurrency(item.currentValue)}</span>
-        <span style={styles.subtitle}>Inv {formatCurrency(item.investedValue)}</span>
-      </div>
-      {change && (
-        <div style={styles.col}>
-          <span style={{ ...styles.value, color: changeColor(change.value) }}>
-            {formatSignedCurrency(change.value)}
-          </span>
-          <span style={{ ...styles.subtitle, color: changeColor(change.value) }}>
-            {formatSigned(change.pct)}%
-          </span>
+      <div style={styles.main}>
+        <div style={styles.line}>
+          <span style={styles.symbol}>{item.symbol}</span>
+          <span style={styles.value}>{formatCurrency(item.currentValue)}</span>
         </div>
-      )}
+        <div style={styles.line}>
+          <span style={styles.subtitle}>{item.quantity} @ {formatCurrency(item.avgPrice)}</span>
+          {change && (
+            <span style={{ ...styles.changePill, background: changeBgColor(change.value), color: changeColor(change.value) }}>
+              <FontAwesomeIcon icon={change.value >= 0 ? faCaretUp : faCaretDown} />
+              {formatSignedCurrency(change.value)} ({formatSigned(change.pct)}%)
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -30,10 +29,9 @@ const styles = {
   row: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 'var(--space-md)',
-    padding: '14px var(--space-lg)',
-    minHeight: '56px',
+    padding: '12px var(--space-lg)',
+    minHeight: '64px',
   },
   bordered: {
     borderBottom: '1px solid var(--color-border)',
@@ -51,18 +49,18 @@ const styles = {
     fontWeight: 700,
     flexShrink: 0,
   },
-  left: {
+  main: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
+    gap: '4px',
   },
-  col: {
+  line: {
     display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    textAlign: 'right',
-    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--space-sm)',
   },
   symbol: {
     fontSize: 'var(--font-body)',
@@ -78,7 +76,17 @@ const styles = {
   subtitle: {
     fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
-    marginTop: '2px',
     fontVariantNumeric: 'tabular-nums',
+  },
+  changePill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '2px 6px',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--font-caption)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
   },
 }

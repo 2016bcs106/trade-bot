@@ -3,32 +3,22 @@ import { faChevronRight, faCaretUp, faCaretDown } from '@fortawesome/free-solid-
 import Card from '../../../components/Card'
 import { formatCurrency, formatSignedCurrency, formatSigned, changeColor, changeBgColor } from '../utils'
 
-export default function SummaryCard({ icon, iconColor, title, value, change, secondaryStats, onClick }) {
+export default function SummaryCard({ value, changes, secondaryStats, onClick }) {
   return (
-    <Card style={onClick ? styles.card : undefined} onClick={onClick}>
-      <div style={styles.header}>
-        <div style={styles.titleRow}>
-          {icon && (
-            <div style={{ ...styles.iconCircle, background: iconColor || 'var(--color-primary)' }}>
-              <FontAwesomeIcon icon={icon} style={styles.icon} />
-            </div>
-          )}
-          <span style={styles.title}>{title}</span>
-        </div>
-        {onClick && <FontAwesomeIcon icon={faChevronRight} style={styles.chevron} />}
-      </div>
+    <Card style={{ ...styles.card, ...(onClick ? styles.clickable : {}) }} onClick={onClick}>
+      {onClick && <FontAwesomeIcon icon={faChevronRight} style={styles.chevron} />}
 
       <div style={styles.value}>{formatCurrency(value)}</div>
 
-      {change && (
-        <div style={styles.changeRow}>
+      {changes?.map((change) => (
+        <div key={change.label} style={styles.changeRow}>
           <span style={{ ...styles.changePill, background: changeBgColor(change.value), color: changeColor(change.value) }}>
             <FontAwesomeIcon icon={change.value >= 0 ? faCaretUp : faCaretDown} />
             {formatSignedCurrency(change.value)} ({formatSigned(change.pct)}%)
           </span>
           <span style={styles.changeLabel}>{change.label}</span>
         </div>
-      )}
+      ))}
 
       {secondaryStats && (
         <div style={styles.statsRow}>
@@ -46,38 +36,15 @@ export default function SummaryCard({ icon, iconColor, title, value, change, sec
 
 const styles = {
   card: {
+    position: 'relative',
+  },
+  clickable: {
     cursor: 'pointer',
   },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 'var(--space-md)',
-  },
-  titleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-sm)',
-  },
-  iconCircle: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '8px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  icon: {
-    color: '#fff',
-    fontSize: '0.8rem',
-  },
-  title: {
-    fontSize: 'var(--font-subhead)',
-    fontWeight: 600,
-    color: 'var(--color-text)',
-  },
   chevron: {
+    position: 'absolute',
+    top: 'var(--space-lg)',
+    right: 'var(--space-lg)',
     fontSize: '0.8rem',
     color: 'var(--color-text-tertiary)',
   },
@@ -110,7 +77,7 @@ const styles = {
   },
   statsRow: {
     display: 'flex',
-    gap: 'var(--space-xl)',
+    justifyContent: 'space-between',
     marginTop: 'var(--space-lg)',
     paddingTop: 'var(--space-md)',
     borderTop: '1px solid var(--color-border)',

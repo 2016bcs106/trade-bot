@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faBriefcase, faChartLine, faArrowTrendUp, faArrowTrendDown, faChevronRight } from '@fortawesome/free-solid-svg-icons'
+import { faArrowTrendUp, faArrowTrendDown, faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import Page from '../../components/Page'
 import PageHeader from '../../components/PageHeader'
 import SectionHeader from '../../components/SectionHeader'
@@ -18,45 +18,42 @@ export default function Portfolio() {
     return <Page><Loader /></Page>
   }
 
+  const goToPicks = () => { setActiveTab('recommended'); navigate('/') }
+
   return (
     <Page>
       <PageHeader title="Portfolio" />
 
       <SectionHeader>Holdings</SectionHeader>
       <SummaryCard
-        icon={faBriefcase}
-        iconColor="var(--color-primary)"
-        title="Holdings"
         {...holdingsCardProps(portfolioHoldings.summary)}
         onClick={() => navigate('/portfolio/holdings')}
       />
 
       <SectionHeader>Open Positions</SectionHeader>
       <SummaryCard
-        icon={faChartLine}
-        iconColor="var(--color-info)"
-        title="Open Positions"
         {...positionsCardProps(portfolioPositions.summary)}
         onClick={() => navigate('/portfolio/positions')}
       />
 
       <SectionHeader>Recommendations</SectionHeader>
-      <Card style={styles.recCard} onClick={() => { setActiveTab('recommended'); navigate('/') }}>
-        <div style={styles.recRow}>
+      <Card style={styles.recCard}>
+        <div style={styles.recRow} onClick={goToPicks}>
           <div style={{ ...styles.recIcon, background: 'var(--color-success)' }}>
             <FontAwesomeIcon icon={faArrowTrendUp} style={styles.recIconGlyph} />
           </div>
           <span style={styles.recLabel}>Ready to buy</span>
           <span style={styles.recCount}>{signalsSummary?.buyCount ?? 0}</span>
+          <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
         </div>
-        <div style={{ ...styles.recRow, ...styles.recRowBorder }}>
+        <div style={{ ...styles.recRow, ...styles.recRowBorder }} onClick={goToPicks}>
           <div style={{ ...styles.recIcon, background: 'var(--color-danger)' }}>
             <FontAwesomeIcon icon={faArrowTrendDown} style={styles.recIconGlyph} />
           </div>
           <span style={styles.recLabel}>Ready to sell</span>
           <span style={styles.recCount}>{signalsSummary?.sellCount ?? 0}</span>
+          <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
         </div>
-        <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
       </Card>
     </Page>
   )
@@ -64,8 +61,6 @@ export default function Portfolio() {
 
 const styles = {
   recCard: {
-    cursor: 'pointer',
-    position: 'relative',
     padding: 0,
   },
   recRow: {
@@ -73,6 +68,7 @@ const styles = {
     alignItems: 'center',
     gap: 'var(--space-md)',
     padding: '14px var(--space-lg)',
+    cursor: 'pointer',
   },
   recRowBorder: {
     borderTop: '1px solid var(--color-border)',
@@ -100,13 +96,8 @@ const styles = {
     fontWeight: 700,
     color: 'var(--color-text)',
     fontVariantNumeric: 'tabular-nums',
-    marginRight: 'var(--space-xl)',
   },
   recChevron: {
-    position: 'absolute',
-    top: '50%',
-    right: 'var(--space-lg)',
-    transform: 'translateY(-50%)',
     fontSize: '0.8rem',
     color: 'var(--color-text-tertiary)',
   },

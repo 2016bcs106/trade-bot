@@ -29,7 +29,7 @@ export default function PortfolioPositions() {
         <h1 style={styles.title}>Open Positions</h1>
       </div>
 
-      <SummaryCard icon={faChartLine} iconColor="var(--color-info)" title="Open Positions" {...positionsCardProps(summary)} />
+      <SummaryCard {...positionsCardProps(summary)} />
 
       {items.length === 0 ? (
         <EmptyState icon={faChartLine} title="No open positions" subtitle="Your open intraday positions will show up here" />

@@ -20,9 +20,14 @@ export function formatSignedCurrency(value, decimals = 2) {
 }
 
 export function holdingsCardProps(summary) {
+  const totalReturn = summary.currentValue - summary.investedValue
+  const totalReturnPct = summary.investedValue !== 0 ? (totalReturn / summary.investedValue) * 100 : 0
   return {
     value: summary.currentValue,
-    change: { value: summary.dayChange, pct: summary.dayChangePct, label: 'Today' },
+    changes: [
+      { label: 'Today', value: summary.dayChange, pct: summary.dayChangePct },
+      { label: 'Total return', value: totalReturn, pct: totalReturnPct },
+    ],
     secondaryStats: [
       { label: 'Invested', value: formatCurrency(summary.investedValue) },
       { label: 'Stocks', value: summary.totalStocks },
@@ -34,7 +39,9 @@ export function positionsCardProps(summary) {
   const pnlPct = summary.investedValue !== 0 ? (summary.netPnl / summary.investedValue) * 100 : 0
   return {
     value: summary.currentValue,
-    change: { value: summary.netPnl, pct: pnlPct, label: 'P&L' },
+    changes: [
+      { label: 'P&L', value: summary.netPnl, pct: pnlPct },
+    ],
     secondaryStats: [
       { label: 'Invested', value: formatCurrency(summary.investedValue) },
       { label: 'Stocks', value: summary.totalStocks },
