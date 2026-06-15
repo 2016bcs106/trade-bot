@@ -64,26 +64,32 @@ export default class StockRegistry {
   }
 
   buildStockList(): Record<string, unknown>[] {
-    return this._stocks.map((stock) => ({
-      instrumentKey: this.getInstrumentKey(stock),
-      symbol: stock.symbol,
-      displayName: stock.name,
-      exchangeType: stock.exchange,
-      scripType: "EQUITY",
-      scripId: this.getScripId(stock),
-      isin: stock.isin,
-      industryName: stock.industryName,
-      mcap: stock.mcap,
-      addedAt: stock.addedAt,
-      updatedAt: stock.updatedAt,
-      status: stock.status,
-      isFavorite: this._favorites.has(stock.symbol),
-      isNotified: !!stock.notifySignals,
-      relevanceScore: this._relevanceScores.get(stock.symbol) ?? 0,
-      recommendedStrategies: Object.entries(stock.recommendationData ?? {})
-        .filter(([, data]) => data?.recommended === true)
-        .map(([key]) => key),
-    }));
+    return this._stocks.map((stock) => {
+      const recommended = Object.entries(stock.recommendationData ?? {})
+        .filter(([, data]) => data?.recommended === true);
+
+      return {
+        instrumentKey: this.getInstrumentKey(stock),
+        symbol: stock.symbol,
+        displayName: stock.name,
+        exchangeType: stock.exchange,
+        scripType: "EQUITY",
+        scripId: this.getScripId(stock),
+        isin: stock.isin,
+        industryName: stock.industryName,
+        mcap: stock.mcap,
+        addedAt: stock.addedAt,
+        updatedAt: stock.updatedAt,
+        status: stock.status,
+        isFavorite: this._favorites.has(stock.symbol),
+        isNotified: !!stock.notifySignals,
+        relevanceScore: this._relevanceScores.get(stock.symbol) ?? 0,
+        recommendedStrategies: recommended.map(([key]) => key),
+        estimatedProfitPct: recommended.length > 0
+          ? (recommended[0][1].strategyTotalReturn as number) * 100
+          : null,
+      };
+    });
   }
 
   buildFavoritePrices(aggregateStore: AggregateStore): { instrumentKey: string; symbol: string; price: number; change: number; changePct: number }[] {

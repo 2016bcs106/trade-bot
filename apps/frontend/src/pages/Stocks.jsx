@@ -20,7 +20,7 @@ function getStatusBadge(stock) {
   return null
 }
 
-function StockRow({ stock, bordered, info, onTap, onLongPress, onToggleFavorite }) {
+function StockRow({ stock, bordered, info, showEstimatedProfit, onTap, onLongPress, onToggleFavorite }) {
   const handlers = useLongPress(
     () => onLongPress(stock.symbol),
     () => onTap(stock.symbol),
@@ -36,18 +36,31 @@ function StockRow({ stock, bordered, info, onTap, onLongPress, onToggleFavorite 
         <span style={styles.symbol}>{stock.symbol}</span>
         <span style={styles.name}>{stock.displayName || '—'}</span>
       </div>
-      {info && (
-        <div style={styles.priceCol}>
-          <span style={{ ...styles.price, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{info.price.toFixed(2)}</span>
-          <span style={{ ...styles.change, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-            {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
-          </span>
-        </div>
+      {showEstimatedProfit ? (
+        stock.estimatedProfitPct != null && (
+          <div style={styles.priceCol}>
+            <span style={{ ...styles.price, color: stock.estimatedProfitPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+              {stock.estimatedProfitPct >= 0 ? '+' : ''}{stock.estimatedProfitPct.toFixed(2)}%
+            </span>
+            <span style={styles.change}>Est. profit</span>
+          </div>
+        )
+      ) : (
+        <>
+          {info && (
+            <div style={styles.priceCol}>
+              <span style={{ ...styles.price, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{info.price.toFixed(2)}</span>
+              <span style={{ ...styles.change, color: info.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
+              </span>
+            </div>
+          )}
+          {badge && <Badge label={badge.label} color={badge.color} />}
+          <button style={styles.starBtn} onClick={(e) => { e.stopPropagation(); onToggleFavorite(stock.symbol) }}>
+            <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
+          </button>
+        </>
       )}
-      {badge && <Badge label={badge.label} color={badge.color} />}
-      <button style={styles.starBtn} onClick={(e) => { e.stopPropagation(); onToggleFavorite(stock.symbol) }}>
-        <FontAwesomeIcon icon={stock.isFavorite ? faStarSolid : faStarOutline} style={{ color: stock.isFavorite ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }} />
-      </button>
     </div>
   )
 }
@@ -171,6 +184,7 @@ export default function Stocks() {
               stock={stock}
               bordered={i < stockList.length - 1}
               info={getLivePriceInfo(stock.symbol)}
+              showEstimatedProfit={activeTab === 'recommended'}
               onTap={(symbol) => navigate(`/live/${symbol}`)}
               onLongPress={(symbol) => setDetailSymbol(symbol)}
               onToggleFavorite={toggleFavorite}
