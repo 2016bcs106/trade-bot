@@ -22,6 +22,9 @@ export function AppProvider({ children }) {
   const [scripts, setScripts] = useState(undefined)
   const [requestQueue, setRequestQueue] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
+  const [portfolioHoldings, setPortfolioHoldings] = useState(null)
+  const [portfolioPositions, setPortfolioPositions] = useState(null)
+  const [signalsSummary, setSignalsSummary] = useState(null)
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -110,7 +113,13 @@ export function AppProvider({ children }) {
       const data = snap.val()
       setFailedRequests(data ? Object.entries(data).map(([key, val]) => ({ ...val, _key: key })) : [])
     })
-    return () => { unsubScripts(); unsubQueue(); unsubFailed() }
+    const unsubPortfolioHoldings = onValue(ref(db, 'portfolio/holdings'), (snap) => setPortfolioHoldings(snap.val()))
+    const unsubPortfolioPositions = onValue(ref(db, 'portfolio/positions'), (snap) => setPortfolioPositions(snap.val()))
+    const unsubSignalsSummary = onValue(ref(db, 'signals_summary/latest'), (snap) => setSignalsSummary(snap.val()))
+    return () => {
+      unsubScripts(); unsubQueue(); unsubFailed()
+      unsubPortfolioHoldings(); unsubPortfolioPositions(); unsubSignalsSummary()
+    }
   }, [])
 
   const selectStock = (instrumentKey) => {
@@ -186,7 +195,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, activeTab, setActiveTab, scripts, requestQueue, failedRequests, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, activeTab, setActiveTab, scripts, requestQueue, failedRequests, portfolioHoldings, portfolioPositions, signalsSummary, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )
