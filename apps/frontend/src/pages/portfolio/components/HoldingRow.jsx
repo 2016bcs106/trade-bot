@@ -20,7 +20,6 @@ export default function HoldingRow({ item, changes, isLast }) {
           <div style={{ ...styles.cell, ...styles.cellRight }}>
             <span style={styles.label}>Current Value</span>
             <span style={styles.statValue}>{formatCurrency(item.currentValue)}</span>
-            <span style={styles.ltp}>LTP {formatCurrency(item.ltp)}</span>
           </div>
 
           {changes?.map((change, i) => (
@@ -99,11 +98,6 @@ const styles = {
     fontSize: 'var(--font-footnote)',
     fontWeight: 600,
     color: 'var(--color-text)',
-    fontVariantNumeric: 'tabular-nums',
-  },
-  ltp: {
-    fontSize: 'var(--font-caption)',
-    color: 'var(--color-text-tertiary)',
     fontVariantNumeric: 'tabular-nums',
   },
 }
