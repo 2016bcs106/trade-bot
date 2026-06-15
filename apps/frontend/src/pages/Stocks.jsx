@@ -117,6 +117,9 @@ export default function Stocks() {
   }
 
   const stockList = [...filteredStocks].sort((a, b) => {
+    if (activeTab === 'recommended') {
+      return (a.recommendedRank ?? Infinity) - (b.recommendedRank ?? Infinity)
+    }
     if (activeTab === 'top') {
       const rankDiff = getGroupRank(a) - getGroupRank(b)
       if (rankDiff !== 0) return rankDiff
@@ -157,9 +160,11 @@ export default function Stocks() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
-          <FontAwesomeIcon icon={faArrowDownWideShort} />
-        </button>
+        {activeTab === 'favorites' && (
+          <button style={styles.sortBtn} onClick={() => setSortSheetOpen(true)}>
+            <FontAwesomeIcon icon={faArrowDownWideShort} />
+          </button>
+        )}
       </div>
 
       {stockList.length === 0 ? (

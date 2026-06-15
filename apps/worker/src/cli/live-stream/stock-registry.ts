@@ -85,6 +85,9 @@ export default class StockRegistry {
         isNotified: !!stock.notifySignals,
         relevanceScore: this._relevanceScores.get(stock.symbol) ?? 0,
         recommendedStrategies: recommended.map(([key]) => key),
+        recommendedRank: recommended.length > 0
+          ? (recommended[0][1].rank as number | null)
+          : null,
         estimatedProfitPct: recommended.length > 0
           ? (recommended[0][1].strategyTotalReturn as number) * 100
           : null,
