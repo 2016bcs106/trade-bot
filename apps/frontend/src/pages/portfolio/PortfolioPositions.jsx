@@ -40,7 +40,7 @@ export default function PortfolioPositions() {
               key={item.symbol}
               item={item}
               changes={[
-                { value: item.pnl, pct: item.pnlPct },
+                { label: 'Net P&L', value: item.pnl, pct: item.pnlPct },
               ]}
               isLast={i === items.length - 1}
             />

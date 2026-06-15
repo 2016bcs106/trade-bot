@@ -1,37 +1,37 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faBriefcase } from '@fortawesome/free-solid-svg-icons'
 import { formatCurrency, formatSignedCurrency, formatSigned, changeColor } from '../utils'
 
 export default function HoldingRow({ item, changes, isLast }) {
-  const [dayChange, netChange] = changes ?? []
+  const [primaryChange] = changes ?? []
 
   return (
     <div style={{ ...styles.row, ...(isLast ? {} : styles.bordered) }}>
-      <div style={{ ...styles.accent, background: dayChange ? changeColor(dayChange.value) : 'var(--color-border)' }} />
+      <div style={{ ...styles.accent, background: primaryChange ? changeColor(primaryChange.value) : 'var(--color-border)' }} />
       <div style={styles.main}>
         <div style={styles.line}>
           <span style={styles.symbol}>{item.symbol}</span>
-          <span style={styles.value}>{formatCurrency(item.currentValue)}</span>
+          <span style={styles.subtitle}>{item.quantity} @ {formatCurrency(item.avgPrice)}</span>
         </div>
-        <div style={styles.line}>
-          <span style={styles.subtitle}>
-            <FontAwesomeIcon icon={faBriefcase} style={styles.subtitleIcon} />
-            {item.quantity} x {formatCurrency(item.avgPrice)}
-          </span>
-          {dayChange && (
-            <span style={{ ...styles.changeText, color: changeColor(dayChange.value) }}>
-              {formatSignedCurrency(dayChange.value)} ({formatSigned(dayChange.pct)}%)
-            </span>
-          )}
-        </div>
-        {netChange && (
-          <div style={styles.line}>
-            <span style={styles.subtitle}>Net return</span>
-            <span style={{ ...styles.changeText, color: changeColor(netChange.value) }}>
-              {formatSignedCurrency(netChange.value)} ({formatSigned(netChange.pct)}%)
-            </span>
+
+        <div style={styles.grid}>
+          <div style={styles.cell}>
+            <span style={styles.label}>Invested</span>
+            <span style={styles.statValue}>{formatCurrency(item.investedValue)}</span>
           </div>
-        )}
+          <div style={{ ...styles.cell, ...styles.cellRight }}>
+            <span style={styles.label}>Current Value</span>
+            <span style={styles.statValue}>{formatCurrency(item.currentValue)}</span>
+            <span style={styles.ltp}>LTP {formatCurrency(item.ltp)}</span>
+          </div>
+
+          {changes?.map((change, i) => (
+            <div key={change.label} style={{ ...styles.cell, ...(i % 2 === 1 ? styles.cellRight : {}) }}>
+              <span style={styles.label}>{change.label}</span>
+              <span style={{ ...styles.statValue, color: changeColor(change.value) }}>
+                {formatSignedCurrency(change.value)} ({formatSigned(change.pct)}%)
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -57,11 +57,10 @@ const styles = {
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
   },
   line: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: 'var(--space-sm)',
   },
@@ -70,28 +69,41 @@ const styles = {
     fontWeight: 600,
     color: 'var(--color-text)',
   },
-  value: {
-    fontSize: 'var(--font-body)',
-    fontWeight: 700,
-    color: 'var(--color-text)',
-    fontVariantNumeric: 'tabular-nums',
-  },
   subtitle: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
     fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
     fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
   },
-  subtitleIcon: {
-    fontSize: '0.75em',
-    color: 'var(--color-text-tertiary)',
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    rowGap: '10px',
+    columnGap: 'var(--space-sm)',
+    marginTop: '10px',
   },
-  changeText: {
+  cell: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  cellRight: {
+    alignItems: 'flex-end',
+    textAlign: 'right',
+  },
+  label: {
+    fontSize: 'var(--font-caption)',
+    color: 'var(--color-text-muted)',
+  },
+  statValue: {
     fontSize: 'var(--font-footnote)',
     fontWeight: 600,
+    color: 'var(--color-text)',
     fontVariantNumeric: 'tabular-nums',
-    whiteSpace: 'nowrap',
+  },
+  ltp: {
+    fontSize: 'var(--font-caption)',
+    color: 'var(--color-text-tertiary)',
+    fontVariantNumeric: 'tabular-nums',
   },
 }

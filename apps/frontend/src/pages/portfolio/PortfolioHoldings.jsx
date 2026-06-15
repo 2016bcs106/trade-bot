@@ -40,8 +40,8 @@ export default function PortfolioHoldings() {
               key={item.symbol}
               item={item}
               changes={[
-                { value: item.dayChange, pct: item.dayChangePct },
-                { value: item.pnl, pct: item.pnlPct },
+                { label: '1-Day Change', value: item.dayChange, pct: item.dayChangePct },
+                { label: 'Net P&L', value: item.pnl, pct: item.pnlPct },
               ]}
               isLast={i === items.length - 1}
             />
