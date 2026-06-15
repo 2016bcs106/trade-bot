@@ -39,7 +39,10 @@ export default function PortfolioHoldings() {
             <HoldingRow
               key={item.symbol}
               item={item}
-              change={{ value: item.dayChange, pct: item.dayChangePct }}
+              changes={[
+                { value: item.dayChange, pct: item.dayChangePct },
+                { value: item.pnl, pct: item.pnlPct },
+              ]}
               isLast={i === items.length - 1}
             />
           ))}

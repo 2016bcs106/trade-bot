@@ -1,25 +1,37 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCaretUp, faCaretDown } from '@fortawesome/free-solid-svg-icons'
-import { formatCurrency, formatSignedCurrency, formatSigned, changeColor, changeBgColor } from '../utils'
+import { faBriefcase } from '@fortawesome/free-solid-svg-icons'
+import { formatCurrency, formatSignedCurrency, formatSigned, changeColor } from '../utils'
 
-export default function HoldingRow({ item, change, isLast }) {
+export default function HoldingRow({ item, changes, isLast }) {
+  const [dayChange, netChange] = changes ?? []
+
   return (
     <div style={{ ...styles.row, ...(isLast ? {} : styles.bordered) }}>
-      <div style={styles.avatar}>{item.symbol.slice(0, 2)}</div>
+      <div style={{ ...styles.accent, background: dayChange ? changeColor(dayChange.value) : 'var(--color-border)' }} />
       <div style={styles.main}>
         <div style={styles.line}>
           <span style={styles.symbol}>{item.symbol}</span>
           <span style={styles.value}>{formatCurrency(item.currentValue)}</span>
         </div>
         <div style={styles.line}>
-          <span style={styles.subtitle}>{item.quantity} @ {formatCurrency(item.avgPrice)}</span>
-          {change && (
-            <span style={{ ...styles.changePill, background: changeBgColor(change.value), color: changeColor(change.value) }}>
-              <FontAwesomeIcon icon={change.value >= 0 ? faCaretUp : faCaretDown} />
-              {formatSignedCurrency(change.value)} ({formatSigned(change.pct)}%)
+          <span style={styles.subtitle}>
+            <FontAwesomeIcon icon={faBriefcase} style={styles.subtitleIcon} />
+            {item.quantity} x {formatCurrency(item.avgPrice)}
+          </span>
+          {dayChange && (
+            <span style={{ ...styles.changeText, color: changeColor(dayChange.value) }}>
+              {formatSignedCurrency(dayChange.value)} ({formatSigned(dayChange.pct)}%)
             </span>
           )}
         </div>
+        {netChange && (
+          <div style={styles.line}>
+            <span style={styles.subtitle}>Net return</span>
+            <span style={{ ...styles.changeText, color: changeColor(netChange.value) }}>
+              {formatSignedCurrency(netChange.value)} ({formatSigned(netChange.pct)}%)
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -28,25 +40,16 @@ export default function HoldingRow({ item, change, isLast }) {
 const styles = {
   row: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: 'var(--space-md)',
-    padding: '12px var(--space-lg)',
-    minHeight: '64px',
+    padding: '14px var(--space-lg)',
   },
   bordered: {
     borderBottom: '1px solid var(--color-border)',
   },
-  avatar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-    borderRadius: '50%',
-    background: 'var(--color-primary-light)',
-    color: 'var(--color-primary)',
-    fontSize: 'var(--font-caption)',
-    fontWeight: 700,
+  accent: {
+    width: '3px',
+    borderRadius: '2px',
     flexShrink: 0,
   },
   main: {
@@ -54,7 +57,7 @@ const styles = {
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '6px',
   },
   line: {
     display: 'flex',
@@ -64,27 +67,29 @@ const styles = {
   },
   symbol: {
     fontSize: 'var(--font-body)',
-    fontWeight: 500,
+    fontWeight: 600,
     color: 'var(--color-text)',
   },
   value: {
     fontSize: 'var(--font-body)',
-    fontWeight: 600,
+    fontWeight: 700,
     color: 'var(--color-text)',
     fontVariantNumeric: 'tabular-nums',
   },
   subtitle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
     fontSize: 'var(--font-footnote)',
     color: 'var(--color-text-muted)',
     fontVariantNumeric: 'tabular-nums',
   },
-  changePill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '2px 6px',
-    borderRadius: 'var(--radius-sm)',
-    fontSize: 'var(--font-caption)',
+  subtitleIcon: {
+    fontSize: '0.75em',
+    color: 'var(--color-text-tertiary)',
+  },
+  changeText: {
+    fontSize: 'var(--font-footnote)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',

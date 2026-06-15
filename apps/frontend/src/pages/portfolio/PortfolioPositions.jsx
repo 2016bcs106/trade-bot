@@ -39,7 +39,9 @@ export default function PortfolioPositions() {
             <HoldingRow
               key={item.symbol}
               item={item}
-              change={{ value: item.pnl, pct: item.pnlPct }}
+              changes={[
+                { value: item.pnl, pct: item.pnlPct },
+              ]}
               isLast={i === items.length - 1}
             />
           ))}

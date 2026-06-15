@@ -6,10 +6,6 @@ export function changeColor(value) {
   return value >= 0 ? 'var(--color-success)' : 'var(--color-danger)'
 }
 
-export function changeBgColor(value) {
-  return value >= 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)'
-}
-
 export function formatCurrency(value, decimals = 2) {
   return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
 }
