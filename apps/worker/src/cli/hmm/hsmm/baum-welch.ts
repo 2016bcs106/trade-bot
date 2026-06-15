@@ -45,7 +45,7 @@ export function reEstimateHSMM_A(logGammaExpanded: number[][], logXiExpanded: nu
       let numer = 0;
       for (let t = 0; t < logXiExpanded.length; t++) {
         for (let d2 = 1; d2 <= D; d2++) {
-          numer += Math.exp(logXiExpanded[t][from][expandedIndex(j2, d2, D)]);
+          numer += Math.exp(logXiExpanded[t][j][expandedIndex(j2, d2, D)]);
         }
       }
 
@@ -74,7 +74,7 @@ export function reEstimateDurations(logGammaExpanded: number[][], logXiExpanded:
       for (let t = 0; t < logXiExpanded.length; t++) {
         for (let i = 0; i < N; i++) {
           if (i === j) continue;
-          count += Math.exp(logXiExpanded[t][expandedIndex(i, 1, D)][to]);
+          count += Math.exp(logXiExpanded[t][i][to]);
         }
       }
 
@@ -110,7 +110,8 @@ export function trainHSMM(
     const logAlpha = forwardLogAlpha(observations, expandedA, expandedPi, expandedEmissions);
     const logBeta = backwardLogBeta(observations, expandedA, expandedEmissions);
     const logGamma = computeLogGamma(logAlpha, logBeta);
-    const logXi = computeLogXi(observations, expandedA, expandedEmissions, logAlpha, logBeta);
+    const fromIndices = Array.from({ length: N }, (_, j) => expandedIndex(j, 1, D));
+    const logXi = computeLogXi(observations, expandedA, expandedEmissions, logAlpha, logBeta, fromIndices);
 
     logLikelihoods.push(logSumExp(logAlpha[observations.length - 1]));
 
