@@ -8,7 +8,7 @@ import { CardList } from '../../components/Card'
 import { useApp } from '../../context/AppContext'
 import SummaryCard from './components/SummaryCard'
 import HoldingRow from './components/HoldingRow'
-import { holdingsStats } from './utils'
+import { holdingsCardProps } from './utils'
 
 export default function PortfolioHoldings() {
   const navigate = useNavigate()
@@ -29,7 +29,7 @@ export default function PortfolioHoldings() {
         <h1 style={styles.title}>Holdings</h1>
       </div>
 
-      <SummaryCard title="Holdings" stats={holdingsStats(summary)} />
+      <SummaryCard icon={faBriefcase} iconColor="var(--color-primary)" title="Holdings" {...holdingsCardProps(summary)} />
 
       {items.length === 0 ? (
         <EmptyState icon={faBriefcase} title="No holdings" subtitle="Your long-term holdings will show up here" />

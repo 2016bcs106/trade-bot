@@ -6,20 +6,38 @@ export function changeColor(value) {
   return value >= 0 ? 'var(--color-success)' : 'var(--color-danger)'
 }
 
-export function holdingsStats(summary) {
-  return [
-    { label: 'Invested', value: summary.investedValue.toFixed(2) },
-    { label: 'Current', value: summary.currentValue.toFixed(2) },
-    { label: '1D Change', value: `${formatSigned(summary.dayChange)} (${formatSigned(summary.dayChangePct)}%)`, color: changeColor(summary.dayChange) },
-    { label: 'Stocks', value: summary.totalStocks },
-  ]
+export function changeBgColor(value) {
+  return value >= 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)'
 }
 
-export function positionsStats(summary) {
-  return [
-    { label: 'Invested', value: summary.investedValue.toFixed(2) },
-    { label: 'Current', value: summary.currentValue.toFixed(2) },
-    { label: 'Net P&L', value: formatSigned(summary.netPnl), color: changeColor(summary.netPnl) },
-    { label: 'Stocks', value: summary.totalStocks },
-  ]
+export function formatCurrency(value, decimals = 2) {
+  return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+}
+
+export function formatSignedCurrency(value, decimals = 2) {
+  const sign = value >= 0 ? '+' : '-'
+  return `${sign}₹${Math.abs(value).toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+}
+
+export function holdingsCardProps(summary) {
+  return {
+    value: summary.currentValue,
+    change: { value: summary.dayChange, pct: summary.dayChangePct, label: 'Today' },
+    secondaryStats: [
+      { label: 'Invested', value: formatCurrency(summary.investedValue) },
+      { label: 'Stocks', value: summary.totalStocks },
+    ],
+  }
+}
+
+export function positionsCardProps(summary) {
+  const pnlPct = summary.investedValue !== 0 ? (summary.netPnl / summary.investedValue) * 100 : 0
+  return {
+    value: summary.currentValue,
+    change: { value: summary.netPnl, pct: pnlPct, label: 'P&L' },
+    secondaryStats: [
+      { label: 'Invested', value: formatCurrency(summary.investedValue) },
+      { label: 'Stocks', value: summary.totalStocks },
+    ],
+  }
 }

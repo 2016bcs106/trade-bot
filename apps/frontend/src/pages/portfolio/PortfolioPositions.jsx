@@ -8,7 +8,7 @@ import { CardList } from '../../components/Card'
 import { useApp } from '../../context/AppContext'
 import SummaryCard from './components/SummaryCard'
 import HoldingRow from './components/HoldingRow'
-import { positionsStats } from './utils'
+import { positionsCardProps } from './utils'
 
 export default function PortfolioPositions() {
   const navigate = useNavigate()
@@ -29,7 +29,7 @@ export default function PortfolioPositions() {
         <h1 style={styles.title}>Open Positions</h1>
       </div>
 
-      <SummaryCard title="Open Positions" stats={positionsStats(summary)} />
+      <SummaryCard icon={faChartLine} iconColor="var(--color-info)" title="Open Positions" {...positionsCardProps(summary)} />
 
       {items.length === 0 ? (
         <EmptyState icon={faChartLine} title="No open positions" subtitle="Your open intraday positions will show up here" />
