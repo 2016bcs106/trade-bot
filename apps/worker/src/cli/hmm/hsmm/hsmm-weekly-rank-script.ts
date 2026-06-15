@@ -1,11 +1,14 @@
 import "../../../config/env.ts";
 import { nowISO } from "../../../utils/time.ts";
 import BaseScript from "../../base-script.ts";
-import { runStage1, runStage2, Stage1Result, Stage2Result } from "./rank-stages.ts";
+import { Stage1Result, Stage2Result } from "./rank-stages.ts";
+import RankWorkerPool from "./worker-pool.ts";
 
 const STRATEGY_KEY = "HSMM_REGIME_FLIP";
 const STAGE2_CANDIDATE_LIMIT = 100;
 const RECOMMEND_COUNT = 50;
+// Conservative default — the EC2 host has ~916MB RAM and is already swapping.
+const POOL_SIZE = Number(process.env.HSMM_WORKER_POOL_SIZE) || 2;
 
 class HsmmWeeklyRankScript extends BaseScript {
   private candidateCount = 0;
@@ -32,16 +35,22 @@ class HsmmWeeklyRankScript extends BaseScript {
     this.log.info(`${candidates.length} candidates for stage 1 screening`);
 
     const survivors: Stage1Result[] = [];
-    for (let i = 0; i < candidates.length; i++) {
-      const symbol = candidates[i];
-      try {
-        const result = runStage1(symbol);
-        if (result) survivors.push(result);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.log.error(`${symbol} — stage 1 failed: ${msg}`);
-      }
-      if ((i + 1) % 25 === 0) this.log.info(`Stage 1 progress: ${i + 1}/${candidates.length}`);
+    {
+      const pool = new RankWorkerPool(POOL_SIZE);
+      let completed = 0;
+      await Promise.all(candidates.map(async (symbol) => {
+        try {
+          const result = await pool.run<Stage1Result | null>({ type: "stage1", symbol });
+          if (result) survivors.push(result);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.log.error(`${symbol} — stage 1 failed: ${msg}`);
+        } finally {
+          completed++;
+          if (completed % 25 === 0) this.log.info(`Stage 1 progress: ${completed}/${candidates.length}`);
+        }
+      }));
+      await pool.destroy();
     }
 
     survivors.sort((a, b) => b.combinedScore - a.combinedScore);
@@ -54,16 +63,22 @@ class HsmmWeeklyRankScript extends BaseScript {
 
     const stage2Candidates = survivors.slice(0, STAGE2_CANDIDATE_LIMIT);
     const stage2Survivors: Stage2Result[] = [];
-    for (let i = 0; i < stage2Candidates.length; i++) {
-      const candidate = stage2Candidates[i];
-      try {
-        const result = runStage2(candidate);
-        if (result) stage2Survivors.push(result);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.log.error(`${candidate.symbol} — stage 2 failed: ${msg}`);
-      }
-      if ((i + 1) % 10 === 0) this.log.info(`Stage 2 progress: ${i + 1}/${stage2Candidates.length}`);
+    {
+      const pool = new RankWorkerPool(POOL_SIZE);
+      let completed = 0;
+      await Promise.all(stage2Candidates.map(async (candidate) => {
+        try {
+          const result = await pool.run<Stage2Result | null>({ type: "stage2", stage1: candidate });
+          if (result) stage2Survivors.push(result);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.log.error(`${candidate.symbol} — stage 2 failed: ${msg}`);
+        } finally {
+          completed++;
+          if (completed % 10 === 0) this.log.info(`Stage 2 progress: ${completed}/${stage2Candidates.length}`);
+        }
+      }));
+      await pool.destroy();
     }
 
     stage2Survivors.sort((a, b) => b.strategySharpe - a.strategySharpe);
