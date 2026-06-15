@@ -1,52 +1,62 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChevronRight, faCaretUp, faCaretDown } from '@fortawesome/free-solid-svg-icons'
+import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import Card from '../../../components/Card'
-import { formatCurrency, formatSignedCurrency, formatSigned, changeColor, changeBgColor } from '../utils'
+import { formatCurrency, formatSignedCurrency, formatSigned, changeColor } from '../utils'
 
 export default function SummaryCard({ value, changes, secondaryStats, onClick }) {
+  const rowCount = Math.max(secondaryStats?.length ?? 0, changes?.length ?? 0)
+
   return (
     <Card style={{ ...styles.card, ...(onClick ? styles.clickable : {}) }} onClick={onClick}>
-      {onClick && <FontAwesomeIcon icon={faChevronRight} style={styles.chevron} />}
+      <div style={styles.topRow}>
+        <div style={styles.value}>{formatCurrency(value)}</div>
+        {onClick && <FontAwesomeIcon icon={faChevronRight} style={styles.chevron} />}
+      </div>
 
-      <div style={styles.value}>{formatCurrency(value)}</div>
-
-      {changes?.map((change) => (
-        <div key={change.label} style={styles.changeRow}>
-          <span style={{ ...styles.changePill, background: changeBgColor(change.value), color: changeColor(change.value) }}>
-            <FontAwesomeIcon icon={change.value >= 0 ? faCaretUp : faCaretDown} />
-            {formatSignedCurrency(change.value)} ({formatSigned(change.pct)}%)
-          </span>
-          <span style={styles.changeLabel}>{change.label}</span>
-        </div>
-      ))}
-
-      {secondaryStats && (
-        <div style={styles.statsRow}>
-          {secondaryStats.map((stat) => (
-            <div key={stat.label} style={styles.stat}>
-              <span style={styles.statValue}>{stat.value}</span>
-              <span style={styles.statLabel}>{stat.label}</span>
+      <div style={styles.statsBlock}>
+        {Array.from({ length: rowCount }, (_, i) => {
+          const stat = secondaryStats?.[i]
+          const change = changes?.[i]
+          return (
+            <div key={i} style={styles.statRow}>
+              <div style={styles.statCol}>
+                {stat && (
+                  <>
+                    <span style={styles.label}>{stat.label}</span>
+                    <span style={styles.statValue}>{stat.value}</span>
+                  </>
+                )}
+              </div>
+              <div style={{ ...styles.statCol, ...styles.statColRight }}>
+                {change && (
+                  <>
+                    <span style={styles.label}>{change.label}</span>
+                    <span style={{ ...styles.changeValue, color: changeColor(change.value) }}>
+                      {formatSignedCurrency(change.value)} ({formatSigned(change.pct)}%)
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
     </Card>
   )
 }
 
 const styles = {
   card: {
-    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
   },
   clickable: {
     cursor: 'pointer',
   },
-  chevron: {
-    position: 'absolute',
-    top: 'var(--space-lg)',
-    right: 'var(--space-lg)',
-    fontSize: '0.8rem',
-    color: 'var(--color-text-tertiary)',
+  topRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   value: {
     fontSize: 'var(--font-title1)',
@@ -55,36 +65,34 @@ const styles = {
     fontVariantNumeric: 'tabular-nums',
     letterSpacing: '-0.5px',
   },
-  changeRow: {
+  chevron: {
+    fontSize: '0.9rem',
+    color: 'var(--color-text-tertiary)',
+  },
+  statsBlock: {
     display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-sm)',
-    marginTop: '6px',
-  },
-  changePill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '2px 8px',
-    borderRadius: 'var(--radius-sm)',
-    fontSize: 'var(--font-caption)',
-    fontWeight: 600,
-    fontVariantNumeric: 'tabular-nums',
-  },
-  changeLabel: {
-    fontSize: 'var(--font-caption)',
-    color: 'var(--color-text-muted)',
-  },
-  statsRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    gap: 'var(--space-md)',
     marginTop: 'var(--space-lg)',
     paddingTop: 'var(--space-md)',
     borderTop: '1px solid var(--color-border)',
   },
-  stat: {
+  statRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+  },
+  statCol: {
     display: 'flex',
     flexDirection: 'column',
+    gap: '2px',
+  },
+  statColRight: {
+    alignItems: 'flex-end',
+    textAlign: 'right',
+  },
+  label: {
+    fontSize: 'var(--font-caption)',
+    color: 'var(--color-text-muted)',
   },
   statValue: {
     fontSize: 'var(--font-body)',
@@ -92,9 +100,9 @@ const styles = {
     color: 'var(--color-text)',
     fontVariantNumeric: 'tabular-nums',
   },
-  statLabel: {
-    fontSize: 'var(--font-caption)',
-    color: 'var(--color-text-muted)',
-    marginTop: '2px',
+  changeValue: {
+    fontSize: 'var(--font-body)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
   },
 }
