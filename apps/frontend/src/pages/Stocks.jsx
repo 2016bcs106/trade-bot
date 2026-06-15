@@ -75,11 +75,10 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, toggleFavorite } = useApp()
+  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, toggleFavorite } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('favorites')
 
   const getLivePriceInfo = (symbol) => {
     const stock = stocks.find((s) => s.symbol === symbol)
@@ -142,13 +141,13 @@ export default function Stocks() {
 
       <div style={styles.tabRow}>
         <button style={{ ...styles.tab, ...(activeTab === 'favorites' ? styles.tabActive : {}) }} onClick={() => setActiveTab('favorites')}>
-          Favorites <Badge label={`${stocks.filter((s) => s.isFavorite).length}`} color={activeTab === 'favorites' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+          Favs <Badge label={`${stocks.filter((s) => s.isFavorite).length}`} color={activeTab === 'favorites' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
         <button style={{ ...styles.tab, ...(activeTab === 'recommended' ? styles.tabActive : {}) }} onClick={() => setActiveTab('recommended')}>
-          Recommended <Badge label={`${stocks.filter(isRecommended).length}`} color={activeTab === 'recommended' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+          Picks <Badge label={`${stocks.filter(isRecommended).length}`} color={activeTab === 'recommended' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
         <button style={{ ...styles.tab, ...(activeTab === 'top' ? styles.tabActive : {}) }} onClick={() => setActiveTab('top')}>
-          Top stocks <Badge label={`${stocks.length}`} color={activeTab === 'top' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+          Top <Badge label={`${stocks.length}`} color={activeTab === 'top' ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
         </button>
       </div>
 

@@ -94,12 +94,9 @@ export default forwardRef(function PriceChart({ options }, ref) {
         if (time < '09:45') {
           continue;
         } else if (time >= '14:30') {
-          console.log(time, closes[i], position);
           if (position === 'long') {
             exitSignals[i] = closes[i];
             netProfit += (closes[i] - entryPrice); // Fixed: Exit - Entry
-
-            console.log(closes[i] - entryPrice);
 
             position = null;
             entryPrice = null;
@@ -107,7 +104,6 @@ export default forwardRef(function PriceChart({ options }, ref) {
             exitSignals[i] = closes[i];
             netProfit += (entryPrice - closes[i]); // Fixed: Entry - Exit
 
-            console.log(closes[i] - entryPrice);
             position = null;
             entryPrice = null;
           }
