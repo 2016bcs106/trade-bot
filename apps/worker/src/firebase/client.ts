@@ -6,6 +6,8 @@ import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payloa
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { PushSubscriptionData } from "../types/push-subscription.ts";
+import { PortfolioHoldings, PortfolioPositions } from "../types/market-data/portfolio.ts";
+import { SignalsSummary } from "../types/signals-summary.ts";
 
 const app = initializeApp({
   databaseURL: process.env.FIREBASE_DATABASE_URL,
@@ -119,6 +121,25 @@ export default class FirebaseClient {
 
   async setSignal(strategyKey: string, date: string, symbol: string, data: { signal: string; confidence: number }): Promise<void> {
     await this._setValue(`signals/${symbol}/${strategyKey}/${date}`, data);
+  }
+
+  async setSignalsSummary(data: SignalsSummary): Promise<void> {
+    await this._setValue("signals_summary/latest", data);
+  }
+
+  // ─── Portfolio ─────────────────────────────────────────────────────
+
+  async setPortfolioHoldings(data: PortfolioHoldings): Promise<void> {
+    await this._setValue("portfolio/holdings", data);
+  }
+
+  async setPortfolioPositions(data: PortfolioPositions): Promise<void> {
+    await this._setValue("portfolio/positions", data);
+  }
+
+  async getPortfolioHoldingSymbols(): Promise<Set<string>> {
+    const data = await this._getValue("portfolio/holdings/items") as { symbol: string }[] | null;
+    return new Set((data || []).map((item) => item.symbol));
   }
 
   onStocksChange(callback: (stocks: Record<string, StockConfig> | null) => void): Unsubscribe {
