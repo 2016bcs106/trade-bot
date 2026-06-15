@@ -8,6 +8,9 @@ import Monitor from './pages/Monitor'
 import Settings from './pages/Settings'
 import PaytmMoneyCallback from './pages/PaytmMoneyCallback'
 import LiveTicks from './pages/LiveTicks'
+import Portfolio from './pages/portfolio/Portfolio'
+import PortfolioHoldings from './pages/portfolio/PortfolioHoldings'
+import PortfolioPositions from './pages/portfolio/PortfolioPositions'
 
 const isDryRun = new URLSearchParams(window.location.search).has('dryRun')
 
@@ -24,6 +27,9 @@ function App() {
           <Route path="/paytm-money-callback" element={<PaytmMoneyCallback />} />
           <Route path="/" element={<AuthGuard><Stocks /></AuthGuard>} />
           <Route path="/live/:symbol" element={<AuthGuard><LiveTicks /></AuthGuard>} />
+          <Route path="/portfolio" element={<AuthGuard><Portfolio /></AuthGuard>} />
+          <Route path="/portfolio/holdings" element={<AuthGuard><PortfolioHoldings /></AuthGuard>} />
+          <Route path="/portfolio/positions" element={<AuthGuard><PortfolioPositions /></AuthGuard>} />
           <Route path="/monitor" element={<AuthGuard><Monitor /></AuthGuard>} />
           <Route path="/settings" element={<AuthGuard><Settings /></AuthGuard>} />
         </Routes>

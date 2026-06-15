@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faListUl, faHeartPulse, faGear } from '@fortawesome/free-solid-svg-icons'
+import { faListUl, faHeartPulse, faGear, faWallet } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import { useApp } from '../context/AppContext'
 
 const navItems = [
+  { path: '/portfolio', label: 'Portfolio', icon: faWallet },
   { path: '/', label: 'Stocks', icon: faListUl },
   { path: '/monitor', label: 'Monitor', icon: faHeartPulse },
   { path: '/settings', label: 'Settings', icon: faGear },
@@ -45,7 +46,9 @@ export default function BottomNav() {
       {navItems.map((item) => {
         const isActive = item.path === '/'
           ? (location.pathname === '/' || location.pathname.startsWith('/live/'))
-          : location.pathname === item.path
+          : item.path === '/portfolio'
+            ? location.pathname.startsWith('/portfolio')
+            : location.pathname === item.path
         const color = isActive ? 'var(--color-primary)' : 'var(--color-text-muted)'
         return (
           <button key={item.path} onClick={() => navigate(item.path)} style={styles.item}>
