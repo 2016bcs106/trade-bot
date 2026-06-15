@@ -18,7 +18,7 @@ export default function PortfolioPositions() {
     return <Page><Loader /></Page>
   }
 
-  const { summary, items } = portfolioPositions
+  const { summary, items = [] } = portfolioPositions
 
   return (
     <Page>

@@ -18,7 +18,7 @@ export default function PortfolioHoldings() {
     return <Page><Loader /></Page>
   }
 
-  const { summary, items } = portfolioHoldings
+  const { summary, items = [] } = portfolioHoldings
 
   return (
     <Page>
