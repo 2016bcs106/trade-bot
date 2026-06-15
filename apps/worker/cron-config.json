@@ -33,5 +33,10 @@
     "name": "check-auth-freshness",
     "schedule": "45 18 * * *",
     "command": "src/cli/check-auth-freshness-script.ts"
+  },
+  {
+    "name": "portfolio-sync",
+    "schedule": "*/5 9-15 * * 1-5",
+    "command": "src/cli/portfolio-sync-script.ts"
   }
 ]
