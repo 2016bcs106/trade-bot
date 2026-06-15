@@ -43,17 +43,16 @@ function StockRow({ stock, bordered, info, showEstimatedProfit, signal, onTap, o
         <span style={styles.name}>{stock.displayName || '—'}</span>
       </div>
       {showEstimatedProfit ? (
-        <>
+        <div style={styles.priceCol}>
           {signal && <Badge label={signal.label} color={signal.color} />}
           {stock.estimatedProfitPct != null && (
-            <div style={styles.priceCol}>
-              <span style={{ ...styles.price, color: stock.estimatedProfitPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+            <span style={styles.change}>
+              Backtest profit: <span style={{ color: stock.estimatedProfitPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                 {stock.estimatedProfitPct >= 0 ? '+' : ''}{stock.estimatedProfitPct.toFixed(2)}%
               </span>
-              <span style={styles.change}>Est. profit</span>
-            </div>
+            </span>
           )}
-        </>
+        </div>
       ) : (
         <>
           {info && (
@@ -379,7 +378,7 @@ const styles = {
     fontSize: 'var(--font-caption)',
     fontWeight: 500,
     fontVariantNumeric: 'tabular-nums',
-    marginTop: '1px',
+    marginTop: '4px',
   },
   symbol: {
     display: 'block',
