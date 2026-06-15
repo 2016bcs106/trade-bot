@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import { TokenExchangeResponse } from "../../types/auth/token-exchange-response.ts";
 import { OHLCV } from "../../types/market-data/ohlcv.ts";
 import { LiveMarketDataResponse } from "../../types/market-data/live-market-data.ts";
+import { PaytmHoldingsResponse, PaytmHoldingsValueResponse, PaytmPositionsResponse } from "../../types/market-data/portfolio.ts";
 
 /**
  * Paytm Money API client — handles all HTTP interactions with Paytm Money.
@@ -39,6 +40,35 @@ export default class PaytmMoneyClient {
       headers: { "x-jwt-token": accessToken },
     });
     return response.json() as Promise<LiveMarketDataResponse>;
+  }
+
+  // ─── Portfolio ───────────────────────────────────────────────────────
+
+  /** Fetch open positions (intraday + carry-forward). */
+  async fetchPositions(accessToken: string): Promise<PaytmPositionsResponse> {
+    const response = await fetch("https://developer.paytmmoney.com/orders/v1/position", {
+      method: "GET",
+      headers: { "x-jwt-token": accessToken },
+    });
+    return response.json() as Promise<PaytmPositionsResponse>;
+  }
+
+  /** Fetch long-term (non-intraday) holdings. */
+  async fetchHoldings(accessToken: string): Promise<PaytmHoldingsResponse> {
+    const response = await fetch("https://developer.paytmmoney.com/holdings/v1/get-user-holdings-data", {
+      method: "GET",
+      headers: { "x-jwt-token": accessToken },
+    });
+    return response.json() as Promise<PaytmHoldingsResponse>;
+  }
+
+  /** Fetch portfolio-level holdings value summary. */
+  async fetchHoldingsValue(accessToken: string): Promise<PaytmHoldingsValueResponse> {
+    const response = await fetch("https://developer.paytmmoney.com/holdings/v1/get-holdings-value", {
+      method: "GET",
+      headers: { "x-jwt-token": accessToken },
+    });
+    return response.json() as Promise<PaytmHoldingsValueResponse>;
   }
 
   // ─── Historical OHLCV Data ───────────────────────────────────────────
