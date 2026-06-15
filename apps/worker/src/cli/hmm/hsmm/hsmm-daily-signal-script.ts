@@ -2,7 +2,7 @@ import "../../../config/env.ts";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
-import { todayDate } from "../../../utils/time.ts";
+import { nowISO, todayDate } from "../../../utils/time.ts";
 import BaseScript from "../../base-script.ts";
 import { GaussianParams } from "../types/gaussian-params.ts";
 import { OHLCV } from "../../../types/market-data/ohlcv.ts";
@@ -59,15 +59,24 @@ class HsmmDailySignalScript extends BaseScript {
     this.log.info(`Computing signals for ${recommended.length} recommended stocks`);
 
     const date = todayDate();
+    const heldSymbols = await this.firebase.getPortfolioHoldingSymbols();
+    const buySymbols: string[] = [];
+    const sellSymbols: string[] = [];
 
     for (const stock of recommended) {
       try {
         const result = this.computeSignal(stock);
         if (!result) continue;
 
+        if (result.signal === "SELL" && !heldSymbols.has(stock.symbol)) {
+          this.log.info(`${stock.symbol}: SELL skipped — not held in portfolio`);
+          this.processedCount++;
+          continue;
+        }
+
         await this.firebase.setSignal(STRATEGY_KEY, date, stock.symbol, result);
-        if (result.signal === "BUY") this.buyCount++;
-        else this.sellCount++;
+        if (result.signal === "BUY") { this.buyCount++; buySymbols.push(stock.symbol); }
+        else { this.sellCount++; sellSymbols.push(stock.symbol); }
         this.processedCount++;
         this.log.info(`${stock.symbol}: ${result.signal} (confidence=${result.confidence.toFixed(3)})`);
       } catch (err) {
@@ -76,6 +85,14 @@ class HsmmDailySignalScript extends BaseScript {
         this.log.error(`${stock.symbol} — failed: ${msg}`);
       }
     }
+
+    await this.firebase.setSignalsSummary({
+      buyCount: this.buyCount,
+      sellCount: this.sellCount,
+      buySymbols,
+      sellSymbols,
+      updatedAt: nowISO(),
+    });
 
     this.log.info(`Done — processed=${this.processedCount}, BUY=${this.buyCount}, SELL=${this.sellCount}, errors=${this.errorCount}`);
   }
