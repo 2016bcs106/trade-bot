@@ -1,7 +1,7 @@
 import { useState, useEffect, createContext, useContext } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faSpinner, faArrowRightToBracket, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons'
-import { db, ref, onValue, auth, googleProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from '../utils/firebase'
+import { db, ref, onValue, auth, googleProvider, signInWithPopup, onAuthStateChanged, signOut } from '../utils/firebase'
 
 const GoogleAuthContext = createContext(null)
 
@@ -21,7 +21,6 @@ export default function GoogleAuthGuard({ children }) {
   const [role, setRole] = useState(null)
 
   useEffect(() => {
-    getRedirectResult(auth).catch(() => {})
     return onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
@@ -61,7 +60,7 @@ export default function GoogleAuthGuard({ children }) {
         <div style={styles.content}>
           <h1 style={styles.title}>Trade Bot</h1>
           <p style={styles.subtitle}>Sign in to continue</p>
-          <button style={styles.button} onClick={() => signInWithRedirect(auth, googleProvider)}>
+          <button style={styles.button} onClick={() => signInWithPopup(auth, googleProvider).catch(() => {})}>
             <FontAwesomeIcon icon={faArrowRightToBracket} />
             <span>Sign in with Google</span>
           </button>

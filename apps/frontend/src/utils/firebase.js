@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getDatabase, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt, push } from 'firebase/database'
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -19,4 +19,4 @@ setPersistence(auth, browserLocalPersistence).catch(() => {})
 const googleProvider = new GoogleAuthProvider()
 
 export { db, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt, push }
-export { auth, googleProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
+export { auth, googleProvider, signInWithPopup, onAuthStateChanged, signOut }
