@@ -6,7 +6,8 @@
     "start": "tsx src/cli/live-stream-script.ts",
     "live-stream": "tsx src/cli/live-stream-script.ts",
     "request-handler": "tsx src/cli/request-orchestration-script.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "allow-user": "tsx src/cli/manage-allowed-users.ts"
   },
   "keywords": [],
   "author": "",

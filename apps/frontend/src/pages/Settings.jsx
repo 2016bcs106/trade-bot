@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faArrowRotateRight, faServer, faCheck, faBell } from '@fortawesome/free-solid-svg-icons'
+import { faArrowRotateRight, faServer, faCheck, faBell, faUser, faArrowRightToBracket } from '@fortawesome/free-solid-svg-icons'
 import { db, ref, push, set, onValue } from '../utils/firebase'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import Page from '../components/Page'
@@ -9,7 +9,9 @@ import PageHeader from '../components/PageHeader'
 import SectionHeader from '../components/SectionHeader'
 import { CardList } from '../components/Card'
 import ListItem from '../components/ListItem'
+import Badge from '../components/Badge'
 import BottomSheet from '../components/BottomSheet'
+import { useGoogleAuth } from '../components/GoogleAuthGuard'
 
 export function getSignalSource() {
   try { return localStorage.getItem('signalSource') || 'backend' } catch { return 'backend' }
@@ -24,6 +26,7 @@ function InlineToggle({ enabled, onToggle }) {
 }
 
 export default function Settings() {
+  const { user, isAdmin, signOut } = useGoogleAuth()
   const [updateQueued, setUpdateQueued] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [signalSource, setSignalSource] = useState(getSignalSource)
@@ -67,6 +70,23 @@ export default function Settings() {
   return (
     <Page>
       <PageHeader title="Settings" />
+
+      <SectionHeader>Account</SectionHeader>
+      <CardList>
+        <ListItem
+          icon={faUser}
+          iconColor="var(--color-primary)"
+          title={user?.email || '—'}
+          right={isAdmin ? <Badge label="Admin" color="var(--color-primary)" /> : null}
+        />
+        <ListItem
+          icon={faArrowRightToBracket}
+          iconColor="var(--color-danger)"
+          title="Sign out"
+          onClick={signOut}
+          isLast
+        />
+      </CardList>
 
       <SectionHeader>General</SectionHeader>
       <CardList>
