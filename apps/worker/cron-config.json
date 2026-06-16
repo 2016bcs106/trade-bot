@@ -36,7 +36,7 @@
   },
   {
     "name": "portfolio-sync",
-    "schedule": "*/5 9-15 * * 1-5",
+    "schedule": "*/5 3-10 * * 1-5",
     "command": "src/cli/portfolio-sync-script.ts"
   }
 ]
