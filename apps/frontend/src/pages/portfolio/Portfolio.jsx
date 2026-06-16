@@ -12,13 +12,13 @@ import { holdingsCardProps, positionsCardProps } from './utils'
 
 export default function Portfolio() {
   const navigate = useNavigate()
-  const { portfolioHoldings, portfolioPositions, signalsSummary, setActiveTab } = useApp()
+  const { portfolioHoldings, portfolioPositions, signalsSummary, setActiveTab, setPicksFilter } = useApp()
 
   if (!portfolioHoldings || !portfolioPositions) {
     return <Page><Loader /></Page>
   }
 
-  const goToPicks = () => { setActiveTab('recommended'); navigate('/') }
+  const goToPicks = (filter = 'all') => { setPicksFilter(filter); setActiveTab('recommended'); navigate('/') }
 
   return (
     <Page>
@@ -38,7 +38,7 @@ export default function Portfolio() {
 
       <SectionHeader>Recommendations</SectionHeader>
       <Card style={styles.recCard}>
-        <div style={styles.recRow} onClick={goToPicks}>
+        <div style={styles.recRow} onClick={() => goToPicks('buy')}>
           <div style={{ ...styles.recIcon, background: 'var(--color-success)' }}>
             <FontAwesomeIcon icon={faArrowTrendUp} style={styles.recIconGlyph} />
           </div>
@@ -46,7 +46,7 @@ export default function Portfolio() {
           <span style={styles.recCount}>{signalsSummary?.buyCount ?? 0}</span>
           <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
         </div>
-        <div style={{ ...styles.recRow, ...styles.recRowBorder }} onClick={goToPicks}>
+        <div style={{ ...styles.recRow, ...styles.recRowBorder }} onClick={() => goToPicks('sell')}>
           <div style={{ ...styles.recIcon, background: 'var(--color-danger)' }}>
             <FontAwesomeIcon icon={faArrowTrendDown} style={styles.recIconGlyph} />
           </div>

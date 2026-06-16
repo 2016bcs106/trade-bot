@@ -1,13 +1,16 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import Card from '../../../components/Card'
-import { formatCurrency, formatSignedCurrency, formatSigned, changeColor } from '../utils'
+import { formatCurrencyCompact, formatSignedCurrencyCompact, formatSigned, changeColor } from '../utils'
 
 export default function SummaryCard({ currentValue, stockCount, stockLabel = 'stocks', left, right, onClick }) {
   return (
     <Card style={{ ...styles.card, ...(onClick ? styles.clickable : {}) }} onClick={onClick}>
       <div style={styles.row1}>
-        <span style={styles.currentValue}>{formatCurrency(currentValue)}</span>
+        <div style={styles.valueBlock}>
+          <span style={styles.valueLabel}>Current Value</span>
+          <span style={styles.currentValue}>{formatCurrencyCompact(currentValue)}</span>
+        </div>
         <div style={styles.stockCount}>
           <span style={styles.stockCountText}>{stockCount} {stockLabel}</span>
           {onClick && <FontAwesomeIcon icon={faChevronRight} style={styles.chevron} />}
@@ -17,14 +20,14 @@ export default function SummaryCard({ currentValue, stockCount, stockLabel = 'st
         <div style={styles.stat}>
           <span style={styles.label}>{left.label}</span>
           <span style={{ ...styles.change, color: changeColor(left.value) }}>
-            {formatSignedCurrency(left.value)} ({formatSigned(left.pct)}%)
+            {formatSignedCurrencyCompact(left.value)} ({formatSigned(left.pct)}%)
           </span>
         </div>
         <div style={{ ...styles.stat, ...styles.statRight }}>
           <span style={styles.label}>{right.label}</span>
           {right.pct != null
-            ? <span style={{ ...styles.change, color: changeColor(right.value) }}>{formatSignedCurrency(right.value)} ({formatSigned(right.pct)}%)</span>
-            : <span style={styles.change}>{formatCurrency(right.value)}</span>
+            ? <span style={{ ...styles.change, color: changeColor(right.value) }}>{formatSignedCurrencyCompact(right.value)} ({formatSigned(right.pct)}%)</span>
+            : <span style={styles.change}>{formatCurrencyCompact(right.value)}</span>
           }
         </div>
       </div>
@@ -43,8 +46,17 @@ const styles = {
   },
   row1: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
+  },
+  valueBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  valueLabel: {
+    fontSize: 'var(--font-caption)',
+    color: 'var(--color-text-muted)',
   },
   currentValue: {
     fontSize: 'var(--font-title1)',

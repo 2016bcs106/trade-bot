@@ -38,22 +38,31 @@ function StockRow({ stock, bordered, info, showEstimatedProfit, signal, onTap, o
       style={{ ...styles.stockRow, ...(bordered ? styles.bordered : {}) }}
       {...handlers}
     >
-      <div style={styles.stockInfo}>
-        <span style={styles.symbol}>{stock.symbol}</span>
-        <span style={styles.name}>{stock.displayName || '—'}</span>
-      </div>
       {showEstimatedProfit ? (
-        <div style={styles.priceCol}>
-          {signal && <Badge label={signal.label} color={signal.color} />}
-          {stock.estimatedProfitPct != null && (
-            <span style={styles.change}>
-              Backtest profit: <span style={{ color: stock.estimatedProfitPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                {stock.estimatedProfitPct >= 0 ? '+' : ''}{stock.estimatedProfitPct.toFixed(2)}%
+        <div style={styles.picksContent}>
+          <div style={styles.picksLine}>
+            <span style={styles.symbol}>{stock.symbol}</span>
+            {signal
+              ? <span style={{ ...styles.signalLabel, color: signal.color }}>{signal.label}</span>
+              : <span style={styles.noAction}>No signal</span>
+            }
+          </div>
+          <div style={styles.picksLine}>
+            <span style={styles.name}>{stock.displayName || '—'}</span>
+            {stock.estimatedProfitPct != null && (
+              <span style={styles.estimatedProfit}>
+                Est. {stock.estimatedProfitPct >= 0 ? '+' : ''}{stock.estimatedProfitPct.toFixed(2)}%
               </span>
-            </span>
-          )}
+            )}
+          </div>
         </div>
       ) : (
+        <div style={styles.stockInfo}>
+          <span style={styles.symbol}>{stock.symbol}</span>
+          <span style={styles.name}>{stock.displayName || '—'}</span>
+        </div>
+      )}
+      {!showEstimatedProfit && (
         <>
           {info && (
             <div style={styles.priceCol}>
@@ -83,7 +92,7 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, toggleFavorite, signalsSummary } = useApp()
+  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, picksFilter, setPicksFilter, toggleFavorite, signalsSummary } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
@@ -99,6 +108,15 @@ export default function Stocks() {
     .filter((s) => {
       if (activeTab === 'favorites') return s.isFavorite
       if (activeTab === 'recommended') return isRecommended(s)
+      return true
+    })
+    .filter((s) => {
+      if (activeTab !== 'recommended' || picksFilter === 'all') return true
+      const isBuy = signalsSummary?.buySymbols?.includes(s.symbol)
+      const isSell = signalsSummary?.sellSymbols?.includes(s.symbol)
+      if (picksFilter === 'buy') return isBuy
+      if (picksFilter === 'sell') return isSell
+      if (picksFilter === 'none') return !isBuy && !isSell
       return true
     })
     .filter((s) => !query || s.symbol.includes(query) || (s.displayName || '').toUpperCase().includes(query))
@@ -173,6 +191,25 @@ export default function Stocks() {
           </button>
         )}
       </div>
+
+      {activeTab === 'recommended' && (
+        <div style={styles.filterRow}>
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'buy', label: 'BUY' },
+            { key: 'sell', label: 'SELL' },
+            { key: 'none', label: 'No signal' },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              style={{ ...styles.filterPill, ...(picksFilter === key ? styles.filterPillActive : {}) }}
+              onClick={() => setPicksFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {stockList.length === 0 ? (
         <EmptyState
@@ -363,6 +400,33 @@ const styles = {
     flex: 1,
     minWidth: 0,
   },
+  picksContent: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  picksLine: {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 'var(--space-sm)',
+  },
+  signalLabel: {
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+  },
+  noAction: {
+    fontSize: 'var(--font-footnote)',
+    color: 'var(--color-text-muted)',
+  },
+  estimatedProfit: {
+    fontSize: 'var(--font-footnote)',
+    color: 'var(--color-text-muted)',
+    whiteSpace: 'nowrap',
+  },
   priceCol: {
     textAlign: 'right',
   },
@@ -394,6 +458,27 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     marginTop: '2px',
+  },
+  filterRow: {
+    display: 'flex',
+    gap: 'var(--space-sm)',
+    marginBottom: 'var(--space-md)',
+  },
+  filterPill: {
+    padding: '5px 12px',
+    borderRadius: '999px',
+    border: '1px solid var(--color-text-muted)',
+    background: 'transparent',
+    fontSize: 'var(--font-caption)',
+    fontWeight: 500,
+    color: 'var(--color-text-muted)',
+    cursor: 'pointer',
+  },
+  filterPillActive: {
+    background: 'var(--color-primary)',
+    borderColor: 'var(--color-primary)',
+    color: '#fff',
+    fontWeight: 600,
   },
   searchBar: {
     display: 'flex',

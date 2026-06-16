@@ -19,6 +19,7 @@ export function AppProvider({ children }) {
     try { return localStorage.getItem('stockSortAsc') === 'true' } catch { return false }
   })
   const [activeTab, setActiveTab] = useState('favorites')
+  const [picksFilter, setPicksFilter] = useState('all')
   const [scripts, setScripts] = useState(undefined)
   const [requestQueue, setRequestQueue] = useState([])
   const [failedRequests, setFailedRequests] = useState([])
@@ -195,7 +196,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, activeTab, setActiveTab, scripts, requestQueue, failedRequests, portfolioHoldings, portfolioPositions, signalsSummary, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, activeTab, setActiveTab, picksFilter, setPicksFilter, scripts, requestQueue, failedRequests, portfolioHoldings, portfolioPositions, signalsSummary, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )
