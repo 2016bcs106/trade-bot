@@ -19,28 +19,21 @@ export function holdingsCardProps(summary) {
   const totalReturn = summary.currentValue - summary.investedValue
   const totalReturnPct = summary.investedValue !== 0 ? (totalReturn / summary.investedValue) * 100 : 0
   return {
-    value: summary.currentValue,
-    changes: [
-      { label: 'Today', value: summary.dayChange, pct: summary.dayChangePct },
-      { label: 'Total return', value: totalReturn, pct: totalReturnPct },
-    ],
-    secondaryStats: [
-      { label: 'Invested', value: formatCurrency(summary.investedValue) },
-      { label: 'Stocks', value: summary.totalStocks },
-    ],
+    currentValue: summary.currentValue,
+    stockCount: summary.totalStocks,
+    stockLabel: 'stocks',
+    left: { label: 'Total Return', value: totalReturn, pct: totalReturnPct },
+    right: { label: 'Today', value: summary.dayChange, pct: summary.dayChangePct },
   }
 }
 
 export function positionsCardProps(summary) {
   const pnlPct = summary.investedValue !== 0 ? (summary.netPnl / summary.investedValue) * 100 : 0
   return {
-    value: summary.currentValue,
-    changes: [
-      { label: 'P&L', value: summary.netPnl, pct: pnlPct },
-    ],
-    secondaryStats: [
-      { label: 'Invested', value: formatCurrency(summary.investedValue) },
-      { label: 'Stocks', value: summary.totalStocks },
-    ],
+    currentValue: summary.currentValue,
+    stockCount: summary.totalStocks,
+    stockLabel: 'positions',
+    left: { label: 'Net P&L', value: summary.netPnl, pct: pnlPct },
+    right: { label: 'Invested', value: summary.investedValue },
   }
 }
