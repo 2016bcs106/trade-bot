@@ -116,9 +116,9 @@ class PortfolioSyncScript extends BaseScript {
         const absQty = Math.abs(quantity);
         const investedValue = avgPrice * absQty;
         const currentValue = ltp * absQty;
-        const pnl = p.realised_profit != null
-          ? Number(p.realised_profit)
-          : (quantity >= 0 ? currentValue - investedValue : investedValue - currentValue);
+        const unrealisedPnl = quantity >= 0 ? currentValue - investedValue : investedValue - currentValue;
+        const realisedPnl = Number(p.realised_profit) || 0;
+        const pnl = unrealisedPnl + realisedPnl;
         const pnlPct = investedValue !== 0 ? (pnl / investedValue) * 100 : 0;
 
         return {
