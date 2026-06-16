@@ -36,6 +36,14 @@ export default class FirebaseClient {
     return data.token;
   }
 
+  async getPublicAccessToken(): Promise<string> {
+    const data = await this._getValue("auth/publicAccessToken") as { token?: string } | null;
+    if (!data?.token) {
+      throw new Error("No publicAccessToken found in Firebase.");
+    }
+    return data.token;
+  }
+
   onAccessTokenChange(callback: (token: string) => void): Unsubscribe {
     return this._onChange("auth/accessToken", (data) => {
       const record = data as { token?: string } | null;

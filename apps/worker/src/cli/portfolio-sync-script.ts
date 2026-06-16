@@ -45,8 +45,23 @@ class PortfolioSyncScript extends BaseScript {
     this.sampleHolding = holdings[0] ?? null;
     this.samplePosition = positions[0] ?? null;
 
+    const allStocks = await this.firebase.getAllStocks();
+    const isinToSymbol = new Map<string, string>(
+      Object.values(allStocks)
+        .filter((s) => s.isin)
+        .map((s) => [s.isin as string, s.symbol])
+    );
+
+    const positionSecurityIds = positions
+      .filter((p) => Number(p.net_qty) !== 0)
+      .map((p) => Number(p.security_id))
+      .filter((id) => id > 0);
+    const livePrices = positionSecurityIds.length > 0
+      ? await this.client.fetchLivePrices(positionSecurityIds, "NSE", accessToken)
+      : new Map<number, number>();
+
     const normalizedHoldings = this.normalizeHoldings(holdings, holdingsValueRes.data?.results?.[0]);
-    const normalizedPositions = this.normalizePositions(positions);
+    const normalizedPositions = this.normalizePositions(positions, isinToSymbol, livePrices);
 
     this.holdingsCount = normalizedHoldings.items.length;
     this.positionsCount = normalizedPositions.items.length;
@@ -106,23 +121,27 @@ class PortfolioSyncScript extends BaseScript {
     };
   }
 
-  private normalizePositions(positions: PaytmPosition[]): PortfolioPositions {
+  private normalizePositions(positions: PaytmPosition[], isinToSymbol: Map<string, string>, livePrices: Map<number, number>): PortfolioPositions {
     const items = positions
       .filter((p) => Number(p.net_qty) !== 0)
       .map((p) => {
         const quantity = Number(p.net_qty) || 0;
         const avgPrice = Number(p.net_avg) || 0;
-        const ltp = Number(p.last_traded_price) || 0;
+        const secId = Number(p.security_id);
+        const ltp = livePrices.get(secId) ?? 0;
         const absQty = Math.abs(quantity);
         const investedValue = avgPrice * absQty;
-        const currentValue = ltp * absQty;
-        const unrealisedPnl = quantity >= 0 ? currentValue - investedValue : investedValue - currentValue;
+        const currentValue = ltp > 0 ? ltp * absQty : investedValue;
         const realisedPnl = Number(p.realised_profit) || 0;
+        const unrealisedPnl = ltp > 0
+          ? (quantity >= 0 ? currentValue - investedValue : investedValue - currentValue)
+          : 0;
         const pnl = unrealisedPnl + realisedPnl;
         const pnlPct = investedValue !== 0 ? (pnl / investedValue) * 100 : 0;
+        const symbol = isinToSymbol.get(p.isin) ?? p.display_name;
 
         return {
-          symbol: p.display_name,
+          symbol,
           quantity,
           avgPrice,
           ltp,

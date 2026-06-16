@@ -42,6 +42,21 @@ export default class PaytmMoneyClient {
     return response.json() as Promise<LiveMarketDataResponse>;
   }
 
+  /** Fetch live prices for multiple securities in parallel. Returns a map of security_id → last_price. */
+  async fetchLivePrices(securityIds: number[], exchange: string, accessToken: string): Promise<Map<number, number>> {
+    const results = await Promise.all(
+      securityIds.map((id) => this.fetchLiveData(exchange, String(id), "EQUITY", accessToken))
+    );
+    const map = new Map<number, number>();
+    for (const res of results) {
+      const entry = res.data?.[0];
+      if (entry && entry.found !== false && entry.last_price > 0) {
+        map.set(entry.security_id, entry.last_price);
+      }
+    }
+    return map;
+  }
+
   // ─── Portfolio ───────────────────────────────────────────────────────
 
   /** Fetch open positions (intraday + carry-forward). */

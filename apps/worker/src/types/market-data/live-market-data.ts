@@ -10,6 +10,8 @@ export interface LiveMarketDataResponse {
 }
 
 export interface LiveMarketDataEntry {
+  found?: boolean;
+  message?: string;
   /** Last traded price */
   last_price: number;
   /** Day's open price */
