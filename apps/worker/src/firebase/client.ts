@@ -183,6 +183,10 @@ export default class FirebaseClient {
     return snapshot.val();
   }
 
+  async getValue(path: string): Promise<unknown> {
+    return this._getValue(path);
+  }
+
   async setValue(path: string, value: unknown): Promise<void> {
     await set(ref(this.db, path), value);
   }
