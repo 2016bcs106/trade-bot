@@ -145,6 +145,14 @@ export default class FirebaseClient {
     await this._setValue("portfolio/positions", data);
   }
 
+  async setDhanhqPortfolioHoldings(data: PortfolioHoldings): Promise<void> {
+    await this._setValue("dhanhq/portfolio/holdings", data);
+  }
+
+  async setDhanhqPortfolioPositions(data: PortfolioPositions): Promise<void> {
+    await this._setValue("dhanhq/portfolio/positions", data);
+  }
+
   async getPortfolioHoldingSymbols(): Promise<Set<string>> {
     const data = await this._getValue("portfolio/holdings/items") as { symbol: string }[] | null;
     return new Set((data || []).map((item) => item.symbol));

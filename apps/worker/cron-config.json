@@ -38,5 +38,10 @@
     "name": "dhanhq-token-refresh",
     "schedule": "*/30 * * * *",
     "command": "src/cli/dhanhq-token-refresh-script.ts"
+  },
+  {
+    "name": "dhanhq-portfolio-sync",
+    "schedule": "*/5 3-10 * * 1-5",
+    "command": "src/cli/dhanhq-portfolio-sync-script.ts"
   }
 ]

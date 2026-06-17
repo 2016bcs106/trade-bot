@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChevronLeft, faBriefcase } from '@fortawesome/free-solid-svg-icons'
 import Page from '../../components/Page'
@@ -12,18 +12,21 @@ import { holdingsCardProps } from './utils'
 
 export default function PortfolioHoldings() {
   const navigate = useNavigate()
-  const { portfolioHoldings } = useApp()
+  const { broker = 'paytm' } = useParams()
+  const { portfolioHoldings, dhanHoldings } = useApp()
 
-  if (!portfolioHoldings) {
+  const data = broker === 'dhan' ? dhanHoldings : portfolioHoldings
+
+  if (!data) {
     return <Page><Loader /></Page>
   }
 
-  const { summary, items = [] } = portfolioHoldings
+  const { summary, items = [] } = data
 
   return (
     <Page>
       <div style={styles.headerRow}>
-        <button style={styles.backBtn} onClick={() => navigate('/portfolio')}>
+        <button style={styles.backBtn} onClick={() => navigate('/portfolio', { state: { broker } })}>
           <FontAwesomeIcon icon={faChevronLeft} />
         </button>
         <h1 style={styles.title}>Holdings</h1>
@@ -40,7 +43,7 @@ export default function PortfolioHoldings() {
               key={item.symbol}
               item={item}
               changes={[
-                { label: '1-Day Change', value: item.dayChange, pct: item.dayChangePct },
+                ...(broker !== 'dhan' ? [{ label: '1-Day Change', value: item.dayChange, pct: item.dayChangePct }] : []),
                 { label: 'Net P&L', value: item.pnl, pct: item.pnlPct },
               ]}
               isLast={i === items.length - 1}

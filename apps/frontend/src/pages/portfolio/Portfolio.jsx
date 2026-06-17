@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faArrowTrendUp, faArrowTrendDown, faChevronRight } from '@fortawesome/free-solid-svg-icons'
 import Page from '../../components/Page'
@@ -10,30 +11,68 @@ import { useApp } from '../../context/AppContext'
 import SummaryCard from './components/SummaryCard'
 import { holdingsCardProps, positionsCardProps } from './utils'
 
+const BROKERS = [
+  { key: 'paytm', label: 'Paytm Money' },
+  { key: 'dhan', label: 'Dhan' },
+]
+
 export default function Portfolio() {
   const navigate = useNavigate()
-  const { portfolioHoldings, portfolioPositions, signalsSummary, setActiveTab, setPicksFilter } = useApp()
-
-  if (!portfolioHoldings || !portfolioPositions) {
-    return <Page><Loader /></Page>
-  }
+  const location = useLocation()
+  const [broker, setBroker] = useState(location.state?.broker ?? 'paytm')
+  const { portfolioHoldings, portfolioPositions, dhanHoldings, dhanPositions, signalsSummary, setActiveTab, setPicksFilter } = useApp()
 
   const goToPicks = (filter = 'all') => { setPicksFilter(filter); setActiveTab('recommended'); navigate('/') }
+
+  const brokerTabs = (
+    <div style={styles.tabs}>
+      {BROKERS.map((b) => (
+        <button
+          key={b.key}
+          style={{ ...styles.tab, ...(broker === b.key ? styles.tabActive : {}) }}
+          onClick={() => setBroker(b.key)}
+        >
+          {b.label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (broker === 'dhan') {
+    if (!dhanHoldings || !dhanPositions) {
+      return <Page><PageHeader title="Portfolio" />{brokerTabs}<Loader /></Page>
+    }
+    return (
+      <Page>
+        <PageHeader title="Portfolio" />
+        {brokerTabs}
+        <SectionHeader>Holdings</SectionHeader>
+        <SummaryCard {...holdingsCardProps(dhanHoldings.summary)} onClick={() => navigate('/portfolio/dhan/holdings')} />
+        <SectionHeader>Open Positions</SectionHeader>
+        <SummaryCard {...positionsCardProps(dhanPositions.summary)} onClick={() => navigate('/portfolio/dhan/positions')} />
+      </Page>
+    )
+  }
+
+  if (!portfolioHoldings || !portfolioPositions) {
+    return <Page><PageHeader title="Portfolio" />{brokerTabs}<Loader /></Page>
+  }
 
   return (
     <Page>
       <PageHeader title="Portfolio" />
+      {brokerTabs}
 
       <SectionHeader>Holdings</SectionHeader>
       <SummaryCard
         {...holdingsCardProps(portfolioHoldings.summary)}
-        onClick={() => navigate('/portfolio/holdings')}
+        onClick={() => navigate('/portfolio/paytm/holdings')}
       />
 
       <SectionHeader>Open Positions</SectionHeader>
       <SummaryCard
         {...positionsCardProps(portfolioPositions.summary)}
-        onClick={() => navigate('/portfolio/positions')}
+        onClick={() => navigate('/portfolio/paytm/positions')}
       />
 
       <SectionHeader>Recommendations</SectionHeader>
@@ -60,6 +99,28 @@ export default function Portfolio() {
 }
 
 const styles = {
+  tabs: {
+    display: 'flex',
+    gap: 0,
+    marginBottom: 'var(--space-md)',
+  },
+  tab: {
+    flex: 1,
+    padding: '10px',
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 500,
+    color: 'var(--color-text-muted)',
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  tabActive: {
+    color: 'var(--color-primary)',
+    fontWeight: 600,
+    boxShadow: 'inset 0 -2px 0 var(--color-primary)',
+  },
   recCard: {
     padding: 0,
   },

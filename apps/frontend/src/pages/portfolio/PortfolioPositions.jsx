@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChevronLeft, faChartLine } from '@fortawesome/free-solid-svg-icons'
 import Page from '../../components/Page'
@@ -12,18 +12,21 @@ import { positionsCardProps } from './utils'
 
 export default function PortfolioPositions() {
   const navigate = useNavigate()
-  const { portfolioPositions } = useApp()
+  const { broker = 'paytm' } = useParams()
+  const { portfolioPositions, dhanPositions } = useApp()
 
-  if (!portfolioPositions) {
+  const data = broker === 'dhan' ? dhanPositions : portfolioPositions
+
+  if (!data) {
     return <Page><Loader /></Page>
   }
 
-  const { summary, items = [] } = portfolioPositions
+  const { summary, items = [] } = data
 
   return (
     <Page>
       <div style={styles.headerRow}>
-        <button style={styles.backBtn} onClick={() => navigate('/portfolio')}>
+        <button style={styles.backBtn} onClick={() => navigate('/portfolio', { state: { broker } })}>
           <FontAwesomeIcon icon={faChevronLeft} />
         </button>
         <h1 style={styles.title}>Open Positions</h1>
