@@ -11,6 +11,8 @@ import { forwardLogAlpha } from "../forward-backward.ts";
 import { logSumExp } from "../utils/math.ts";
 import { computeLogReturns } from "../utils/returns.ts";
 import { buildExpandedA, buildExpandedEmissions, buildExpandedPi, expandedIndex } from "./expand.ts";
+import DhanhqClient from "../../../data/providers/dhanhq-client.ts";
+import PaytmMoneyClient from "../../../data/providers/paytm-money-client.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "..", "..", "data");
@@ -28,10 +30,13 @@ interface ModelParams {
 }
 
 class HsmmDailySignalScript extends BaseScript {
+  private dhan = new DhanhqClient();
+  private paytm = new PaytmMoneyClient();
   private processedCount = 0;
   private buyCount = 0;
   private sellCount = 0;
   private errorCount = 0;
+  private tradeLog: string[] = [];
 
   get scriptName(): string {
     return "hsmm-daily-signal";
@@ -43,6 +48,7 @@ class HsmmDailySignalScript extends BaseScript {
       "BUY": this.buyCount,
       "SELL": this.sellCount,
       "Errors": this.errorCount,
+      "Trades": this.tradeLog,
     };
   }
 
@@ -95,6 +101,94 @@ class HsmmDailySignalScript extends BaseScript {
     });
 
     this.log.info(`Done — processed=${this.processedCount}, BUY=${this.buyCount}, SELL=${this.sellCount}, errors=${this.errorCount}`);
+
+    const autoTradeEnabled = await this.firebase.getConfig("dhanAutoTrade");
+    if (autoTradeEnabled) {
+      await this.runAutoTrade(buySymbols, sellSymbols, recommended);
+    } else {
+      this.log.info("Auto-trade disabled — skipping");
+    }
+  }
+
+  private async runAutoTrade(buySymbols: string[], sellSymbols: string[], recommended: StockConfig[]): Promise<void> {
+    const creds = await this.firebase.getValue("dhanhq/credentials") as { clientId: string; accessToken: string } | null;
+    if (!creds?.clientId || !creds?.accessToken) {
+      this.log.error("Auto-trade: dhanhq/credentials missing");
+      return;
+    }
+    const { clientId, accessToken } = creds;
+    const stockMap = new Map(recommended.map((s) => [s.symbol, s]));
+
+    // ── Sell phase ────────────────────────────────────────────────────────────
+    const holdings = await this.dhan.fetchHoldings(accessToken, clientId);
+    const holdingsBySymbol = new Map(holdings.map((h) => [h.tradingSymbol, h]));
+
+    for (const symbol of sellSymbols) {
+      const holding = holdingsBySymbol.get(symbol);
+      if (!holding || holding.totalQty <= 0) {
+        this.log.info(`Auto-trade SELL skip ${symbol} — not in Dhan holdings`);
+        continue;
+      }
+      const stock = stockMap.get(symbol);
+      if (!stock?.securityId) continue;
+      try {
+        const result = await this.dhan.placeOrder(accessToken, clientId, {
+          securityId: String(stock.securityId),
+          transactionType: "SELL",
+          quantity: holding.totalQty,
+        });
+        const entry = `SELL ${symbol} qty=${holding.totalQty} orderId=${result.orderId} status=${result.orderStatus}`;
+        this.tradeLog.push(entry);
+        this.log.info(`Auto-trade ${entry}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log.error(`Auto-trade SELL ${symbol} failed: ${msg}`);
+      }
+    }
+
+    // ── Buy phase ─────────────────────────────────────────────────────────────
+    const funds = await this.dhan.fetchFunds(accessToken, clientId);
+    let balance = funds?.availabelBalance ?? 0;
+    this.log.info(`Auto-trade buy budget: ₹${balance.toFixed(2)}`);
+
+    const buyCandidates = buySymbols
+      .map((symbol) => {
+        const stock = stockMap.get(symbol);
+        const strategyReturn = (stock?.recommendationData?.[STRATEGY_KEY]?.strategyTotalReturn as number) ?? 0;
+        return { symbol, stock, strategyReturn };
+      })
+      .filter((c) => c.stock && Number(c.stock.securityId) > 0)
+      .sort((a, b) => b.strategyReturn - a.strategyReturn);
+
+    const paytmToken = await this.firebase.getAccessToken();
+    const secIds = buyCandidates.map((c) => Number(c.stock!.securityId));
+    const livePrices = await this.paytm.fetchLivePrices(secIds, "NSE", paytmToken);
+
+    for (const { symbol, stock } of buyCandidates) {
+      const ltp = livePrices.get(Number(stock!.securityId)) ?? 0;
+      if (ltp <= 0) {
+        this.log.info(`Auto-trade BUY skip ${symbol} — no LTP`);
+        continue;
+      }
+      if (balance < ltp) {
+        this.log.info(`Auto-trade BUY skip ${symbol} — insufficient balance (₹${balance.toFixed(2)} < ₹${ltp})`);
+        continue;
+      }
+      try {
+        const result = await this.dhan.placeOrder(accessToken, clientId, {
+          securityId: String(stock!.securityId),
+          transactionType: "BUY",
+          quantity: 1,
+        });
+        balance -= ltp;
+        const entry = `BUY ${symbol} qty=1 ltp=${ltp} orderId=${result.orderId} status=${result.orderStatus} remaining=₹${balance.toFixed(2)}`;
+        this.tradeLog.push(entry);
+        this.log.info(`Auto-trade ${entry}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log.error(`Auto-trade BUY ${symbol} failed: ${msg}`);
+      }
+    }
   }
 
   /**

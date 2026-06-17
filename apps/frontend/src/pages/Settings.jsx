@@ -32,6 +32,7 @@ export default function Settings() {
   const [signalSource, setSignalSource] = useState(getSignalSource)
   const [notifyOnRestart, setNotifyOnRestart] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(false)
+  const [dhanAutoTrade, setDhanAutoTrade] = useState(false)
 
   useEffect(() => {
     return onValue(ref(db, 'config/notifyOnRestart'), (snap) => {
@@ -42,6 +43,12 @@ export default function Settings() {
   useEffect(() => {
     return onValue(ref(db, 'config/pushNotificationsEnabled'), (snap) => {
       setPushEnabled(!!snap.val())
+    })
+  }, [])
+
+  useEffect(() => {
+    return onValue(ref(db, 'config/dhanAutoTrade'), (snap) => {
+      setDhanAutoTrade(!!snap.val())
     })
   }, [])
 
@@ -115,6 +122,18 @@ export default function Settings() {
           title="Push notifications"
           subtitle="Get notified when your Paytm Money login expires"
           right={<InlineToggle enabled={pushEnabled} onToggle={handlePushToggle} />}
+          isLast
+        />
+      </CardList>
+
+      <SectionHeader>Trading</SectionHeader>
+      <CardList>
+        <ListItem
+          title="Dhan Auto Trade"
+          subtitle="Auto buy/sell on Dhan based on daily signals at 10 AM IST"
+          right={<InlineToggle enabled={dhanAutoTrade} onToggle={() => {
+            set(ref(db, 'config/dhanAutoTrade'), !dhanAutoTrade || null)
+          }} />}
           isLast
         />
       </CardList>

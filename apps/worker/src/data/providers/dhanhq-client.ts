@@ -1,4 +1,5 @@
 import { DhanHolding, DhanPosition } from "../../types/market-data/dhanhq-portfolio.ts";
+import fetch from "node-fetch";
 
 const DHAN_API_BASE = "https://api.dhan.co/v2";
 
@@ -29,5 +30,35 @@ export default class DhanhqClient {
     if (!res.ok) return [];
     const data = await res.json() as unknown;
     return Array.isArray(data) ? data as DhanPosition[] : [];
+  }
+
+  async placeOrder(
+    accessToken: string,
+    clientId: string,
+    order: { securityId: string; transactionType: "BUY" | "SELL"; quantity: number },
+  ): Promise<{ orderId: string; orderStatus: string }> {
+    const res = await fetch(`${DHAN_API_BASE}/orders`, {
+      method: "POST",
+      headers: this.headers(accessToken, clientId),
+      body: JSON.stringify({
+        dhanClientId: clientId,
+        transactionType: order.transactionType,
+        exchangeSegment: "NSE_EQ",
+        productType: "CNC",
+        orderType: "MARKET",
+        validity: "DAY",
+        securityId: order.securityId,
+        quantity: order.quantity,
+        disclosedQuantity: 0,
+        price: 0,
+        triggerPrice: 0,
+        afterMarketOrder: false,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Dhan order failed ${res.status}: ${body}`);
+    }
+    return res.json() as Promise<{ orderId: string; orderStatus: string }>;
   }
 }
