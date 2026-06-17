@@ -62,6 +62,15 @@ export interface PaytmPosition {
   [key: string]: unknown;
 }
 
+// ─── Funds summary — written to Firebase ─────────────────────────────────
+
+export interface FundsSummary {
+  availableBalance: number;
+  utilisedAmount: number;
+  openingBalance: number;
+  updatedAt: string;
+}
+
 // ─── Normalized shapes written to Firebase ──────────────────────────────
 
 export interface PortfolioHoldingItem {

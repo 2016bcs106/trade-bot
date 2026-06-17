@@ -6,7 +6,7 @@ import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payloa
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
 import { PushSubscriptionData } from "../types/push-subscription.ts";
-import { PortfolioHoldings, PortfolioPositions } from "../types/market-data/portfolio.ts";
+import { PortfolioHoldings, PortfolioPositions, FundsSummary } from "../types/market-data/portfolio.ts";
 import { SignalsSummary } from "../types/signals-summary.ts";
 
 const app = initializeApp({
@@ -143,6 +143,14 @@ export default class FirebaseClient {
 
   async setPortfolioPositions(data: PortfolioPositions): Promise<void> {
     await this._setValue("portfolio/positions", data);
+  }
+
+  async setFundsSummary(data: FundsSummary): Promise<void> {
+    await this._setValue("portfolio/funds", data);
+  }
+
+  async setDhanhqFundsSummary(data: FundsSummary): Promise<void> {
+    await this._setValue("dhanhq/portfolio/funds", data);
   }
 
   async setDhanhqPortfolioHoldings(data: PortfolioHoldings): Promise<void> {

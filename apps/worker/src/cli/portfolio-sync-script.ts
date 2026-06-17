@@ -33,10 +33,11 @@ class PortfolioSyncScript extends BaseScript {
   protected async run(): Promise<void> {
     const accessToken = await this.firebase.getAccessToken();
 
-    const [holdingsRes, holdingsValueRes, positionsRes] = await Promise.all([
+    const [holdingsRes, holdingsValueRes, positionsRes, fundsRaw] = await Promise.all([
       this.client.fetchHoldings(accessToken),
       this.client.fetchHoldingsValue(accessToken),
       this.client.fetchPositions(accessToken),
+      this.client.fetchFunds(accessToken),
     ]);
 
     const holdings = holdingsRes.data?.results ?? [];
@@ -66,9 +67,17 @@ class PortfolioSyncScript extends BaseScript {
     this.holdingsCount = normalizedHoldings.items.length;
     this.positionsCount = normalizedPositions.items.length;
 
+    const funds = fundsRaw ? {
+      availableBalance: fundsRaw.trade_balance,
+      utilisedAmount: fundsRaw.utilised_amount,
+      openingBalance: fundsRaw.opening_balance,
+      updatedAt: nowISO(),
+    } : null;
+
     await Promise.all([
       this.firebase.setPortfolioHoldings(normalizedHoldings),
       this.firebase.setPortfolioPositions(normalizedPositions),
+      ...(funds ? [this.firebase.setFundsSummary(funds)] : []),
     ]);
 
     this.log.info(`Synced ${this.holdingsCount} holdings, ${this.positionsCount} open positions`);

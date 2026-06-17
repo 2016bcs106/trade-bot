@@ -18,6 +18,12 @@ export default class DhanhqClient {
     return Array.isArray(data) ? data as DhanHolding[] : [];
   }
 
+  async fetchFunds(accessToken: string, clientId: string): Promise<{ availabelBalance: number; utilizedAmount: number; sodLimit: number } | null> {
+    const res = await fetch(`${DHAN_API_BASE}/fundlimit`, { headers: this.headers(accessToken, clientId) });
+    if (!res.ok) return null;
+    return res.json() as Promise<{ availabelBalance: number; utilizedAmount: number; sodLimit: number }>;
+  }
+
   async fetchPositions(accessToken: string, clientId: string): Promise<DhanPosition[]> {
     const res = await fetch(`${DHAN_API_BASE}/positions`, { headers: this.headers(accessToken, clientId) });
     if (!res.ok) return [];

@@ -9,6 +9,7 @@ import Loader from '../../components/Loader'
 import Card from '../../components/Card'
 import { useApp } from '../../context/AppContext'
 import SummaryCard from './components/SummaryCard'
+import FundsCard from './components/FundsCard'
 import { holdingsCardProps, positionsCardProps } from './utils'
 
 const BROKERS = [
@@ -20,7 +21,7 @@ export default function Portfolio() {
   const navigate = useNavigate()
   const location = useLocation()
   const [broker, setBroker] = useState(location.state?.broker ?? 'paytm')
-  const { portfolioHoldings, portfolioPositions, dhanHoldings, dhanPositions, signalsSummary, setActiveTab, setPicksFilter } = useApp()
+  const { portfolioHoldings, portfolioPositions, portfolioFunds, dhanHoldings, dhanPositions, dhanFunds, signalsSummary, setActiveTab, setPicksFilter } = useApp()
 
   const goToPicks = (filter = 'all') => { setPicksFilter(filter); setActiveTab('recommended'); navigate('/') }
 
@@ -67,6 +68,7 @@ export default function Portfolio() {
       <Page>
         <PageHeader title="Portfolio" />
         {brokerTabs}
+        <FundsCard funds={dhanFunds} />
         <SectionHeader>Holdings</SectionHeader>
         <SummaryCard {...holdingsCardProps(dhanHoldings.summary)} onClick={() => navigate('/portfolio/dhan/holdings')} />
         <SectionHeader>Open Positions</SectionHeader>
@@ -85,6 +87,7 @@ export default function Portfolio() {
     <Page>
       <PageHeader title="Portfolio" />
       {brokerTabs}
+      <FundsCard funds={portfolioFunds} />
 
       <SectionHeader>Holdings</SectionHeader>
       <SummaryCard

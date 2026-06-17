@@ -4,7 +4,7 @@ import { nowISO } from "../utils/time.ts";
 import DhanhqClient from "../data/providers/dhanhq-client.ts";
 import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { DhanHolding, DhanPosition } from "../types/market-data/dhanhq-portfolio.ts";
-import { PortfolioHoldings, PortfolioPositions } from "../types/market-data/portfolio.ts";
+import { PortfolioHoldings, PortfolioPositions, FundsSummary } from "../types/market-data/portfolio.ts";
 
 class DhanhqPortfolioSyncScript extends BaseScript {
   private dhan = new DhanhqClient();
@@ -33,9 +33,10 @@ class DhanhqPortfolioSyncScript extends BaseScript {
     const { clientId, accessToken: dhanToken } = creds;
     const paytmToken = await this.firebase.getAccessToken();
 
-    const [holdings, positions] = await Promise.all([
+    const [holdings, positions, fundsRaw] = await Promise.all([
       this.dhan.fetchHoldings(dhanToken, clientId),
       this.dhan.fetchPositions(dhanToken, clientId),
+      this.dhan.fetchFunds(dhanToken, clientId),
     ]);
 
     // Collect all security IDs needing LTP from Paytm Money
@@ -56,9 +57,17 @@ class DhanhqPortfolioSyncScript extends BaseScript {
     this.holdingsCount = normalizedHoldings.items.length;
     this.positionsCount = normalizedPositions.items.length;
 
+    const funds: FundsSummary | null = fundsRaw ? {
+      availableBalance: fundsRaw.availabelBalance,
+      utilisedAmount: fundsRaw.utilizedAmount,
+      openingBalance: fundsRaw.sodLimit,
+      updatedAt: nowISO(),
+    } : null;
+
     await Promise.all([
       this.firebase.setDhanhqPortfolioHoldings(normalizedHoldings),
       this.firebase.setDhanhqPortfolioPositions(normalizedPositions),
+      ...(funds ? [this.firebase.setDhanhqFundsSummary(funds)] : []),
     ]);
 
     this.log.info(`Synced ${this.holdingsCount} holdings, ${this.positionsCount} open positions`);

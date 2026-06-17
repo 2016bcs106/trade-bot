@@ -77,6 +77,15 @@ export default class PaytmMoneyClient {
     return response.json() as Promise<PaytmHoldingsResponse>;
   }
 
+  async fetchFunds(accessToken: string): Promise<{ trade_balance: number; utilised_amount: number; opening_balance: number } | null> {
+    const res = await fetch("https://developer.paytmmoney.com/accounts/v1/funds/summary?config=true", {
+      headers: { "x-jwt-token": accessToken },
+    });
+    if (!res.ok) return null;
+    const json = await res.json() as { data?: { funds_summary?: { trade_balance: number; utilised_amount: number; opening_balance: number } } };
+    return json.data?.funds_summary ?? null;
+  }
+
   /** Fetch portfolio-level holdings value summary. */
   async fetchHoldingsValue(accessToken: string): Promise<PaytmHoldingsValueResponse> {
     const response = await fetch("https://developer.paytmmoney.com/holdings/v1/get-holdings-value", {
