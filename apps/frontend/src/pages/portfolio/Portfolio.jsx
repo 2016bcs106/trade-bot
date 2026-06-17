@@ -24,6 +24,27 @@ export default function Portfolio() {
 
   const goToPicks = (filter = 'all') => { setPicksFilter(filter); setActiveTab('recommended'); navigate('/') }
 
+  const recommendationsCard = (
+    <Card style={styles.recCard}>
+      <div style={styles.recRow} onClick={() => goToPicks('buy')}>
+        <div style={{ ...styles.recIcon, background: 'var(--color-success)' }}>
+          <FontAwesomeIcon icon={faArrowTrendUp} style={styles.recIconGlyph} />
+        </div>
+        <span style={styles.recLabel}>Ready to buy</span>
+        <span style={styles.recCount}>{signalsSummary?.buyCount ?? 0}</span>
+        <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
+      </div>
+      <div style={{ ...styles.recRow, ...styles.recRowBorder }} onClick={() => goToPicks('sell')}>
+        <div style={{ ...styles.recIcon, background: 'var(--color-danger)' }}>
+          <FontAwesomeIcon icon={faArrowTrendDown} style={styles.recIconGlyph} />
+        </div>
+        <span style={styles.recLabel}>Ready to sell</span>
+        <span style={styles.recCount}>{signalsSummary?.sellCount ?? 0}</span>
+        <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
+      </div>
+    </Card>
+  )
+
   const brokerTabs = (
     <div style={styles.tabs}>
       {BROKERS.map((b) => (
@@ -50,6 +71,8 @@ export default function Portfolio() {
         <SummaryCard {...holdingsCardProps(dhanHoldings.summary)} onClick={() => navigate('/portfolio/dhan/holdings')} />
         <SectionHeader>Open Positions</SectionHeader>
         <SummaryCard {...positionsCardProps(dhanPositions.summary)} onClick={() => navigate('/portfolio/dhan/positions')} />
+        <SectionHeader>Recommendations</SectionHeader>
+        {recommendationsCard}
       </Page>
     )
   }
@@ -76,24 +99,7 @@ export default function Portfolio() {
       />
 
       <SectionHeader>Recommendations</SectionHeader>
-      <Card style={styles.recCard}>
-        <div style={styles.recRow} onClick={() => goToPicks('buy')}>
-          <div style={{ ...styles.recIcon, background: 'var(--color-success)' }}>
-            <FontAwesomeIcon icon={faArrowTrendUp} style={styles.recIconGlyph} />
-          </div>
-          <span style={styles.recLabel}>Ready to buy</span>
-          <span style={styles.recCount}>{signalsSummary?.buyCount ?? 0}</span>
-          <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
-        </div>
-        <div style={{ ...styles.recRow, ...styles.recRowBorder }} onClick={() => goToPicks('sell')}>
-          <div style={{ ...styles.recIcon, background: 'var(--color-danger)' }}>
-            <FontAwesomeIcon icon={faArrowTrendDown} style={styles.recIconGlyph} />
-          </div>
-          <span style={styles.recLabel}>Ready to sell</span>
-          <span style={styles.recCount}>{signalsSummary?.sellCount ?? 0}</span>
-          <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
-        </div>
-      </Card>
+      {recommendationsCard}
     </Page>
   )
 }
