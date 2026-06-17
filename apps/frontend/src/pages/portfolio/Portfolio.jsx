@@ -25,14 +25,21 @@ export default function Portfolio() {
 
   const goToPicks = (filter = 'all') => { setPicksFilter(filter); setActiveTab('recommended'); navigate('/') }
 
-  const recommendationsCard = (
+  const dhanSymbols = new Set([
+    ...(dhanHoldings?.items ?? []).map((i) => i.symbol),
+    ...(dhanPositions?.items ?? []).map((i) => i.symbol),
+  ])
+  const dhanBuyCount = (signalsSummary?.buySymbols ?? []).filter((s) => !dhanSymbols.has(s)).length
+  const dhanSellCount = (signalsSummary?.sellSymbols ?? []).filter((s) => dhanSymbols.has(s)).length
+
+  const makeRecommendationsCard = (buyCount, sellCount) => (
     <Card style={styles.recCard}>
       <div style={styles.recRow} onClick={() => goToPicks('buy')}>
         <div style={{ ...styles.recIcon, background: 'var(--color-success)' }}>
           <FontAwesomeIcon icon={faArrowTrendUp} style={styles.recIconGlyph} />
         </div>
         <span style={styles.recLabel}>Ready to buy</span>
-        <span style={styles.recCount}>{signalsSummary?.buyCount ?? 0}</span>
+        <span style={styles.recCount}>{buyCount}</span>
         <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
       </div>
       <div style={{ ...styles.recRow, ...styles.recRowBorder }} onClick={() => goToPicks('sell')}>
@@ -40,7 +47,7 @@ export default function Portfolio() {
           <FontAwesomeIcon icon={faArrowTrendDown} style={styles.recIconGlyph} />
         </div>
         <span style={styles.recLabel}>Ready to sell</span>
-        <span style={styles.recCount}>{signalsSummary?.sellCount ?? 0}</span>
+        <span style={styles.recCount}>{sellCount}</span>
         <FontAwesomeIcon icon={faChevronRight} style={styles.recChevron} />
       </div>
     </Card>
@@ -74,7 +81,7 @@ export default function Portfolio() {
         <SectionHeader>Open Positions</SectionHeader>
         <SummaryCard {...positionsCardProps(dhanPositions.summary)} onClick={() => navigate('/portfolio/dhan/positions')} />
         <SectionHeader>Recommendations</SectionHeader>
-        {recommendationsCard}
+        {makeRecommendationsCard(dhanBuyCount, dhanSellCount)}
       </Page>
     )
   }
@@ -102,7 +109,7 @@ export default function Portfolio() {
       />
 
       <SectionHeader>Recommendations</SectionHeader>
-      {recommendationsCard}
+      {makeRecommendationsCard(signalsSummary?.buyCount ?? 0, signalsSummary?.sellCount ?? 0)}
     </Page>
   )
 }
