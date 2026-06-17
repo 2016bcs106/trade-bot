@@ -43,10 +43,13 @@ function StockRow({ stock, bordered, info, showEstimatedProfit, signal, onTap, o
           <div style={styles.picksLine}>
             <span style={styles.symbol}>{stock.symbol}</span>
             {signal
-              ? <span
-                  style={{ ...styles.signalLabel, color: signal.color }}
-                  onClick={(e) => { e.stopPropagation(); window.open(`https://www.paytmmoney.com/stocks/company/${stock.pmlId}`, '_blank') }}
-                >{signal.label}</span>
+              ? <a
+                  href={`https://www.paytmmoney.com/stocks/company/${stock.pmlId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...styles.signalLabel, color: signal.color, textDecoration: 'none' }}
+                  onClick={(e) => e.stopPropagation()}
+                >{signal.label}</a>
               : <span style={styles.noAction}>No signal</span>
             }
           </div>
