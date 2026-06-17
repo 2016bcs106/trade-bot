@@ -43,7 +43,10 @@ function StockRow({ stock, bordered, info, showEstimatedProfit, signal, onTap, o
           <div style={styles.picksLine}>
             <span style={styles.symbol}>{stock.symbol}</span>
             {signal
-              ? <span style={{ ...styles.signalLabel, color: signal.color }}>{signal.label}</span>
+              ? <span
+                  style={{ ...styles.signalLabel, color: signal.color }}
+                  onClick={(e) => { e.stopPropagation(); window.open(`https://www.paytmmoney.com/stocks/company/${stock.pmlId}`, '_blank') }}
+                >{signal.label}</span>
               : <span style={styles.noAction}>No signal</span>
             }
           </div>
@@ -414,9 +417,12 @@ const styles = {
     gap: 'var(--space-sm)',
   },
   signalLabel: {
-    fontSize: 'var(--font-footnote)',
+    fontSize: 'var(--font-caption)',
     fontWeight: 600,
     whiteSpace: 'nowrap',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    border: '1.5px solid currentColor',
   },
   noAction: {
     fontSize: 'var(--font-footnote)',

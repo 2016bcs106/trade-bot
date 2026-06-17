@@ -76,6 +76,7 @@ export default class StockRegistry {
         scripType: "EQUITY",
         scripId: this.getScripId(stock),
         isin: stock.isin,
+        pmlId: stock.pmlId,
         industryName: stock.industryName,
         mcap: stock.mcap,
         addedAt: stock.addedAt,
