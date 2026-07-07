@@ -35,7 +35,13 @@ export default class DhanhqClient {
   async placeOrder(
     accessToken: string,
     clientId: string,
-    order: { securityId: string; transactionType: "BUY" | "SELL"; quantity: number },
+    order: {
+      securityId: string;
+      transactionType: "BUY" | "SELL";
+      quantity: number;
+      afterMarketOrder?: boolean;
+      amoTime?: "PRE_OPEN" | "OPEN" | "OPEN_30" | "OPEN_60";
+    },
   ): Promise<{ orderId: string; orderStatus: string }> {
     const res = await fetch(`${DHAN_API_BASE}/orders`, {
       method: "POST",
@@ -52,7 +58,8 @@ export default class DhanhqClient {
         disclosedQuantity: 0,
         price: 0,
         triggerPrice: 0,
-        afterMarketOrder: false,
+        afterMarketOrder: order.afterMarketOrder ?? false,
+        ...(order.afterMarketOrder ? { amoTime: order.amoTime ?? "PRE_OPEN" } : {}),
       }),
     });
     if (!res.ok) {

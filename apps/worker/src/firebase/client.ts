@@ -135,6 +135,18 @@ export default class FirebaseClient {
     await this._setValue("signals_summary/latest", data);
   }
 
+  async getSignalsSummary(): Promise<SignalsSummary | null> {
+    return (await this._getValue("signals_summary/latest")) as SignalsSummary | null;
+  }
+
+  async setDhanSignalsSummary(data: SignalsSummary): Promise<void> {
+    await this._setValue("dhanhq/signals_summary/latest", data);
+  }
+
+  async getDhanSignalsSummary(): Promise<SignalsSummary | null> {
+    return (await this._getValue("dhanhq/signals_summary/latest")) as SignalsSummary | null;
+  }
+
   // ─── Portfolio ─────────────────────────────────────────────────────
 
   async setPortfolioHoldings(data: PortfolioHoldings): Promise<void> {
@@ -163,6 +175,11 @@ export default class FirebaseClient {
 
   async getPortfolioHoldingSymbols(): Promise<Set<string>> {
     const data = await this._getValue("portfolio/holdings/items") as { symbol: string }[] | null;
+    return new Set((data || []).map((item) => item.symbol));
+  }
+
+  async getDhanPortfolioHoldingSymbols(): Promise<Set<string>> {
+    const data = await this._getValue("dhanhq/portfolio/holdings/items") as { symbol: string }[] | null;
     return new Set((data || []).map((item) => item.symbol));
   }
 
