@@ -18,6 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = resolve(__dirname, "..", "..", "..", "..", "..", "..", "data");
 
 const STRATEGY_KEY = "HSMM_REGIME_FLIP";
+const MIN_CONFIDENCE = 0.6;
 const N = 3;
 const D = 20;
 const uniformPi = Array(N).fill(1 / N);
@@ -73,6 +74,12 @@ class HsmmDailySignalScript extends BaseScript {
       try {
         const result = this.computeSignal(stock);
         if (!result) continue;
+
+        if (result.confidence <= MIN_CONFIDENCE) {
+          this.log.info(`${stock.symbol}: skipped — confidence ${(result.confidence * 100).toFixed(1)}% <= ${MIN_CONFIDENCE * 100}%`);
+          this.processedCount++;
+          continue;
+        }
 
         if (result.signal === "SELL" && !heldSymbols.has(stock.symbol)) {
           this.log.info(`${stock.symbol}: SELL skipped — not held in portfolio`);
