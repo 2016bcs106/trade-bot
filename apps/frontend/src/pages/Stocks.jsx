@@ -98,10 +98,12 @@ const SORT_OPTIONS = [
 
 export default function Stocks() {
   const navigate = useNavigate()
-  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, picksFilter, setPicksFilter, toggleFavorite, signalsSummary } = useApp()
+  const { status, stocks, getPriceInfo, selectStock, sortBy, setSortBy, sortAsc, setSortAsc, activeTab, setActiveTab, picksFilter, setPicksFilter, picksBroker, setPicksBroker, toggleFavorite, signalsSummary, dhanSignalsSummary } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [detailSymbol, setDetailSymbol] = useState(null)
   const [sortSheetOpen, setSortSheetOpen] = useState(false)
+
+  const activeSummary = picksBroker === 'dhan' ? dhanSignalsSummary : signalsSummary
 
   const getLivePriceInfo = (symbol) => {
     const stock = stocks.find((s) => s.symbol === symbol)
@@ -118,8 +120,8 @@ export default function Stocks() {
     })
     .filter((s) => {
       if (activeTab !== 'recommended' || picksFilter === 'all') return true
-      const isBuy = signalsSummary?.buySymbols?.includes(s.symbol)
-      const isSell = signalsSummary?.sellSymbols?.includes(s.symbol)
+      const isBuy = activeSummary?.buySymbols?.includes(s.symbol)
+      const isSell = activeSummary?.sellSymbols?.includes(s.symbol)
       if (picksFilter === 'buy') return isBuy
       if (picksFilter === 'sell') return isSell
       if (picksFilter === 'none') return !isBuy && !isSell
@@ -201,6 +203,23 @@ export default function Stocks() {
       {activeTab === 'recommended' && (
         <div style={styles.filterRow}>
           {[
+            { key: 'paytm', label: 'Paytm Money' },
+            { key: 'dhan', label: 'Dhan' },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              style={{ ...styles.filterPill, ...(picksBroker === key ? styles.filterPillActive : {}) }}
+              onClick={() => setPicksBroker(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'recommended' && (
+        <div style={styles.filterRow}>
+          {[
             { key: 'all', label: 'All' },
             { key: 'buy', label: 'BUY' },
             { key: 'sell', label: 'SELL' },
@@ -240,7 +259,7 @@ export default function Stocks() {
               bordered={i < stockList.length - 1}
               info={getLivePriceInfo(stock.symbol)}
               showEstimatedProfit={activeTab === 'recommended'}
-              signal={activeTab === 'recommended' ? getSignalBadge(stock, signalsSummary) : null}
+              signal={activeTab === 'recommended' ? getSignalBadge(stock, activeSummary) : null}
               onTap={(symbol) => navigate(`/live/${symbol}`)}
               onLongPress={(symbol) => setDetailSymbol(symbol)}
               onToggleFavorite={toggleFavorite}

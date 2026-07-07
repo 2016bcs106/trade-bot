@@ -21,16 +21,9 @@ export default function Portfolio() {
   const navigate = useNavigate()
   const location = useLocation()
   const [broker, setBroker] = useState(location.state?.broker ?? 'paytm')
-  const { portfolioHoldings, portfolioPositions, portfolioFunds, dhanHoldings, dhanPositions, dhanFunds, signalsSummary, setActiveTab, setPicksFilter } = useApp()
+  const { portfolioHoldings, portfolioPositions, portfolioFunds, dhanHoldings, dhanPositions, dhanFunds, signalsSummary, dhanSignalsSummary, setActiveTab, setPicksFilter, setPicksBroker } = useApp()
 
-  const goToPicks = (filter = 'all') => { setPicksFilter(filter); setActiveTab('recommended'); navigate('/') }
-
-  const dhanSymbols = new Set([
-    ...(dhanHoldings?.items ?? []).map((i) => i.symbol),
-    ...(dhanPositions?.items ?? []).map((i) => i.symbol),
-  ])
-  const dhanBuyCount = (signalsSummary?.buySymbols ?? []).filter((s) => !dhanSymbols.has(s)).length
-  const dhanSellCount = (signalsSummary?.sellSymbols ?? []).filter((s) => dhanSymbols.has(s)).length
+  const goToPicks = (filter = 'all') => { setPicksFilter(filter); setPicksBroker(broker); setActiveTab('recommended'); navigate('/') }
 
   const makeRecommendationsCard = (buyCount, sellCount) => (
     <Card style={styles.recCard}>
@@ -81,7 +74,7 @@ export default function Portfolio() {
         <SectionHeader>Open Positions</SectionHeader>
         <SummaryCard {...positionsCardProps(dhanPositions.summary)} onClick={() => navigate('/portfolio/dhan/positions')} />
         <SectionHeader>Recommendations</SectionHeader>
-        {makeRecommendationsCard(dhanBuyCount, dhanSellCount)}
+        {makeRecommendationsCard(dhanSignalsSummary?.buyCount ?? 0, dhanSignalsSummary?.sellCount ?? 0)}
       </Page>
     )
   }
