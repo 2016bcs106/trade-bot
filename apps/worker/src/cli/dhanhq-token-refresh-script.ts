@@ -6,6 +6,7 @@ const STALE_THRESHOLD_MS = 23 * 60 * 60 * 1000;
 const DHAN_API_BASE = "https://api.dhan.co/v2";
 
 class DhanhqTokenRefreshScript extends BaseScript {
+  private force = process.argv.includes("--force");
   private lastRefreshedAt: string | null = null;
   private status: "fresh" | "refreshed" | "error" = "fresh";
 
@@ -14,7 +15,7 @@ class DhanhqTokenRefreshScript extends BaseScript {
   }
 
   protected getMetadata(): Record<string, unknown> {
-    return { lastRefreshedAt: this.lastRefreshedAt, status: this.status };
+    return { "Force": this.force, lastRefreshedAt: this.lastRefreshedAt, status: this.status };
   }
 
   protected async run(): Promise<void> {
@@ -31,14 +32,14 @@ class DhanhqTokenRefreshScript extends BaseScript {
     const updatedAt = creds.updatedAt ? new Date(creds.updatedAt).getTime() : 0;
     const ageMs = Date.now() - updatedAt;
 
-    if (ageMs < STALE_THRESHOLD_MS) {
+    if (!this.force && ageMs < STALE_THRESHOLD_MS) {
       const ageHrs = (ageMs / 3_600_000).toFixed(1);
       this.log.info(`Token is fresh (${ageHrs}h old) — no refresh needed`);
       this.status = "fresh";
       return;
     }
 
-    this.log.info("Token is stale — refreshing via Dhan API...");
+    this.log.info(this.force ? "Force refresh requested — refreshing via Dhan API..." : "Token is stale — refreshing via Dhan API...");
 
     const res = await fetch(`${DHAN_API_BASE}/RenewToken`, {
       method: "GET",

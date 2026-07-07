@@ -40,6 +40,11 @@
     "command": "src/cli/dhanhq-token-refresh-script.ts"
   },
   {
+    "name": "dhanhq-token-refresh-force",
+    "schedule": "29 18 * * *",
+    "command": "src/cli/dhanhq-token-refresh-script.ts --force"
+  },
+  {
     "name": "dhanhq-portfolio-sync",
     "schedule": "*/1 3-10 * * 1-5",
     "command": "src/cli/dhanhq-portfolio-sync-script.ts"
