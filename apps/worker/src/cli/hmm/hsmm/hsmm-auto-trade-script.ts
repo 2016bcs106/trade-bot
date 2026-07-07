@@ -45,7 +45,7 @@ class HsmmAutoTradeScript extends BaseScript {
     const holdings = await this.dhan.fetchHoldings(accessToken, clientId);
     const holdingsBySymbol = new Map(holdings.map((h) => [h.tradingSymbol, h]));
 
-    for (const symbol of summary.sellSymbols) {
+    for (const symbol of summary.sellSymbols ?? []) {
       const holding = holdingsBySymbol.get(symbol);
       if (!holding || holding.totalQty <= 0) {
         this.log.info(`Auto-trade SELL skip ${symbol} — not in Dhan holdings`);
@@ -75,7 +75,7 @@ class HsmmAutoTradeScript extends BaseScript {
     let balance = funds?.availabelBalance ?? 0;
     this.log.info(`Auto-trade buy budget: ₹${balance.toFixed(2)}`);
 
-    const buyCandidates = summary.buySymbols
+    const buyCandidates = (summary.buySymbols ?? [])
       .map((symbol) => {
         const stock = stockMap.get(symbol);
         const strategyReturn = (stock?.recommendationData?.[STRATEGY_KEY]?.strategyTotalReturn as number) ?? 0;
