@@ -134,7 +134,6 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     const newlyReleased = released.filter((a) => !existingRecent[a.seq_id]);
 
-    const recentRecords: Record<string, RecentQuarterlyResultRecord> = {};
     for (const a of newlyReleased) {
       // Each company's processing is isolated in its own try/catch: an unexpected failure here
       // (e.g. a transient filesystem error during OCR) must never crash the whole batch, and
@@ -143,6 +142,12 @@ class NseQuarterlyResultsScript extends BaseScript {
       // failed company through with everything except financials/financialsSource). Skipping
       // this company for the run is safe and self-healing: it's simply retried as newlyReleased
       // again next run, since it never gets added to existingRecent.
+      //
+      // Each record is written to Firebase as soon as it's built, rather than accumulated and
+      // written in one batch at the end -- a run processing 100+ companies (each needing several
+      // BSE calls with retries) can run long enough to overlap the next scheduled run, and a
+      // batch-at-the-end write meant anything already processed was lost if the run was
+      // interrupted before reaching that point.
       try {
         let description = a.attchmntText;
         let pdfUrl = a.attchmntFile;
@@ -193,7 +198,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           }
         }
 
-        recentRecords[a.seq_id] = {
+        const record: RecentQuarterlyResultRecord = {
           symbol: a.symbol,
           companyName: a.sm_name,
           announcedAt,
@@ -203,6 +208,8 @@ class NseQuarterlyResultsScript extends BaseScript {
           financials,
           financialsSource,
         };
+        await this.firebase.setValue(`quarterlyResults/recent/${a.seq_id}`, record);
+        this.recentAdded++;
       } catch (err) {
         this.log.warn(`Skipping ${a.symbol} this run after an unexpected error`, err);
       }
@@ -220,7 +227,6 @@ class NseQuarterlyResultsScript extends BaseScript {
       (seqId) => existingRecent[seqId].financialsSource !== "bse" && existingRecent[seqId].announcedAtMs >= recentCutoffMs
     );
 
-    const financialsUpgrades: Record<string, RecentQuarterlyResultRecord> = {};
     for (const seqId of retryableSeqIds) {
       try {
         const existing = existingRecent[seqId];
@@ -233,15 +239,17 @@ class NseQuarterlyResultsScript extends BaseScript {
         const structuredFinancials = await this.bse.fetchStructuredFinancials(scripCode);
         if (!structuredFinancials) continue;
 
-        financialsUpgrades[seqId] = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
+        const upgraded: RecentQuarterlyResultRecord = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
+        await this.firebase.setValue(`quarterlyResults/recent/${seqId}`, upgraded);
         this.upgraded++;
       } catch (err) {
         this.log.warn(`Skipping retry for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
       }
     }
 
-    // ─── Diff against what's already in Firebase — never overwrite an existing "recent"
-    // record (it may have had financials filled in since), only add ones that are new.
+    // ─── Diff "upcoming" against what's already in Firebase — cheap, no external calls per
+    // item (already fetched above), so safe to batch in one write, unlike "recent" above which
+    // is now written incrementally as each result completes.
 
     const updates: Record<string, unknown> = {};
 
@@ -263,20 +271,8 @@ class NseQuarterlyResultsScript extends BaseScript {
       }
     }
 
-    for (const [seqId, record] of Object.entries(recentRecords)) {
-      if (!existingRecent[seqId]) {
-        updates[`quarterlyResults/recent/${seqId}`] = record;
-        this.recentAdded++;
-      }
-    }
-    for (const [seqId, record] of Object.entries(financialsUpgrades)) {
-      updates[`quarterlyResults/recent/${seqId}`] = record;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      updates["quarterlyResults/lastUpdated"] = nowISO();
-      await this.firebase.updateValues(updates);
-    }
+    updates["quarterlyResults/lastUpdated"] = nowISO();
+    await this.firebase.updateValues(updates);
 
     this.log.info(
       `Firebase delta — upcoming: +${this.upcomingAdded} ~${this.upcomingUpdated} -${this.upcomingRemoved}, recent: +${this.recentAdded} ` +
