@@ -305,8 +305,10 @@ class NseQuarterlyResultsScript extends BaseScript {
     // Records missing releasePrice (e.g. added before this feature, or a prior run's snapshot
     // fetch failed) get a full snapshot. Records that already have one just get latestPrice
     // refreshed, skipping the (identical, wasted) releasePrice lookup -- it's a historical close
-    // and never changes once set. Only refreshes latestPrice once per day (latestPriceDate !=
-    // today) since intraday movement isn't tracked here, this is a daily-close comparison.
+    // and never changes once set. Normally only refreshes latestPrice once per day (latestPriceDate
+    // != today) since intraday movement isn't tracked here, but records still missing pmlId (e.g.
+    // saved before that field existed) skip that gate so pmlId backfills immediately rather than
+    // waiting for tomorrow's refresh.
     const today = now().format("YYYY-MM-DD");
     const priceableSeqIds = Object.keys(existingRecent).filter((seqId) => existingRecent[seqId].announcedAtMs >= recentCutoffMs);
     this.log.info(`Price backfill/refresh candidates: ${priceableSeqIds.length}`);
@@ -329,14 +331,20 @@ class NseQuarterlyResultsScript extends BaseScript {
           } else {
             this.log.error(`Still no release price for ${existing.symbol} after backfill attempt`);
           }
-        } else if (existing.latestPriceDate !== today) {
+        } else if (existing.pmlId == null || existing.latestPriceDate !== today) {
           await this.delay(PAYTM_REQUEST_DELAY_MS);
           this.log.info(`Refreshing latest price for ${existing.symbol} (stale since ${existing.latestPriceDate})`);
           const latest = await priceTracker.fetchLatestOnly(existing.symbol);
           if (latest !== null) {
             const priceChangePct = existing.releasePrice !== 0 ? Math.round(((latest.latestPrice - existing.releasePrice) / existing.releasePrice) * 10000) / 100 : null;
             await this.firebase.updateValues({
-              [`quarterlyResults/recent/${seqId}`]: { ...existing, latestPrice: latest.latestPrice, latestPriceDate: latest.latestPriceDate, priceChangePct },
+              [`quarterlyResults/recent/${seqId}`]: {
+                ...existing,
+                pmlId: latest.pmlId,
+                latestPrice: latest.latestPrice,
+                latestPriceDate: latest.latestPriceDate,
+                priceChangePct,
+              },
             });
             this.pricesRefreshed++;
           }

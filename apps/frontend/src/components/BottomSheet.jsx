@@ -1,4 +1,27 @@
-export default function BottomSheet({ title, isOpen, onClose, children }) {
+import { useEffect } from 'react'
+
+export default function BottomSheet({ title, isOpen, onClose, children, footer }) {
+  useEffect(() => {
+    if (!isOpen) return
+
+    const scrollY = window.scrollY
+    const body = document.body
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.overflow = 'hidden'
+
+    return () => {
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.overflow = ''
+      window.scrollTo(0, scrollY)
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
@@ -12,6 +35,7 @@ export default function BottomSheet({ title, isOpen, onClose, children }) {
         <div style={styles.body}>
           {children}
         </div>
+        {footer && <div style={styles.footer}>{footer}</div>}
       </div>
     </>
   )
@@ -23,6 +47,7 @@ const styles = {
     inset: 0,
     background: 'rgba(0,0,0,0.32)',
     zIndex: 2000,
+    touchAction: 'none',
   },
   sheet: {
     position: 'fixed',
@@ -61,5 +86,11 @@ const styles = {
     overflowY: 'auto',
     flex: 1,
     WebkitOverflowScrolling: 'touch',
+  },
+  footer: {
+    flexShrink: 0,
+    padding: 'var(--space-md) var(--space-lg)',
+    borderTop: '1px solid var(--color-border)',
+    background: 'var(--color-card)',
   },
 }

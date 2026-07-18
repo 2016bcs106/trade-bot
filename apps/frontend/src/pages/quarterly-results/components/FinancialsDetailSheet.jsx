@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCopy, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { faCopy, faCircleCheck } from '@fortawesome/free-regular-svg-icons'
+import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons'
 import BottomSheet from '../../../components/BottomSheet'
 import DetailRow from '../../../components/DetailRow'
 import SectionHeader from '../../../components/SectionHeader'
 import { VerdictBadge, FINANCIALS_SOURCE_LABELS, PriceChangeBadge } from '../QuarterlyResults'
+
+const ZERODHA_CHART_ID = '6401'
 
 const COPIED_FEEDBACK_MS = 1500
 
@@ -79,6 +82,8 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
   if (!record) return null
 
   const f = record.financials || {}
+  const zerodhaUrl = `https://kite.zerodha.com/markets/chart/web/ciq/NSE/${record.symbol}/${ZERODHA_CHART_ID}`
+  const paytmUrl = record.pmlId ? `https://www.paytmmoney.com/stocks/company/${record.pmlId}` : null
   const sectorMetricEntries = Object.entries(f.sectorMetrics || {}).filter(([, value]) => value !== null && value !== undefined)
   const has = (value) => value !== null && value !== undefined
   const hasComparison = (comparison) => has(comparison?.pctChange)
@@ -101,15 +106,33 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
     <BottomSheet
       title={
         <span style={styles.titleRow}>
-          <FontAwesomeIcon icon={copied ? faCheck : faCopy} onClick={handleCopy} style={styles.copyIcon} />
-          {record.symbol}
+          <span style={styles.companyName}>{record.companyName}</span>
+          <span style={styles.titleRight}>
+            <span style={styles.symbol}>{record.symbol}</span>
+            <FontAwesomeIcon icon={copied ? faCircleCheck : faCopy} onClick={handleCopy} style={styles.copyIcon} />
+          </span>
         </span>
       }
       isOpen={isOpen}
       onClose={onClose}
+      footer={
+        <>
+          <div style={styles.brokerLinks}>
+            <a href={zerodhaUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
+              Zerodha
+              <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={styles.brokerLinkIcon} />
+            </a>
+            {paytmUrl && (
+              <a href={paytmUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
+                Paytm
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={styles.brokerLinkIcon} />
+              </a>
+            )}
+          </div>
+          <button style={styles.closeButton} onClick={onClose}>Close</button>
+        </>
+      }
     >
-      <div style={styles.subtitle}>{record.companyName}</div>
-
       <SectionHeader style={styles.firstSection}>Overview</SectionHeader>
       <div style={styles.body}>
         <DetailRow label="Verdict" value={<VerdictBadge verdict={f.overallVerdict} />} />
@@ -117,14 +140,14 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
         <DetailRow label="Audit Opinion" value={AUDIT_OPINION_LABELS[f.auditOpinion]} />
         <DetailRow label="Data Source" value={financialsSourceValue(record.financialsSource)} />
         {has(record.releasePrice) && (
-          <DetailRow label="Price at Release" value={`₹${record.releasePrice.toFixed(2)} (${moment(record.releasePriceDate).format('DD MMM YYYY')})`} />
+          <DetailRow label="Price at Release" value={`₹${record.releasePrice.toFixed(2)}`} />
         )}
         {has(record.latestPrice) && (
           <DetailRow
             label="Latest Price"
             value={
               <span style={styles.priceRow}>
-                {`₹${record.latestPrice.toFixed(2)} (${moment(record.latestPriceDate).format('DD MMM YYYY')})`}
+                {`₹${record.latestPrice.toFixed(2)}`}
                 <PriceChangeBadge pct={record.priceChangePct} />
               </span>
             }
@@ -239,13 +262,34 @@ const styles = {
   titleRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     gap: 'var(--space-sm)',
     width: '100%',
     textAlign: 'left',
   },
+  titleRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-sm)',
+    flexShrink: 0,
+  },
+  symbol: {
+    fontSize: 'var(--font-title3)',
+    fontWeight: 700,
+    color: 'var(--color-text)',
+  },
+  companyName: {
+    fontSize: 'var(--font-body)',
+    fontWeight: 400,
+    color: 'var(--color-text)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+    marginRight: 'var(--space-md)',
+  },
   copyIcon: {
-    fontSize: '0.8rem',
+    fontSize: '0.85rem',
     color: 'var(--color-text-muted)',
     cursor: 'pointer',
   },
@@ -253,13 +297,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-sm)',
-  },
-  subtitle: {
-    padding: '0 var(--space-lg)',
-    marginBottom: 'var(--space-sm)',
-    fontSize: 'var(--font-footnote)',
-    color: 'var(--color-text-muted)',
-    textAlign: 'center',
   },
   firstSection: {
     marginTop: 0,
@@ -269,5 +306,38 @@ const styles = {
   },
   lastSection: {
     paddingBottom: 'var(--space-xl)',
+  },
+  brokerLinks: {
+    display: 'flex',
+    gap: 'var(--space-sm)',
+    marginBottom: 'var(--space-sm)',
+  },
+  brokerLink: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 'var(--space-xs)',
+    padding: '10px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--color-border)',
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 600,
+    color: 'var(--color-primary)',
+    textDecoration: 'none',
+  },
+  brokerLinkIcon: {
+    fontSize: '0.7rem',
+  },
+  closeButton: {
+    width: '100%',
+    padding: '12px',
+    borderRadius: 'var(--radius-sm)',
+    border: 'none',
+    background: 'var(--color-primary)',
+    color: '#fff',
+    fontSize: 'var(--font-body)',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
 }

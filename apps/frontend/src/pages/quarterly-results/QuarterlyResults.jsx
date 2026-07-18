@@ -37,7 +37,7 @@ export function PriceChangeBadge({ pct }) {
   if (pct === null || pct === undefined) return null
   const color = pct > 0 ? 'var(--color-success)' : pct < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'
   const sign = pct > 0 ? '+' : ''
-  return <Badge label={`${sign}${pct.toFixed(2)}%`} color={color} />
+  return <span style={{ ...styles.priceChangeText, color }}>{sign}{pct.toFixed(2)}%</span>
 }
 
 const DATE_FILTERS = [
@@ -145,7 +145,7 @@ export default function QuarterlyResults() {
                 right={
                   <div style={styles.rightStack}>
                     <VerdictBadge verdict={item.financials?.overallVerdict} />
-                    <span style={styles.dateText}>{moment(item.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY')}</span>
+                    <span style={styles.dateText}>{moment(item.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY, h:mm A')}</span>
                   </div>
                 }
                 isLast={i === filteredRecent.length - 1}
@@ -259,6 +259,10 @@ const styles = {
     alignItems: 'center',
     gap: 'var(--space-sm)',
   },
+  priceChangeText: {
+    fontSize: 'var(--font-footnote)',
+    fontWeight: 600,
+  },
   rightStack: {
     display: 'flex',
     flexDirection: 'column',
@@ -268,5 +272,6 @@ const styles = {
   dateText: {
     fontSize: 'var(--font-caption)',
     color: 'var(--color-text-muted)',
+    whiteSpace: 'nowrap',
   },
 }

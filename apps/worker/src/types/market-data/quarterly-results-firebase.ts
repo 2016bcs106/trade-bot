@@ -104,6 +104,11 @@ export interface RecentQuarterlyResultRecord {
    * typically transient; "bse" records are left alone. See nse-quarterly-results-script.ts. */
   financialsSource: "bse" | "ocr" | "none";
 
+  /** Paytm Money's internal stock ID, resolved as a side effect of fetching prices below (see
+   * price-tracker.ts) — used by the frontend to link out to Paytm Money's own stock page. Null
+   * if no price data was ever successfully fetched for this record. */
+  pmlId: string | null;
+
   /** Price at the exact minute results were announced (via Paytm Money minute OHLCV, using
    * announcedAt as the reference time) if that falls within market hours, otherwise the daily
    * close on the announcement date or the last trading day before it — see price-tracker.ts.

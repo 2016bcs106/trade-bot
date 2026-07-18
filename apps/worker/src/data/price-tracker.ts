@@ -11,6 +11,7 @@ const MARKET_OPEN = "09:15";
 const MARKET_CLOSE = "15:30";
 
 export interface PriceSnapshot {
+  pmlId: string | null;
   releasePrice: number | null;
   releasePriceDate: string | null;
   latestPrice: number | null;
@@ -19,6 +20,7 @@ export interface PriceSnapshot {
 }
 
 const EMPTY_SNAPSHOT: PriceSnapshot = {
+  pmlId: null,
   releasePrice: null,
   releasePriceDate: null,
   latestPrice: null,
@@ -65,6 +67,7 @@ export default class PriceTracker {
       log.info(`${symbol}: release ₹${release.price} (${release.date}) → latest ₹${latest.price} (${latest.date}), ${priceChangePct}%`);
 
       return {
+        pmlId,
         releasePrice: release.price,
         releasePriceDate: release.date,
         latestPrice: latest.price,
@@ -77,8 +80,8 @@ export default class PriceTracker {
     }
   }
 
-  /** Just the latest close + date, for refreshing latestPrice on records whose releasePrice is already set and permanent. */
-  async fetchLatestOnly(symbol: string): Promise<{ latestPrice: number; latestPriceDate: string } | null> {
+  /** Just the latest close + date (plus the resolved pmlId, for backfilling records saved before that field existed), for refreshing latestPrice on records whose releasePrice is already set and permanent. */
+  async fetchLatestOnly(symbol: string): Promise<{ pmlId: string; latestPrice: number; latestPriceDate: string } | null> {
     try {
       const pmlId = await this.resolvePmlId(symbol);
       if (!pmlId) {
@@ -91,7 +94,7 @@ export default class PriceTracker {
         log.error(`No latest close found for ${symbol} — skipping latest-price refresh`);
         return null;
       }
-      return { latestPrice: latest.price, latestPriceDate: latest.date };
+      return { pmlId, latestPrice: latest.price, latestPriceDate: latest.date };
     } catch (err) {
       log.error(`fetchLatestOnly failed for ${symbol}`, err);
       return null;
