@@ -53,5 +53,10 @@
     "name": "dhanhq-portfolio-sync",
     "schedule": "*/1 3-10 * * 1-5",
     "command": "src/cli/dhanhq-portfolio-sync-script.ts"
+  },
+  {
+    "name": "nse-quarterly-results",
+    "schedule": "*/5 * * * *",
+    "command": "src/cli/nse-quarterly-results-script.ts"
   }
 ]
