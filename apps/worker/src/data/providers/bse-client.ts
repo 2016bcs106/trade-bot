@@ -52,9 +52,11 @@ export default class BseClient {
 
   /**
    * Resolve an NSE trading symbol to its BSE scrip code. Returns null if not found (e.g. not
-   * dual-listed), not confidently disambiguated, or on any request failure. BSE's servers
-   * occasionally send a malformed header that Node's strict HTTP parser rejects outright; since
-   * this is purely an enrichment step with an OCR/vision fallback, any failure here must
+   * dual-listed), not confidently disambiguated, or on any request failure. Every BSE request in
+   * this class sets `insecureHTTPParser: true` -- BSE's servers occasionally send a response with
+   * whitespace after a header value, which is technically non-compliant and gets rejected outright
+   * by Node's default strict HTTP parser ("Parse Error: Unexpected whitespace after header value").
+   * Since this is purely an enrichment step with an OCR/vision fallback, any failure here must
    * degrade gracefully rather than take down the whole run.
    *
    * A short symbol search matches multiple unrelated listings — e.g. "PNB" also matches PNB
@@ -64,16 +66,18 @@ export default class BseClient {
    * symbol resolves the great majority of cases outright; `companyName` (NSE's own company name)
    * is the tie-breaker on the rare case that still leaves more than one candidate.
    *
-   * BSE's servers intermittently send a malformed header or a transient non-OK response under
-   * sustained load -- retryWithBackoff retries those up to MAX_RETRIES times before this gives
-   * up and returns null; a genuinely-empty search result (no candidates) is not retried, since
-   * retrying wouldn't change that.
+   * BSE's servers also intermittently send a transient non-OK response under sustained load --
+   * retryWithBackoff retries both that and the malformed-header case (in case insecureHTTPParser
+   * alone doesn't fully avoid it) up to MAX_RETRIES times before this gives up and returns null;
+   * a genuinely-empty search result (no candidates) is not retried, since retrying wouldn't change
+   * that.
    */
   async findScripCode(symbol: string, companyName: string): Promise<string | null> {
     try {
       const entries = await retryWithBackoff(async () => {
         const response = await fetch(`${this.apiBaseUrl}/GetQuoteAllSearchDatabeta/w?searchString=${encodeURIComponent(symbol)}`, {
           headers: { "User-Agent": this.userAgent, "Referer": `${this.siteBaseUrl}/` },
+          insecureHTTPParser: true,
         });
         if (!response.ok) throw new Error(`BSE scrip search failed: ${response.status}`);
         return (await response.json()) as BseScripSearchEntry[];
@@ -114,6 +118,7 @@ export default class BseClient {
       const html = await retryWithBackoff(async () => {
         const response = await fetch(`${this.apiBaseUrl}/SlbReportNewbeta/w?scripcode=${scripCode}`, {
           headers: { "User-Agent": this.userAgent, "Referer": `${this.siteBaseUrl}/` },
+          insecureHTTPParser: true,
         });
         if (!response.ok) throw new Error(`BSE structured financials request failed: ${response.status}`);
         const data = (await response.json()) as { QtlyinCr?: string };
@@ -191,7 +196,7 @@ export default class BseClient {
       const data = await retryWithBackoff(async () => {
         const response = await fetch(
           `${this.apiBaseUrl}/AnnSubCategoryGetData/w?strCat=-1&strPrevDate=${from}&strScrip=${scripCode}&strSearch=P&strToDate=${to}&strType=C`,
-          { headers: { "User-Agent": this.userAgent, "Referer": `${this.siteBaseUrl}/corporates/ann.html` } }
+          { headers: { "User-Agent": this.userAgent, "Referer": `${this.siteBaseUrl}/corporates/ann.html` }, insecureHTTPParser: true }
         );
         if (!response.ok) throw new Error(`BSE announcements request failed: ${response.status}`);
         return (await response.json()) as { Table?: BseAnnouncementRow[] };

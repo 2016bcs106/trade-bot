@@ -315,7 +315,11 @@ class NseQuarterlyResultsScript extends BaseScript {
       try {
         const existing = existingRecent[seqId];
 
-        if (existing.releasePrice === null) {
+        // Firebase omits fields that were never written rather than storing them as null, so
+        // records that predate this feature have releasePrice as `undefined`, not `null` -- a
+        // strict `=== null` check missed those and fell through to the refresh branch below,
+        // which then divided by `undefined` (NaN), which Firebase's RTDB rejects outright.
+        if (existing.releasePrice == null) {
           await this.delay(PAYTM_REQUEST_DELAY_MS);
           this.log.info(`Backfilling release price for ${existing.symbol} (announced ${existing.announcedAt})`);
           const snapshot = await priceTracker.fetchSnapshot(existing.symbol, parseDate(existing.announcedAt, ANNOUNCEMENT_DATE_FORMAT));
