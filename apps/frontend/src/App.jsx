@@ -12,6 +12,7 @@ import LiveTicks from './pages/LiveTicks'
 import Portfolio from './pages/portfolio/Portfolio'
 import PortfolioHoldings from './pages/portfolio/PortfolioHoldings'
 import PortfolioPositions from './pages/portfolio/PortfolioPositions'
+import QuarterlyResults from './pages/quarterly-results/QuarterlyResults'
 
 const isDryRun = new URLSearchParams(window.location.search).has('dryRun')
 
@@ -32,6 +33,7 @@ function App() {
             <Route path="/portfolio" element={<AuthGuard><Portfolio /></AuthGuard>} />
             <Route path="/portfolio/:broker/holdings" element={<AuthGuard><PortfolioHoldings /></AuthGuard>} />
             <Route path="/portfolio/:broker/positions" element={<AuthGuard><PortfolioPositions /></AuthGuard>} />
+            <Route path="/results" element={<AuthGuard><QuarterlyResults /></AuthGuard>} />
             <Route path="/monitor" element={<AuthGuard><Monitor /></AuthGuard>} />
             <Route path="/settings" element={<AuthGuard><Settings /></AuthGuard>} />
           </Routes>

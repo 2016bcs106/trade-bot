@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faListUl, faHeartPulse, faGear, faWallet } from '@fortawesome/free-solid-svg-icons'
+import { faListUl, faHeartPulse, faGear, faWallet, faFileLines } from '@fortawesome/free-solid-svg-icons'
 import moment from 'moment'
 import { useApp } from '../context/AppContext'
 
 const navItems = [
   { path: '/portfolio', label: 'Portfolio', icon: faWallet },
   { path: '/', label: 'Stocks', icon: faListUl },
+  { path: '/results', label: 'Results', icon: faFileLines },
   { path: '/monitor', label: 'Monitor', icon: faHeartPulse },
   { path: '/settings', label: 'Settings', icon: faGear },
 ]

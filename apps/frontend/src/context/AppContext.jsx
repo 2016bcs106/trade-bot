@@ -32,6 +32,7 @@ export function AppProvider({ children }) {
   const [dhanFunds, setDhanFunds] = useState(null)
   const [signalsSummary, setSignalsSummary] = useState(null)
   const [dhanSignalsSummary, setDhanSignalsSummary] = useState(null)
+  const [quarterlyResults, setQuarterlyResults] = useState(null)
   const wsRef = useRef(null)
 
   useEffect(() => {
@@ -128,10 +129,12 @@ export function AppProvider({ children }) {
     const unsubDhanFunds = onValue(ref(db, 'dhanhq/portfolio/funds'), (snap) => setDhanFunds(snap.val()))
     const unsubSignalsSummary = onValue(ref(db, 'signals_summary/latest'), (snap) => setSignalsSummary(snap.val()))
     const unsubDhanSignalsSummary = onValue(ref(db, 'dhanhq/signals_summary/latest'), (snap) => setDhanSignalsSummary(snap.val()))
+    const unsubQuarterlyResults = onValue(ref(db, 'quarterlyResults'), (snap) => setQuarterlyResults(snap.val()))
     return () => {
       unsubScripts(); unsubQueue(); unsubFailed()
       unsubPortfolioHoldings(); unsubPortfolioPositions(); unsubPortfolioFunds()
       unsubDhanHoldings(); unsubDhanPositions(); unsubDhanFunds(); unsubSignalsSummary(); unsubDhanSignalsSummary()
+      unsubQuarterlyResults()
     }
   }, [])
 
@@ -208,7 +211,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, activeTab, setActiveTab, picksFilter, setPicksFilter, picksBroker, setPicksBroker, scripts, requestQueue, failedRequests, portfolioHoldings, portfolioPositions, portfolioFunds, dhanHoldings, dhanPositions, dhanFunds, signalsSummary, dhanSignalsSummary, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
+    <AppContext.Provider value={{ status, stocks, selectedInstrumentKey, rowsByMinute, dataByInstrument, marketStatus, sortBy, setSortBy: persistedSetSortBy, sortAsc, setSortAsc: persistedSetSortAsc, activeTab, setActiveTab, picksFilter, setPicksFilter, picksBroker, setPicksBroker, scripts, requestQueue, failedRequests, portfolioHoldings, portfolioPositions, portfolioFunds, dhanHoldings, dhanPositions, dhanFunds, signalsSummary, dhanSignalsSummary, quarterlyResults, selectStock, subscribeStock, unsubscribeStock, toggleFavorite, toggleNotify, getLatestPrice, getPriceInfo }}>
       {children}
     </AppContext.Provider>
   )

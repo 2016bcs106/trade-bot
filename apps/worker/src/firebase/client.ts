@@ -1,7 +1,7 @@
 import "../config/env.ts";
 import { nowISO } from "../utils/time.ts";
 import { initializeApp, deleteApp } from "firebase/app";
-import { getDatabase, ref, get, set, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
+import { getDatabase, ref, get, set, update, push, remove, onValue, Database, Unsubscribe } from "firebase/database";
 import { SaveAccessTokensPayload } from "../types/auth/save-access-tokens-payload.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { StockConfig } from "../types/stocks/index.ts";
@@ -222,6 +222,11 @@ export default class FirebaseClient {
 
   async setValue(path: string, value: unknown): Promise<void> {
     await set(ref(this.db, path), value);
+  }
+
+  /** Atomic multi-path write — keys are full paths from the root. Use for delta updates instead of overwriting a whole subtree with setValue. */
+  async updateValues(updates: Record<string, unknown>): Promise<void> {
+    await update(ref(this.db), updates);
   }
 
   private async _setValue(path: string, value: unknown): Promise<void> {
