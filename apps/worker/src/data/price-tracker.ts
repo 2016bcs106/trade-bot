@@ -2,6 +2,9 @@ import { Moment } from "moment";
 import PaytmMoneyClient from "./providers/paytm-money-client.ts";
 import { now } from "../utils/time.ts";
 import { StockConfig } from "../types/stocks/stock-config.ts";
+import createLogger from "../utils/logger.ts";
+
+const log = createLogger("price-tracker");
 
 const LOOKBACK_DAYS = 10;
 const MARKET_OPEN = "09:15";
@@ -40,15 +43,26 @@ export default class PriceTracker {
   async fetchSnapshot(symbol: string, announcedAt: Moment): Promise<PriceSnapshot> {
     try {
       const pmlId = await this.resolvePmlId(symbol);
-      if (!pmlId) return EMPTY_SNAPSHOT;
+      if (!pmlId) {
+        log.error(`No pmlId resolved for ${symbol} — skipping price snapshot`);
+        return EMPTY_SNAPSHOT;
+      }
 
       const release = await this.resolveReleasePrice(pmlId, announcedAt);
-      if (!release) return EMPTY_SNAPSHOT;
+      if (!release) {
+        log.error(`No release price found for ${symbol} (announced ${announcedAt.format()}) — no candles on or before that date`);
+        return EMPTY_SNAPSHOT;
+      }
 
       const latest = await this.resolveLatestClose(pmlId);
-      if (!latest) return EMPTY_SNAPSHOT;
+      if (!latest) {
+        log.error(`No latest close found for ${symbol} despite a release price — skipping price snapshot`);
+        return EMPTY_SNAPSHOT;
+      }
 
       const priceChangePct = release.price !== 0 ? Math.round(((latest.price - release.price) / release.price) * 10000) / 100 : null;
+
+      log.info(`${symbol}: release ₹${release.price} (${release.date}) → latest ₹${latest.price} (${latest.date}), ${priceChangePct}%`);
 
       return {
         releasePrice: release.price,
@@ -57,7 +71,8 @@ export default class PriceTracker {
         latestPriceDate: latest.date,
         priceChangePct,
       };
-    } catch {
+    } catch (err) {
+      log.error(`fetchSnapshot failed for ${symbol}`, err);
       return EMPTY_SNAPSHOT;
     }
   }
@@ -66,11 +81,19 @@ export default class PriceTracker {
   async fetchLatestOnly(symbol: string): Promise<{ latestPrice: number; latestPriceDate: string } | null> {
     try {
       const pmlId = await this.resolvePmlId(symbol);
-      if (!pmlId) return null;
+      if (!pmlId) {
+        log.error(`No pmlId resolved for ${symbol} — skipping latest-price refresh`);
+        return null;
+      }
 
       const latest = await this.resolveLatestClose(pmlId);
-      return latest ? { latestPrice: latest.price, latestPriceDate: latest.date } : null;
-    } catch {
+      if (!latest) {
+        log.error(`No latest close found for ${symbol} — skipping latest-price refresh`);
+        return null;
+      }
+      return { latestPrice: latest.price, latestPriceDate: latest.date };
+    } catch (err) {
+      log.error(`fetchLatestOnly failed for ${symbol}`, err);
       return null;
     }
   }
@@ -92,18 +115,24 @@ export default class PriceTracker {
       const onOrBefore = minuteCandles.filter((c) => c.timestamp <= cutoff);
       if (onOrBefore.length > 0) {
         const candle = onOrBefore[onOrBefore.length - 1];
+        log.info(`pmlId=${pmlId}: minute-level release price ₹${candle.close} at ${candle.timestamp} (announced ${cutoff})`);
         return { price: candle.close, date: candle.timestamp.split(" ")[0] };
       }
+      log.info(`pmlId=${pmlId}: announced within market hours (${cutoff}) but no minute candles for ${day} — falling back to daily close`);
     }
 
     const fromDate = announcedAt.clone().subtract(LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
     const toDate = now().format("YYYY-MM-DD");
     const dailyCandles = await this.paytm.fetchOHLCV(pmlId, fromDate, toDate, "DAY");
-    if (dailyCandles.length === 0) return null;
+    if (dailyCandles.length === 0) {
+      log.error(`pmlId=${pmlId}: no daily candles in [${fromDate}, ${toDate}] — cannot resolve a release price`);
+      return null;
+    }
 
     const announceDay = announcedAt.format("YYYY-MM-DD");
     const onOrBefore = dailyCandles.filter((c) => c.timestamp.split(" ")[0] <= announceDay);
     const releaseCandle = onOrBefore.length > 0 ? onOrBefore[onOrBefore.length - 1] : dailyCandles[0];
+    log.info(`pmlId=${pmlId}: daily-close release price ₹${releaseCandle.close} on ${releaseCandle.timestamp.split(" ")[0]} (announced ${announceDay})`);
     return { price: releaseCandle.close, date: releaseCandle.timestamp.split(" ")[0] };
   }
 
@@ -111,7 +140,10 @@ export default class PriceTracker {
     const fromDate = now().subtract(LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
     const toDate = now().format("YYYY-MM-DD");
     const candles = await this.paytm.fetchOHLCV(pmlId, fromDate, toDate, "DAY");
-    if (candles.length === 0) return null;
+    if (candles.length === 0) {
+      log.error(`pmlId=${pmlId}: no daily candles in [${fromDate}, ${toDate}] — cannot resolve a latest close`);
+      return null;
+    }
 
     const latestCandle = candles[candles.length - 1];
     return { price: latestCandle.close, date: latestCandle.timestamp.split(" ")[0] };
@@ -127,8 +159,10 @@ export default class PriceTracker {
     if (this.knownPmlIds[symbol]) return this.knownPmlIds[symbol];
     try {
       const result = await this.paytm.searchStock(symbol);
+      if (!result?.id) log.error(`Paytm search returned no match for ${symbol}`);
       return result?.id ?? null;
-    } catch {
+    } catch (err) {
+      log.error(`Paytm search failed for ${symbol}`, err);
       return null;
     }
   }

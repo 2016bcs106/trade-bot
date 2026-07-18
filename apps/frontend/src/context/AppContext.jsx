@@ -136,12 +136,16 @@ export function AppProvider({ children }) {
     // last N days over the wire, instead of loading the whole history and filtering client-side.
     const recentCutoffMs = Date.now() - QUARTERLY_RESULTS_RECENT_DAYS * 24 * 60 * 60 * 1000
     const recentQuery = query(ref(db, 'quarterlyResults/recent'), orderByChild('announcedAtMs'), startAt(recentCutoffMs))
-    const unsubQuarterlyUpcoming = onValue(ref(db, 'quarterlyResults/upcoming'), (snap) => {
-      setQuarterlyResults((prev) => ({ ...prev, upcoming: snap.val() }))
-    })
-    const unsubQuarterlyRecent = onValue(recentQuery, (snap) => {
-      setQuarterlyResults((prev) => ({ ...prev, recent: snap.val() }))
-    })
+    const unsubQuarterlyUpcoming = onValue(
+      ref(db, 'quarterlyResults/upcoming'),
+      (snap) => setQuarterlyResults((prev) => ({ ...prev, upcoming: snap.val() })),
+      (err) => console.error('quarterlyResults/upcoming subscription failed', err)
+    )
+    const unsubQuarterlyRecent = onValue(
+      recentQuery,
+      (snap) => setQuarterlyResults((prev) => ({ ...prev, recent: snap.val() })),
+      (err) => console.error('quarterlyResults/recent subscription failed', err)
+    )
 
     return () => {
       unsubScripts(); unsubQueue(); unsubFailed()

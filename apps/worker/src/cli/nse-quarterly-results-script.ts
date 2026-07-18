@@ -82,7 +82,7 @@ class NseQuarterlyResultsScript extends BaseScript {
       const heartbeatAgeMs = nowMs() - moment(existing.lastHeartbeat).valueOf();
       return heartbeatAgeMs < STALE_LOCK_MS;
     } catch (err) {
-      createLogger(this.scriptName).warn("Failed to check for a running instance — proceeding anyway", err);
+      createLogger(this.scriptName).error("Failed to check for a running instance — proceeding anyway", err);
       return false;
     }
   }
@@ -153,12 +153,12 @@ class NseQuarterlyResultsScript extends BaseScript {
     for (const e of upcoming) {
       if (e.date !== currentDate) {
         currentDate = e.date;
-        this.log.debug(currentDate);
+        this.log.info(currentDate);
       }
-      this.log.debug(`  ${e.symbol.padEnd(15)} ${e.company}`);
+      this.log.info(`  ${e.symbol.padEnd(15)} ${e.company}`);
     }
     for (const a of released) {
-      this.log.debug(`${a.symbol} — ${a.sm_name} | ${a.an_dt} | ${a.attchmntText} | ${a.attchmntFile}`);
+      this.log.info(`${a.symbol} — ${a.sm_name} | ${a.an_dt} | ${a.attchmntText} | ${a.attchmntFile}`);
     }
 
     // ─── Push to Firebase ───
@@ -247,6 +247,7 @@ class NseQuarterlyResultsScript extends BaseScript {
         }
 
         await this.delay(PAYTM_REQUEST_DELAY_MS);
+        this.log.info(`Fetching price snapshot for ${a.symbol} (announced ${announcedAt})`);
         const priceSnapshot = await priceTracker.fetchSnapshot(a.symbol, parseDate(announcedAt, ANNOUNCEMENT_DATE_FORMAT));
         if (priceSnapshot.releasePrice !== null) this.priceSnapshotsFetched++;
 
@@ -264,7 +265,7 @@ class NseQuarterlyResultsScript extends BaseScript {
         await this.firebase.setValue(`quarterlyResults/recent/${a.seq_id}`, record);
         this.recentAdded++;
       } catch (err) {
-        this.log.warn(`Skipping ${a.symbol} this run after an unexpected error`, err);
+        this.log.error(`Skipping ${a.symbol} this run after an unexpected error`, err);
       }
     }
 
@@ -296,7 +297,7 @@ class NseQuarterlyResultsScript extends BaseScript {
         await this.firebase.setValue(`quarterlyResults/recent/${seqId}`, upgraded);
         this.upgraded++;
       } catch (err) {
-        this.log.warn(`Skipping retry for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
+        this.log.error(`Skipping retry for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
       }
     }
 
@@ -308,6 +309,7 @@ class NseQuarterlyResultsScript extends BaseScript {
     // today) since intraday movement isn't tracked here, this is a daily-close comparison.
     const today = now().format("YYYY-MM-DD");
     const priceableSeqIds = Object.keys(existingRecent).filter((seqId) => existingRecent[seqId].announcedAtMs >= recentCutoffMs);
+    this.log.info(`Price backfill/refresh candidates: ${priceableSeqIds.length}`);
 
     for (const seqId of priceableSeqIds) {
       try {
@@ -315,13 +317,17 @@ class NseQuarterlyResultsScript extends BaseScript {
 
         if (existing.releasePrice === null) {
           await this.delay(PAYTM_REQUEST_DELAY_MS);
+          this.log.info(`Backfilling release price for ${existing.symbol} (announced ${existing.announcedAt})`);
           const snapshot = await priceTracker.fetchSnapshot(existing.symbol, parseDate(existing.announcedAt, ANNOUNCEMENT_DATE_FORMAT));
           if (snapshot.releasePrice !== null) {
             await this.firebase.updateValues({ [`quarterlyResults/recent/${seqId}`]: { ...existing, ...snapshot } });
             this.priceSnapshotsFetched++;
+          } else {
+            this.log.error(`Still no release price for ${existing.symbol} after backfill attempt`);
           }
         } else if (existing.latestPriceDate !== today) {
           await this.delay(PAYTM_REQUEST_DELAY_MS);
+          this.log.info(`Refreshing latest price for ${existing.symbol} (stale since ${existing.latestPriceDate})`);
           const latest = await priceTracker.fetchLatestOnly(existing.symbol);
           if (latest !== null) {
             const priceChangePct = existing.releasePrice !== 0 ? Math.round(((latest.latestPrice - existing.releasePrice) / existing.releasePrice) * 10000) / 100 : null;
@@ -332,7 +338,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           }
         }
       } catch (err) {
-        this.log.warn(`Skipping price refresh for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
+        this.log.error(`Skipping price refresh for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
       }
     }
 
@@ -391,14 +397,14 @@ class NseQuarterlyResultsScript extends BaseScript {
       let pages = await locateResultPages(pdfPath);
       if (!pages) {
         const cappedCount = Math.min(await getPageCount(pdfPath), FULL_DOCUMENT_FALLBACK_MAX_PAGES);
-        this.log.debug(`No results pages located for ${pdfUrl}, falling back to first ${cappedCount} pages`);
+        this.log.info(`No results pages located for ${pdfUrl}, falling back to first ${cappedCount} pages`);
         pages = Array.from({ length: cappedCount }, (_, i) => i + 1);
       }
 
       const images = await renderPages(pdfPath, pages);
       return await extractFinancials(images);
     } catch (err) {
-      this.log.warn(`Financial extraction failed for ${pdfUrl}`, err);
+      this.log.error(`Financial extraction failed for ${pdfUrl}`, err);
       return emptyFinancials();
     } finally {
       if (workDir) await rm(workDir, { recursive: true, force: true });

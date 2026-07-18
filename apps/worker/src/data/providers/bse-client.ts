@@ -3,6 +3,9 @@ import moment from "moment";
 import { BseFinancialResultAnnouncement } from "../../types/market-data/bse-financial-result.ts";
 import { BseFinancialsColumn, BseQuarterlyFinancials } from "../../types/market-data/bse-structured-financials.ts";
 import retryWithBackoff from "../../utils/retry.ts";
+import createLogger from "../../utils/logger.ts";
+
+const log = createLogger("bse-client");
 
 const MAX_RETRIES = 5;
 
@@ -78,13 +81,20 @@ export default class BseClient {
 
       const equityCandidates = entries.filter((e) => e.Type === "in Equity T+1" && e.shortName.toUpperCase() === symbol.toUpperCase());
 
-      if (equityCandidates.length === 0) return null;
+      if (equityCandidates.length === 0) {
+        log.info(`No BSE equity match for ${symbol} (${entries.length} raw candidates)`);
+        return null;
+      }
       if (equityCandidates.length === 1) return equityCandidates[0].strSricpCode;
 
       const normalizedTarget = this.normalizeCompanyName(companyName);
       const exactMatch = equityCandidates.find((c) => this.normalizeCompanyName(c.scripName) === normalizedTarget);
+      if (!exactMatch) {
+        log.info(`${equityCandidates.length} BSE equity candidates for ${symbol}, none matched company name "${companyName}"`);
+      }
       return exactMatch ? exactMatch.strSricpCode : null;
-    } catch {
+    } catch (err) {
+      log.error(`findScripCode failed for ${symbol} after retries`, err);
       return null;
     }
   }
@@ -109,11 +119,17 @@ export default class BseClient {
         const data = (await response.json()) as { QtlyinCr?: string };
         return data.QtlyinCr;
       }, MAX_RETRIES);
-      if (!html) return null;
+      if (!html) {
+        log.info(`No structured financials HTML from BSE for scripCode=${scripCode}`);
+        return null;
+      }
 
       const headerMatch = html.match(/<thead>.*?<\/thead>/s);
       const labels = [...(headerMatch?.[0].matchAll(/<th class='tableheading'>([^<]*)<\/th>/g) ?? [])].map((m) => m[1]).filter((l) => l !== "(in Cr.)");
-      if (labels.length === 0) return null;
+      if (labels.length === 0) {
+        log.info(`No table headers parsed from BSE structured financials HTML for scripCode=${scripCode}`);
+        return null;
+      }
 
       const columns: BseFinancialsColumn[] = labels.map((label) => ({
         label,
@@ -140,8 +156,13 @@ export default class BseClient {
         });
       }
 
-      return columns.every((c) => c.revenue === null && c.netProfit === null) ? null : { columns };
-    } catch {
+      if (columns.every((c) => c.revenue === null && c.netProfit === null)) {
+        log.info(`Parsed BSE structured financials columns for scripCode=${scripCode} but all revenue/netProfit values were empty`);
+        return null;
+      }
+      return { columns };
+    } catch (err) {
+      log.error(`fetchStructuredFinancials failed for scripCode=${scripCode} after retries`, err);
       return null;
     }
   }
@@ -177,7 +198,10 @@ export default class BseClient {
       }, MAX_RETRIES);
 
       const resultRows = (data.Table ?? []).filter((r) => r.SUBCATNAME === "Financial Results");
-      if (resultRows.length === 0) return null;
+      if (resultRows.length === 0) {
+        log.info(`No "Financial Results" announcement from BSE for scripCode=${scripCode} in [${fromDate}, ${toDate}] (${data.Table?.length ?? 0} total rows)`);
+        return null;
+      }
 
       resultRows.sort((a, b) => moment(b.DT_TM).valueOf() - moment(a.DT_TM).valueOf());
       const best = resultRows[0];
@@ -187,7 +211,8 @@ export default class BseClient {
         announcedAt: moment(best.DT_TM).format("DD-MMM-YYYY HH:mm:ss"),
         pdfUrl: `${this.siteBaseUrl}/xml-data/corpfiling/AttachLive/${best.ATTACHMENTNAME}`,
       };
-    } catch {
+    } catch (err) {
+      log.error(`fetchFinancialResultsAnnouncement failed for scripCode=${scripCode} after retries`, err);
       return null;
     }
   }

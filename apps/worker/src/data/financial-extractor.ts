@@ -278,7 +278,7 @@ export default async function extractFinancials(pageImages: Buffer[]): Promise<Q
     }
 
     if (!rows.revenue && !rows.netProfit) {
-      log.warn("No recognizable financial rows found in OCR text");
+      log.error("No recognizable financial rows found in OCR text");
       return result;
     }
 
@@ -311,7 +311,7 @@ export default async function extractFinancials(pageImages: Buffer[]): Promise<Q
 
     return result;
   } catch (err) {
-    log.warn("OCR-based financial extraction failed", err);
+    log.error("OCR-based financial extraction failed", err);
     return result;
   } finally {
     await rm(workDir, { recursive: true, force: true });

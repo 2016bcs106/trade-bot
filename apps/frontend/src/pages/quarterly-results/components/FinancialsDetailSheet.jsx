@@ -92,7 +92,9 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
       await navigator.clipboard.writeText(record.symbol)
       setCopied(true)
       setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS)
-    } catch {}
+    } catch (err) {
+      console.error('Failed to copy symbol to clipboard', err)
+    }
   }
 
   return (

@@ -1,3 +1,7 @@
+import createLogger from "./logger.ts";
+
+const log = createLogger("retry");
+
 const BASE_DELAY_MS = 500;
 const MAX_DELAY_MS = 8000;
 
@@ -22,8 +26,11 @@ export default async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetri
       lastError = err;
       if (attempt === maxRetries) break;
       const cappedDelay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** attempt);
-      await delay(Math.random() * cappedDelay);
+      const jittered = Math.random() * cappedDelay;
+      log.info(`Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${Math.round(jittered)}ms`, err);
+      await delay(jittered);
     }
   }
+  log.error(`All ${maxRetries + 1} attempts failed`, lastError);
   throw lastError;
 }
