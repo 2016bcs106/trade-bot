@@ -10,6 +10,7 @@ import ListItem from '../../components/ListItem'
 import Badge from '../../components/Badge'
 import { CardList } from '../../components/Card'
 import { useApp } from '../../context/AppContext'
+import FinancialsDetailSheet from './components/FinancialsDetailSheet'
 
 const UPCOMING_DATE_FORMAT = 'DD-MMM-YYYY'
 const ANNOUNCED_DATE_FORMAT = 'DD-MMM-YYYY HH:mm:ss'
@@ -21,9 +22,15 @@ const VERDICT_BADGES = {
   negative: { label: 'Negative', color: 'var(--color-danger)' },
 }
 
-function VerdictBadge({ verdict }) {
+export function VerdictBadge({ verdict }) {
   const config = VERDICT_BADGES[verdict] || { label: 'Pending', color: 'var(--color-text-tertiary)' }
   return <Badge label={config.label} color={config.color} />
+}
+
+export const FINANCIALS_SOURCE_LABELS = {
+  bse: 'BSE',
+  ocr: 'OCR',
+  none: 'NONE',
 }
 
 const DATE_FILTERS = [
@@ -37,6 +44,7 @@ export default function QuarterlyResults() {
   const [tab, setTab] = useState('recent')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState('all')
+  const [selectedRecord, setSelectedRecord] = useState(null)
 
   if (!quarterlyResults) {
     return (
@@ -121,14 +129,22 @@ export default function QuarterlyResults() {
               <ListItem
                 key={item.seqId}
                 title={item.symbol}
-                subtitle={moment(item.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY')}
-                right={<VerdictBadge verdict={item.financials?.overallVerdict} />}
+                subtitle={FINANCIALS_SOURCE_LABELS[item.financialsSource || 'none']}
+                right={
+                  <div style={styles.rightStack}>
+                    <VerdictBadge verdict={item.financials?.overallVerdict} />
+                    <span style={styles.dateText}>{moment(item.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY')}</span>
+                  </div>
+                }
                 isLast={i === filteredRecent.length - 1}
+                onClick={() => setSelectedRecord(item)}
               />
             ))}
           </CardList>
         )
       )}
+
+      <FinancialsDetailSheet isOpen={!!selectedRecord} onClose={() => setSelectedRecord(null)} record={selectedRecord} />
 
       {tab === 'upcoming' && (
         filteredUpcoming.length === 0 ? (
@@ -225,5 +241,15 @@ const styles = {
   },
   list: {
     marginTop: 'var(--space-md)',
+  },
+  rightStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '4px',
+  },
+  dateText: {
+    fontSize: 'var(--font-caption)',
+    color: 'var(--color-text-muted)',
   },
 }

@@ -136,65 +136,76 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     const recentRecords: Record<string, RecentQuarterlyResultRecord> = {};
     for (const a of newlyReleased) {
-      let description = a.attchmntText;
-      let pdfUrl = a.attchmntFile;
-      let announcedAt = a.an_dt;
+      // Each company's processing is isolated in its own try/catch: an unexpected failure here
+      // (e.g. a transient filesystem error during OCR) must never crash the whole batch, and
+      // must never produce a partial record (fields present, financials silently missing --
+      // Firebase drops undefined keys on write rather than erroring, which previously let a
+      // failed company through with everything except financials/financialsSource). Skipping
+      // this company for the run is safe and self-healing: it's simply retried as newlyReleased
+      // again next run, since it never gets added to existingRecent.
+      try {
+        let description = a.attchmntText;
+        let pdfUrl = a.attchmntFile;
+        let announcedAt = a.an_dt;
 
-      await this.delay(BSE_REQUEST_DELAY_MS);
-      const scripCode = await this.bse.findScripCode(a.symbol, a.sm_name);
-      if (scripCode) {
         await this.delay(BSE_REQUEST_DELAY_MS);
-        const bseResult = await this.bse.fetchFinancialResultsAnnouncement(
-          scripCode,
-          now().subtract(RECENT_DAYS, "days").format(QUERY_DATE_FORMAT),
-          now().format(QUERY_DATE_FORMAT)
-        );
-        if (bseResult) {
-          description = bseResult.headline;
-          pdfUrl = bseResult.pdfUrl;
-          announcedAt = bseResult.announcedAt;
-          this.bseMatched++;
+        const scripCode = await this.bse.findScripCode(a.symbol, a.sm_name);
+        if (scripCode) {
+          await this.delay(BSE_REQUEST_DELAY_MS);
+          const bseResult = await this.bse.fetchFinancialResultsAnnouncement(
+            scripCode,
+            now().subtract(RECENT_DAYS, "days").format(QUERY_DATE_FORMAT),
+            now().format(QUERY_DATE_FORMAT)
+          );
+          if (bseResult) {
+            description = bseResult.headline;
+            pdfUrl = bseResult.pdfUrl;
+            announcedAt = bseResult.announcedAt;
+            this.bseMatched++;
+          } else {
+            this.bseFallback++;
+          }
         } else {
           this.bseFallback++;
         }
-      } else {
-        this.bseFallback++;
-      }
 
-      // BSE's own structured financials (see bse-client.ts fetchStructuredFinancials) are
-      // exact and instant when available -- no PDF download, no OCR, no row-format guessing.
-      // Only fall back to OCR/vision on the filed PDF when BSE has no scrip match or hasn't
-      // published structured data for this filing yet.
-      await this.delay(BSE_REQUEST_DELAY_MS);
-      const structuredFinancials = scripCode ? await this.bse.fetchStructuredFinancials(scripCode) : null;
+        // BSE's own structured financials (see bse-client.ts fetchStructuredFinancials) are
+        // exact and instant when available -- no PDF download, no OCR, no row-format guessing.
+        // Only fall back to OCR/vision on the filed PDF when BSE has no scrip match or hasn't
+        // published structured data for this filing yet.
+        await this.delay(BSE_REQUEST_DELAY_MS);
+        const structuredFinancials = scripCode ? await this.bse.fetchStructuredFinancials(scripCode) : null;
 
-      let financials: QuarterlyResultFinancials;
-      let financialsSource: RecentQuarterlyResultRecord["financialsSource"];
-      if (structuredFinancials) {
-        financials = mapBseFinancialsToResult(structuredFinancials);
-        financialsSource = "bse";
-        this.structuredMatched++;
-      } else {
-        financials = await this.extractFinancialsFromPdf(pdfUrl);
-        if (financials.overallVerdict !== null) {
-          financialsSource = "ocr";
-          this.extracted++;
+        let financials: QuarterlyResultFinancials;
+        let financialsSource: RecentQuarterlyResultRecord["financialsSource"];
+        if (structuredFinancials) {
+          financials = mapBseFinancialsToResult(structuredFinancials);
+          financialsSource = "bse";
+          this.structuredMatched++;
         } else {
-          financialsSource = "none";
-          this.extractionFailed++;
+          financials = await this.extractFinancialsFromPdf(pdfUrl);
+          if (financials.overallVerdict !== null) {
+            financialsSource = "ocr";
+            this.extracted++;
+          } else {
+            financialsSource = "none";
+            this.extractionFailed++;
+          }
         }
-      }
 
-      recentRecords[a.seq_id] = {
-        symbol: a.symbol,
-        companyName: a.sm_name,
-        announcedAt,
-        announcedAtMs: parseDate(announcedAt, ANNOUNCEMENT_DATE_FORMAT).valueOf(),
-        description,
-        pdfUrl,
-        financials,
-        financialsSource,
-      };
+        recentRecords[a.seq_id] = {
+          symbol: a.symbol,
+          companyName: a.sm_name,
+          announcedAt,
+          announcedAtMs: parseDate(announcedAt, ANNOUNCEMENT_DATE_FORMAT).valueOf(),
+          description,
+          pdfUrl,
+          financials,
+          financialsSource,
+        };
+      } catch (err) {
+        this.log.warn(`Skipping ${a.symbol} this run after an unexpected error`, err);
+      }
     }
 
     // ─── Retry BSE for existing records that fell back to OCR (or failed outright) ───
@@ -211,18 +222,22 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     const financialsUpgrades: Record<string, RecentQuarterlyResultRecord> = {};
     for (const seqId of retryableSeqIds) {
-      const existing = existingRecent[seqId];
+      try {
+        const existing = existingRecent[seqId];
 
-      await this.delay(BSE_REQUEST_DELAY_MS);
-      const scripCode = await this.bse.findScripCode(existing.symbol, existing.companyName);
-      if (!scripCode) continue;
+        await this.delay(BSE_REQUEST_DELAY_MS);
+        const scripCode = await this.bse.findScripCode(existing.symbol, existing.companyName);
+        if (!scripCode) continue;
 
-      await this.delay(BSE_REQUEST_DELAY_MS);
-      const structuredFinancials = await this.bse.fetchStructuredFinancials(scripCode);
-      if (!structuredFinancials) continue;
+        await this.delay(BSE_REQUEST_DELAY_MS);
+        const structuredFinancials = await this.bse.fetchStructuredFinancials(scripCode);
+        if (!structuredFinancials) continue;
 
-      financialsUpgrades[seqId] = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
-      this.upgraded++;
+        financialsUpgrades[seqId] = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
+        this.upgraded++;
+      } catch (err) {
+        this.log.warn(`Skipping retry for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
+      }
     }
 
     // ─── Diff against what's already in Firebase — never overwrite an existing "recent"
@@ -278,8 +293,12 @@ class NseQuarterlyResultsScript extends BaseScript {
    * emptyFinancials() rather than throwing, so one bad PDF doesn't stop the sync run.
    */
   private async extractFinancialsFromPdf(pdfUrl: string): Promise<QuarterlyResultFinancials> {
-    const workDir = await mkdtemp(join(tmpdir(), "quarterly-pdf-"));
+    // mkdtemp itself must be inside the try -- if it throws (e.g. a transient filesystem issue),
+    // that previously escaped uncaught since it ran before the try block started, propagating up
+    // through the caller instead of degrading to emptyFinancials() like every other failure here.
+    let workDir: string | null = null;
     try {
+      workDir = await mkdtemp(join(tmpdir(), "quarterly-pdf-"));
       const pdfPath = join(workDir, "filing.pdf");
       await downloadFile(pdfUrl, pdfPath);
 
@@ -296,7 +315,7 @@ class NseQuarterlyResultsScript extends BaseScript {
       this.log.warn(`Financial extraction failed for ${pdfUrl}`, err);
       return emptyFinancials();
     } finally {
-      await rm(workDir, { recursive: true, force: true });
+      if (workDir) await rm(workDir, { recursive: true, force: true });
     }
   }
 
