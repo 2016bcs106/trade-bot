@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import moment from 'moment'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faCopy, faCheck } from '@fortawesome/free-solid-svg-icons'
 import BottomSheet from '../../../components/BottomSheet'
 import DetailRow from '../../../components/DetailRow'
 import SectionHeader from '../../../components/SectionHeader'
 import { VerdictBadge, FINANCIALS_SOURCE_LABELS } from '../QuarterlyResults'
+
+const COPIED_FEEDBACK_MS = 1500
 
 const ANNOUNCED_DATE_FORMAT = 'DD-MMM-YYYY HH:mm:ss'
 
@@ -69,6 +74,8 @@ function comparisonValue(comparison) {
 }
 
 export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
+  const [copied, setCopied] = useState(false)
+
   if (!record) return null
 
   const f = record.financials || {}
@@ -80,8 +87,25 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
   const hasYoy = hasComparison(f.yoy?.revenue) || hasComparison(f.yoy?.netProfit) || hasComparison(f.yoy?.operatingMargin)
   const hasQoq = hasComparison(f.qoq?.revenue) || hasComparison(f.qoq?.netProfit) || hasComparison(f.qoq?.operatingMargin)
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(record.symbol)
+      setCopied(true)
+      setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS)
+    } catch {}
+  }
+
   return (
-    <BottomSheet title={record.symbol} isOpen={isOpen} onClose={onClose}>
+    <BottomSheet
+      title={
+        <span style={styles.titleRow}>
+          <FontAwesomeIcon icon={copied ? faCheck : faCopy} onClick={handleCopy} style={styles.copyIcon} />
+          {record.symbol}
+        </span>
+      }
+      isOpen={isOpen}
+      onClose={onClose}
+    >
       <div style={styles.subtitle}>{record.companyName}</div>
 
       <SectionHeader style={styles.firstSection}>Overview</SectionHeader>
@@ -196,6 +220,19 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
 }
 
 const styles = {
+  titleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 'var(--space-sm)',
+    width: '100%',
+    textAlign: 'left',
+  },
+  copyIcon: {
+    fontSize: '0.8rem',
+    color: 'var(--color-text-muted)',
+    cursor: 'pointer',
+  },
   subtitle: {
     padding: '0 var(--space-lg)',
     marginBottom: 'var(--space-sm)',
