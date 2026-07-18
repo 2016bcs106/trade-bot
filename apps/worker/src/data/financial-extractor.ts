@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import createLogger from "../utils/logger.ts";
-import { QuarterlyResultFinancials, QuarterlyResultComparison } from "../types/market-data/quarterly-results-firebase.ts";
+import { QuarterlyResultFinancials, QuarterlyResultComparison, QuarterlyResultComparisons } from "../types/market-data/quarterly-results-firebase.ts";
 
 const execFileAsync = promisify(execFile);
 const log = createLogger("financial-extractor");
@@ -149,6 +149,43 @@ export function comparison(current: number | null, base: number | null): Quarter
   return { verdict, pctChange: Math.round(pctChange * 100) / 100 };
 }
 
+/**
+ * Mechanical, not holistic -- purely YoY/QoQ sign and magnitude, gated by actual profitability.
+ * Doesn't account for one-offs, guidance, analyst expectations, or sector seasonality. Two fixes
+ * over a naive YoY-only rule, both found by comparing this verdict against real price reaction
+ * across 25 live "strong_positive" calls:
+ *
+ * - A loss-making company can never be positive/strong_positive, however good the YoY% looks --
+ *   a loss shrinking against a larger prior-year loss computes as a large positive percentage
+ *   (e.g. -0.03 vs -0.1 crore = "+70%") while the company is still losing money (seen on AGRITECH).
+ * - strong_positive additionally requires QoQ revenue and profit to not be declining. A strong
+ *   YoY% against an unusually weak year-ago quarter (a "low base effect") shows up as QoQ
+ *   revenue/profit actually falling even as YoY looks great -- exactly the pattern behind several
+ *   stocks marked strong_positive that fell sharply on the day (NAVKARCORP, GMBREW, BORORENEW,
+ *   all QoQ-negative despite YoY net profit up 130-400%). Genuine momentum is confirmed by QoQ
+ *   also being strongly positive (e.g. MRPL: YoY net profit +436%, QoQ net profit +666%), which
+ *   is what should distinguish real acceleration from an illusory YoY comparison.
+ */
+export function computeOverallVerdict(
+  netProfit: number | null,
+  yoy: QuarterlyResultComparisons,
+  qoq: QuarterlyResultComparisons
+): QuarterlyResultFinancials["overallVerdict"] {
+  const revYoy = yoy.revenue.pctChange;
+  const profitYoy = yoy.netProfit.pctChange;
+  if (revYoy === null || profitYoy === null) return null;
+
+  const isProfitable = netProfit !== null && netProfit > 0;
+  const qoqRev = qoq.revenue.pctChange;
+  const qoqProfit = qoq.netProfit.pctChange;
+  const qoqConfirmed = qoqRev !== null && qoqProfit !== null && qoqRev >= 0 && qoqProfit >= 0;
+
+  if (isProfitable && revYoy > 15 && profitYoy > 15 && qoqConfirmed) return "strong_positive";
+  if (isProfitable && revYoy > VERDICT_THRESHOLD_PCT && profitYoy > VERDICT_THRESHOLD_PCT) return "positive";
+  if (revYoy < -VERDICT_THRESHOLD_PCT && profitYoy < -VERDICT_THRESHOLD_PCT) return "negative";
+  return "neutral";
+}
+
 function detectAuditOpinion(text: string): QuarterlyResultFinancials["auditOpinion"] {
   if (/adverse opinion/i.test(text)) return "adverse";
   if (/disclaimer of opinion/i.test(text)) return "disclaimer";
@@ -270,17 +307,7 @@ export default async function extractFinancials(pageImages: Buffer[]): Promise<Q
     };
 
     result.auditOpinion = detectAuditOpinion(fullText);
-
-    // Mechanical, not holistic: purely the sign/magnitude of YoY revenue and profit growth.
-    // Doesn't account for one-offs, guidance, or sector seasonality the way a language model would.
-    const revYoy = result.yoy.revenue.pctChange;
-    const profitYoy = result.yoy.netProfit.pctChange;
-    if (revYoy !== null && profitYoy !== null) {
-      if (revYoy > 15 && profitYoy > 15) result.overallVerdict = "strong_positive";
-      else if (revYoy > VERDICT_THRESHOLD_PCT && profitYoy > VERDICT_THRESHOLD_PCT) result.overallVerdict = "positive";
-      else if (revYoy < -VERDICT_THRESHOLD_PCT && profitYoy < -VERDICT_THRESHOLD_PCT) result.overallVerdict = "negative";
-      else result.overallVerdict = "neutral";
-    }
+    result.overallVerdict = computeOverallVerdict(result.netProfit, result.yoy, result.qoq);
 
     return result;
   } catch (err) {

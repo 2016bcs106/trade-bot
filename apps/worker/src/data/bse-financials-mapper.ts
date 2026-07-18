@@ -1,4 +1,4 @@
-import { comparison, emptyFinancials } from "./financial-extractor.ts";
+import { comparison, computeOverallVerdict, emptyFinancials } from "./financial-extractor.ts";
 import { BseQuarterlyFinancials } from "../types/market-data/bse-structured-financials.ts";
 import { QuarterlyResultFinancials } from "../types/market-data/quarterly-results-firebase.ts";
 
@@ -11,9 +11,9 @@ import { QuarterlyResultFinancials } from "../types/market-data/quarterly-result
  * which calendar quarter happens to be first.
  *
  * Same scope as the OCR path (see financial-extractor.ts): only fields BSE actually reports
- * numerically are populated. overallVerdict uses the same mechanical YoY-sign rule as the OCR
- * fallback -- BSE doesn't give qualitative disclosures (audit opinion, forward guidance,
- * sector ratios), so those stay null here too.
+ * numerically are populated, and overallVerdict is computed via the same shared
+ * computeOverallVerdict rule as the OCR fallback -- BSE doesn't give qualitative disclosures
+ * (audit opinion, forward guidance, sector ratios), so those stay null here too.
  */
 export default function mapBseFinancialsToResult(financials: BseQuarterlyFinancials): QuarterlyResultFinancials {
   const result = emptyFinancials();
@@ -37,14 +37,7 @@ export default function mapBseFinancialsToResult(financials: BseQuarterlyFinanci
     operatingMargin: comparison(current.operatingMarginPct, qoqBase?.operatingMarginPct ?? null),
   };
 
-  const revYoy = result.yoy.revenue.pctChange;
-  const profitYoy = result.yoy.netProfit.pctChange;
-  if (revYoy !== null && profitYoy !== null) {
-    if (revYoy > 15 && profitYoy > 15) result.overallVerdict = "strong_positive";
-    else if (revYoy > 2 && profitYoy > 2) result.overallVerdict = "positive";
-    else if (revYoy < -2 && profitYoy < -2) result.overallVerdict = "negative";
-    else result.overallVerdict = "neutral";
-  }
+  result.overallVerdict = computeOverallVerdict(result.netProfit, result.yoy, result.qoq);
 
   return result;
 }
