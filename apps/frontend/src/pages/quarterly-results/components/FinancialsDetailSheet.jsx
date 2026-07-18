@@ -5,7 +5,7 @@ import { faCopy, faCheck } from '@fortawesome/free-solid-svg-icons'
 import BottomSheet from '../../../components/BottomSheet'
 import DetailRow from '../../../components/DetailRow'
 import SectionHeader from '../../../components/SectionHeader'
-import { VerdictBadge, FINANCIALS_SOURCE_LABELS } from '../QuarterlyResults'
+import { VerdictBadge, FINANCIALS_SOURCE_LABELS, PriceChangeBadge } from '../QuarterlyResults'
 
 const COPIED_FEEDBACK_MS = 1500
 
@@ -114,6 +114,20 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
         <DetailRow label="Announced" value={moment(record.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY, h:mm A')} />
         <DetailRow label="Audit Opinion" value={AUDIT_OPINION_LABELS[f.auditOpinion]} />
         <DetailRow label="Data Source" value={financialsSourceValue(record.financialsSource)} />
+        {has(record.releasePrice) && (
+          <DetailRow label="Price at Release" value={`₹${record.releasePrice.toFixed(2)} (${moment(record.releasePriceDate).format('DD MMM YYYY')})`} />
+        )}
+        {has(record.latestPrice) && (
+          <DetailRow
+            label="Latest Price"
+            value={
+              <span style={styles.priceRow}>
+                {`₹${record.latestPrice.toFixed(2)} (${moment(record.latestPriceDate).format('DD MMM YYYY')})`}
+                <PriceChangeBadge pct={record.priceChangePct} />
+              </span>
+            }
+          />
+        )}
       </div>
 
       {hasProfitLoss && (
@@ -232,6 +246,11 @@ const styles = {
     fontSize: '0.8rem',
     color: 'var(--color-text-muted)',
     cursor: 'pointer',
+  },
+  priceRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-sm)',
   },
   subtitle: {
     padding: '0 var(--space-lg)',

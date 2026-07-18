@@ -5,6 +5,7 @@ import moment from "moment";
 import BaseScript from "./base-script.ts";
 import NseClient from "../data/providers/nse-client.ts";
 import BseClient from "../data/providers/bse-client.ts";
+import PaytmMoneyClient from "../data/providers/paytm-money-client.ts";
 import { now, nowISO, nowMs, parseDate } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import { QuarterlyResultFinancials, RecentQuarterlyResultRecord, UpcomingQuarterlyResultRecord } from "../types/market-data/quarterly-results-firebase.ts";
@@ -15,6 +16,7 @@ import locateResultPages from "../data/pdf-locator.ts";
 import renderPages, { getPageCount } from "../data/pdf-to-images.ts";
 import extractFinancials, { emptyFinancials } from "../data/financial-extractor.ts";
 import mapBseFinancialsToResult from "../data/bse-financials-mapper.ts";
+import PriceTracker, { pmlIdsBySymbol } from "../data/price-tracker.ts";
 
 const DATE_FORMAT = "DD-MMM-YYYY";
 const QUERY_DATE_FORMAT = "DD-MM-YYYY";
@@ -22,6 +24,7 @@ const ANNOUNCEMENT_DATE_FORMAT = "DD-MMM-YYYY HH:mm:ss";
 const RECENT_DAYS = 7;
 const LOOKAHEAD_DAYS = 45;
 const BSE_REQUEST_DELAY_MS = 400;
+const PAYTM_REQUEST_DELAY_MS = 300;
 const FULL_DOCUMENT_FALLBACK_MAX_PAGES = 20;
 // A "running" status is only trusted as a live lock while its heartbeat is this fresh (3x the
 // 60s heartbeat interval). Beyond this, it's treated as a crashed process that never got to
@@ -34,6 +37,7 @@ const STALE_LOCK_MS = 3 * 60_000;
 class NseQuarterlyResultsScript extends BaseScript {
   private client = new NseClient();
   private bse = new BseClient();
+  private paytm = new PaytmMoneyClient();
 
   private upcomingCount = 0;
   private releasedCount = 0;
@@ -47,6 +51,8 @@ class NseQuarterlyResultsScript extends BaseScript {
   private extracted = 0;
   private extractionFailed = 0;
   private upgraded = 0;
+  private priceSnapshotsFetched = 0;
+  private pricesRefreshed = 0;
 
   get scriptName(): string {
     return "nse-quarterly-results";
@@ -90,6 +96,7 @@ class NseQuarterlyResultsScript extends BaseScript {
       "BSE matched, fallback": `${this.bseMatched}, ${this.bseFallback}`,
       "Financials via BSE structured, OCR, OCR failed": `${this.structuredMatched}, ${this.extracted}, ${this.extractionFailed}`,
       "Upgraded to BSE on retry": this.upgraded,
+      "Price snapshots fetched, refreshed": `${this.priceSnapshotsFetched}, ${this.pricesRefreshed}`,
     };
   }
 
@@ -159,6 +166,8 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     const existingUpcoming = ((await this.firebase.getValue("quarterlyResults/upcoming")) as Record<string, UpcomingQuarterlyResultRecord> | null) ?? {};
     const existingRecent = ((await this.firebase.getValue("quarterlyResults/recent")) as Record<string, RecentQuarterlyResultRecord> | null) ?? {};
+
+    const priceTracker = new PriceTracker(this.paytm, pmlIdsBySymbol(await this.firebase.getAllStocks()));
 
     const upcomingRecords: Record<string, UpcomingQuarterlyResultRecord> = {};
     for (const e of upcoming) {
@@ -237,6 +246,10 @@ class NseQuarterlyResultsScript extends BaseScript {
           }
         }
 
+        await this.delay(PAYTM_REQUEST_DELAY_MS);
+        const priceSnapshot = await priceTracker.fetchSnapshot(a.symbol, parseDate(announcedAt, ANNOUNCEMENT_DATE_FORMAT));
+        if (priceSnapshot.releasePrice !== null) this.priceSnapshotsFetched++;
+
         const record: RecentQuarterlyResultRecord = {
           symbol: a.symbol,
           companyName: a.sm_name,
@@ -246,6 +259,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           pdfUrl,
           financials,
           financialsSource,
+          ...priceSnapshot,
         };
         await this.firebase.setValue(`quarterlyResults/recent/${a.seq_id}`, record);
         this.recentAdded++;
@@ -286,6 +300,42 @@ class NseQuarterlyResultsScript extends BaseScript {
       }
     }
 
+    // ─── Backfill/refresh prices for existing records in the recent window ───
+    // Records missing releasePrice (e.g. added before this feature, or a prior run's snapshot
+    // fetch failed) get a full snapshot. Records that already have one just get latestPrice
+    // refreshed, skipping the (identical, wasted) releasePrice lookup -- it's a historical close
+    // and never changes once set. Only refreshes latestPrice once per day (latestPriceDate !=
+    // today) since intraday movement isn't tracked here, this is a daily-close comparison.
+    const today = now().format("YYYY-MM-DD");
+    const priceableSeqIds = Object.keys(existingRecent).filter((seqId) => existingRecent[seqId].announcedAtMs >= recentCutoffMs);
+
+    for (const seqId of priceableSeqIds) {
+      try {
+        const existing = existingRecent[seqId];
+
+        if (existing.releasePrice === null) {
+          await this.delay(PAYTM_REQUEST_DELAY_MS);
+          const snapshot = await priceTracker.fetchSnapshot(existing.symbol, parseDate(existing.announcedAt, ANNOUNCEMENT_DATE_FORMAT));
+          if (snapshot.releasePrice !== null) {
+            await this.firebase.updateValues({ [`quarterlyResults/recent/${seqId}`]: { ...existing, ...snapshot } });
+            this.priceSnapshotsFetched++;
+          }
+        } else if (existing.latestPriceDate !== today) {
+          await this.delay(PAYTM_REQUEST_DELAY_MS);
+          const latest = await priceTracker.fetchLatestOnly(existing.symbol);
+          if (latest !== null) {
+            const priceChangePct = existing.releasePrice !== 0 ? Math.round(((latest.latestPrice - existing.releasePrice) / existing.releasePrice) * 10000) / 100 : null;
+            await this.firebase.updateValues({
+              [`quarterlyResults/recent/${seqId}`]: { ...existing, latestPrice: latest.latestPrice, latestPriceDate: latest.latestPriceDate, priceChangePct },
+            });
+            this.pricesRefreshed++;
+          }
+        }
+      } catch (err) {
+        this.log.warn(`Skipping price refresh for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
+      }
+    }
+
     // ─── Diff "upcoming" against what's already in Firebase — cheap, no external calls per
     // item (already fetched above), so safe to batch in one write, unlike "recent" above which
     // is now written incrementally as each result completes.
@@ -315,7 +365,8 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     this.log.info(
       `Firebase delta — upcoming: +${this.upcomingAdded} ~${this.upcomingUpdated} -${this.upcomingRemoved}, recent: +${this.recentAdded} ` +
-      `(BSE matched: ${this.bseMatched}, fell back to NSE: ${this.bseFallback}, upgraded to BSE on retry: ${this.upgraded})`
+      `(BSE matched: ${this.bseMatched}, fell back to NSE: ${this.bseFallback}, upgraded to BSE on retry: ${this.upgraded}, ` +
+      `price snapshots fetched: ${this.priceSnapshotsFetched}, refreshed: ${this.pricesRefreshed})`
     );
   }
 

@@ -33,6 +33,13 @@ export const FINANCIALS_SOURCE_LABELS = {
   none: 'NONE',
 }
 
+export function PriceChangeBadge({ pct }) {
+  if (pct === null || pct === undefined) return null
+  const color = pct > 0 ? 'var(--color-success)' : pct < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'
+  const sign = pct > 0 ? '+' : ''
+  return <Badge label={`${sign}${pct.toFixed(2)}%`} color={color} />
+}
+
 const DATE_FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'today', label: 'Today' },
@@ -128,7 +135,12 @@ export default function QuarterlyResults() {
             {filteredRecent.map((item, i) => (
               <ListItem
                 key={item.seqId}
-                title={item.symbol}
+                title={
+                  <div style={styles.titleRow}>
+                    <span>{item.symbol}</span>
+                    <PriceChangeBadge pct={item.priceChangePct} />
+                  </div>
+                }
                 subtitle={FINANCIALS_SOURCE_LABELS[item.financialsSource || 'none']}
                 right={
                   <div style={styles.rightStack}>
@@ -241,6 +253,11 @@ const styles = {
   },
   list: {
     marginTop: 'var(--space-md)',
+  },
+  titleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-sm)',
   },
   rightStack: {
     display: 'flex',
