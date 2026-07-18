@@ -53,6 +53,11 @@ export default abstract class BaseScript {
     // than a separate lock node; a stale heartbeat (crashed process) never blocks a new run.
     if (await this.isAnotherInstanceRunning()) {
       this.log.info("Another instance is already running (fresh heartbeat) — skipping this run.");
+      // Firebase's realtime connection is a WebSocket that keeps the event loop alive by design
+      // -- without explicitly closing it here, a skipped process never exits on its own, and
+      // cron keeps spawning a new one every interval on top of it (exactly the process pile-up
+      // this check was meant to prevent, just moved one level down).
+      await this.firebase.destroy();
       return;
     }
 
