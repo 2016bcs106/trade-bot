@@ -1,9 +1,17 @@
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 import BaseScript from "./base-script.ts";
 import NseClient from "../data/providers/nse-client.ts";
 import BseClient from "../data/providers/bse-client.ts";
 import { now, nowISO, parseDate } from "../utils/time.ts";
 import { QuarterlyResultFinancials, RecentQuarterlyResultRecord, UpcomingQuarterlyResultRecord } from "../types/market-data/quarterly-results-firebase.ts";
 import { NseCorporateAnnouncementEntry } from "../types/market-data/nse-corporate-announcement.ts";
+import downloadFile from "../utils/download-file.ts";
+import locateResultPages from "../data/pdf-locator.ts";
+import renderPages, { getPageCount } from "../data/pdf-to-images.ts";
+import extractFinancials, { emptyFinancials } from "../data/financial-extractor.ts";
+import mapBseFinancialsToResult from "../data/bse-financials-mapper.ts";
 
 const DATE_FORMAT = "DD-MMM-YYYY";
 const QUERY_DATE_FORMAT = "DD-MM-YYYY";
@@ -11,57 +19,7 @@ const ANNOUNCEMENT_DATE_FORMAT = "DD-MMM-YYYY HH:mm:ss";
 const RECENT_DAYS = 7;
 const LOOKAHEAD_DAYS = 45;
 const BSE_REQUEST_DELAY_MS = 400;
-
-function emptyFinancials(): QuarterlyResultFinancials {
-  const emptyComparisons = () => ({
-    revenue: { verdict: null, pctChange: null },
-    netProfit: { verdict: null, pctChange: null },
-    operatingMargin: { verdict: null, pctChange: null },
-  });
-
-  return {
-    overallVerdict: null,
-    revenue: null,
-    netProfit: null,
-    profitBeforeTax: null,
-    operatingMarginPct: null,
-    eps: null,
-    exceptionalItems: null,
-    yoy: emptyComparisons(),
-    qoq: emptyComparisons(),
-    debtToEquityRatio: null,
-    interestCoverageRatio: null,
-    receivableDays: null,
-    inventoryDays: null,
-    operatingCashFlow: null,
-    freeCashFlow: null,
-    returnOnEquityPct: null,
-    returnOnCapitalEmployedPct: null,
-    sectorMetrics: {
-      netInterestMarginPct: null,
-      grossNpaPct: null,
-      netNpaPct: null,
-      provisionCoverageRatioPct: null,
-      casaRatioPct: null,
-      valueOfNewBusinessMarginPct: null,
-      persistencyRatioPct: null,
-      constantCurrencyRevenueGrowthPct: null,
-      attritionRatePct: null,
-      dealTcv: null,
-      sameStoreSalesGrowthPct: null,
-      volumeGrowthPct: null,
-      realizationPerUnit: null,
-    },
-    auditOpinion: null,
-    auditQualificationNotes: null,
-    relatedPartyTransactionsFlag: null,
-    forwardGuidance: null,
-    orderBookValue: null,
-    majorDealWins: null,
-    revenueEstimateBeat: null,
-    profitEstimateBeat: null,
-  };
-}
+const FULL_DOCUMENT_FALLBACK_MAX_PAGES = 20;
 
 class NseQuarterlyResultsScript extends BaseScript {
   private client = new NseClient();
@@ -75,6 +33,10 @@ class NseQuarterlyResultsScript extends BaseScript {
   private recentAdded = 0;
   private bseMatched = 0;
   private bseFallback = 0;
+  private structuredMatched = 0;
+  private extracted = 0;
+  private extractionFailed = 0;
+  private upgraded = 0;
 
   get scriptName(): string {
     return "nse-quarterly-results";
@@ -87,6 +49,8 @@ class NseQuarterlyResultsScript extends BaseScript {
       "Upcoming added, updated, removed": `${this.upcomingAdded}, ${this.upcomingUpdated}, ${this.upcomingRemoved}`,
       "Recent added": this.recentAdded,
       "BSE matched, fallback": `${this.bseMatched}, ${this.bseFallback}`,
+      "Financials via BSE structured, OCR, OCR failed": `${this.structuredMatched}, ${this.extracted}, ${this.extractionFailed}`,
+      "Upgraded to BSE on retry": this.upgraded,
     };
   }
 
@@ -152,7 +116,7 @@ class NseQuarterlyResultsScript extends BaseScript {
     }
 
     // ─── Push to Firebase ───
-    // financials is a placeholder — nothing populates it yet, see quarterly-results-firebase.ts
+    // financials is extracted per newly-released record below, via extractFinancialsFromPdf.
 
     const existingUpcoming = ((await this.firebase.getValue("quarterlyResults/upcoming")) as Record<string, UpcomingQuarterlyResultRecord> | null) ?? {};
     const existingRecent = ((await this.firebase.getValue("quarterlyResults/recent")) as Record<string, RecentQuarterlyResultRecord> | null) ?? {};
@@ -197,6 +161,30 @@ class NseQuarterlyResultsScript extends BaseScript {
         this.bseFallback++;
       }
 
+      // BSE's own structured financials (see bse-client.ts fetchStructuredFinancials) are
+      // exact and instant when available -- no PDF download, no OCR, no row-format guessing.
+      // Only fall back to OCR/vision on the filed PDF when BSE has no scrip match or hasn't
+      // published structured data for this filing yet.
+      await this.delay(BSE_REQUEST_DELAY_MS);
+      const structuredFinancials = scripCode ? await this.bse.fetchStructuredFinancials(scripCode) : null;
+
+      let financials: QuarterlyResultFinancials;
+      let financialsSource: RecentQuarterlyResultRecord["financialsSource"];
+      if (structuredFinancials) {
+        financials = mapBseFinancialsToResult(structuredFinancials);
+        financialsSource = "bse";
+        this.structuredMatched++;
+      } else {
+        financials = await this.extractFinancialsFromPdf(pdfUrl);
+        if (financials.overallVerdict !== null) {
+          financialsSource = "ocr";
+          this.extracted++;
+        } else {
+          financialsSource = "none";
+          this.extractionFailed++;
+        }
+      }
+
       recentRecords[a.seq_id] = {
         symbol: a.symbol,
         companyName: a.sm_name,
@@ -204,8 +192,37 @@ class NseQuarterlyResultsScript extends BaseScript {
         announcedAtMs: parseDate(announcedAt, ANNOUNCEMENT_DATE_FORMAT).valueOf(),
         description,
         pdfUrl,
-        financials: emptyFinancials(),
+        financials,
+        financialsSource,
       };
+    }
+
+    // ─── Retry BSE for existing records that fell back to OCR (or failed outright) ───
+    // BSE's throttling looks transient (companies attempted right after a throttled one tend
+    // to succeed immediately -- see bse-client.ts), so a stock that missed BSE in one 5-minute
+    // run will very likely succeed on a later one. Only upgrades financials in place when BSE
+    // now succeeds; leaves the record untouched otherwise. Scoped to the same RECENT_DAYS
+    // window as everything else here, since a stock BSE still doesn't have data for after a
+    // week is unlikely to ever get it (not dual-listed) and isn't worth retrying forever.
+    const recentCutoffMs = now().subtract(RECENT_DAYS, "days").valueOf();
+    const retryableSeqIds = Object.keys(existingRecent).filter(
+      (seqId) => existingRecent[seqId].financialsSource !== "bse" && existingRecent[seqId].announcedAtMs >= recentCutoffMs
+    );
+
+    const financialsUpgrades: Record<string, RecentQuarterlyResultRecord> = {};
+    for (const seqId of retryableSeqIds) {
+      const existing = existingRecent[seqId];
+
+      await this.delay(BSE_REQUEST_DELAY_MS);
+      const scripCode = await this.bse.findScripCode(existing.symbol, existing.companyName);
+      if (!scripCode) continue;
+
+      await this.delay(BSE_REQUEST_DELAY_MS);
+      const structuredFinancials = await this.bse.fetchStructuredFinancials(scripCode);
+      if (!structuredFinancials) continue;
+
+      financialsUpgrades[seqId] = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
+      this.upgraded++;
     }
 
     // ─── Diff against what's already in Firebase — never overwrite an existing "recent"
@@ -237,6 +254,9 @@ class NseQuarterlyResultsScript extends BaseScript {
         this.recentAdded++;
       }
     }
+    for (const [seqId, record] of Object.entries(financialsUpgrades)) {
+      updates[`quarterlyResults/recent/${seqId}`] = record;
+    }
 
     if (Object.keys(updates).length > 0) {
       updates["quarterlyResults/lastUpdated"] = nowISO();
@@ -245,8 +265,39 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     this.log.info(
       `Firebase delta — upcoming: +${this.upcomingAdded} ~${this.upcomingUpdated} -${this.upcomingRemoved}, recent: +${this.recentAdded} ` +
-      `(BSE matched: ${this.bseMatched}, fell back to NSE: ${this.bseFallback})`
+      `(BSE matched: ${this.bseMatched}, fell back to NSE: ${this.bseFallback}, upgraded to BSE on retry: ${this.upgraded})`
     );
+  }
+
+  /**
+   * Downloads the filed PDF, locates the pages containing the actual results table (see
+   * pdf-locator.ts -- avoids vision-reading 40+ pages of subsidiary lists and auditor
+   * boilerplate on large filings), and extracts structured financials from just those pages.
+   * Falls back to a capped read of the whole document if locating fails outright (e.g. a
+   * scanned filing with no usable text layer at all). Any failure degrades to
+   * emptyFinancials() rather than throwing, so one bad PDF doesn't stop the sync run.
+   */
+  private async extractFinancialsFromPdf(pdfUrl: string): Promise<QuarterlyResultFinancials> {
+    const workDir = await mkdtemp(join(tmpdir(), "quarterly-pdf-"));
+    try {
+      const pdfPath = join(workDir, "filing.pdf");
+      await downloadFile(pdfUrl, pdfPath);
+
+      let pages = await locateResultPages(pdfPath);
+      if (!pages) {
+        const cappedCount = Math.min(await getPageCount(pdfPath), FULL_DOCUMENT_FALLBACK_MAX_PAGES);
+        this.log.debug(`No results pages located for ${pdfUrl}, falling back to first ${cappedCount} pages`);
+        pages = Array.from({ length: cappedCount }, (_, i) => i + 1);
+      }
+
+      const images = await renderPages(pdfPath, pages);
+      return await extractFinancials(images);
+    } catch (err) {
+      this.log.warn(`Financial extraction failed for ${pdfUrl}`, err);
+      return emptyFinancials();
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
   }
 
   private delay(ms: number): Promise<void> {

@@ -99,6 +99,10 @@ export interface RecentQuarterlyResultRecord {
   description: string;
   pdfUrl: string;
   financials: QuarterlyResultFinancials;
+  /** Which method actually produced `financials` — "ocr" (or "none") records get retried against
+   * BSE's structured feed on later runs, since BSE throttling that caused the fallback is
+   * typically transient; "bse" records are left alone. See nse-quarterly-results-script.ts. */
+  financialsSource: "bse" | "ocr" | "none";
 }
 
 export interface QuarterlyResultsSnapshot {
