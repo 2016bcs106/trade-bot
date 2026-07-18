@@ -1,7 +1,8 @@
 import { createContext, useContext, useCallback, useEffect, useRef, useState, useMemo } from 'react'
-import { db, ref, onValue } from '../utils/firebase'
+import { db, ref, onValue, query, orderByChild, startAt } from '../utils/firebase'
 
 const WS_URL = import.meta.env.VITE_LIVE_TICKS_WS_URL || 'wss://trade-bot-ws.duckdns.org:8081/live-ticks'
+const QUARTERLY_RESULTS_RECENT_DAYS = 7
 
 const AppContext = createContext(null)
 
@@ -129,12 +130,24 @@ export function AppProvider({ children }) {
     const unsubDhanFunds = onValue(ref(db, 'dhanhq/portfolio/funds'), (snap) => setDhanFunds(snap.val()))
     const unsubSignalsSummary = onValue(ref(db, 'signals_summary/latest'), (snap) => setSignalsSummary(snap.val()))
     const unsubDhanSignalsSummary = onValue(ref(db, 'dhanhq/signals_summary/latest'), (snap) => setDhanSignalsSummary(snap.val()))
-    const unsubQuarterlyResults = onValue(ref(db, 'quarterlyResults'), (snap) => setQuarterlyResults(snap.val()))
+
+    // "recent" accumulates indefinitely server-side (entries persist so any financials filled in
+    // later survive future sync runs) — range-query on announcedAtMs so we only ever fetch the
+    // last N days over the wire, instead of loading the whole history and filtering client-side.
+    const recentCutoffMs = Date.now() - QUARTERLY_RESULTS_RECENT_DAYS * 24 * 60 * 60 * 1000
+    const recentQuery = query(ref(db, 'quarterlyResults/recent'), orderByChild('announcedAtMs'), startAt(recentCutoffMs))
+    const unsubQuarterlyUpcoming = onValue(ref(db, 'quarterlyResults/upcoming'), (snap) => {
+      setQuarterlyResults((prev) => ({ ...prev, upcoming: snap.val() }))
+    })
+    const unsubQuarterlyRecent = onValue(recentQuery, (snap) => {
+      setQuarterlyResults((prev) => ({ ...prev, recent: snap.val() }))
+    })
+
     return () => {
       unsubScripts(); unsubQueue(); unsubFailed()
       unsubPortfolioHoldings(); unsubPortfolioPositions(); unsubPortfolioFunds()
       unsubDhanHoldings(); unsubDhanPositions(); unsubDhanFunds(); unsubSignalsSummary(); unsubDhanSignalsSummary()
-      unsubQuarterlyResults()
+      unsubQuarterlyUpcoming(); unsubQuarterlyRecent()
     }
   }, [])
 

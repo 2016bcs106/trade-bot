@@ -93,6 +93,9 @@ export interface RecentQuarterlyResultRecord {
   symbol: string;
   companyName: string;
   announcedAt: string;
+  /** Unix ms — announcedAt isn't lexicographically sortable ("18-Jul-2026..."), so this is
+   * what the frontend range-queries on to filter to the last N days server-side. */
+  announcedAtMs: number;
   description: string;
   pdfUrl: string;
   financials: QuarterlyResultFinancials;

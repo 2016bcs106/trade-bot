@@ -201,6 +201,7 @@ class NseQuarterlyResultsScript extends BaseScript {
         symbol: a.symbol,
         companyName: a.sm_name,
         announcedAt,
+        announcedAtMs: parseDate(announcedAt, ANNOUNCEMENT_DATE_FORMAT).valueOf(),
         description,
         pdfUrl,
         financials: emptyFinancials(),

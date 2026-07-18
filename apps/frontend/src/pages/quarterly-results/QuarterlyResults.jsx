@@ -26,10 +26,17 @@ function VerdictBadge({ verdict }) {
   return <Badge label={config.label} color={config.color} />
 }
 
+const DATE_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+]
+
 export default function QuarterlyResults() {
   const { quarterlyResults } = useApp()
   const [tab, setTab] = useState('recent')
   const [searchQuery, setSearchQuery] = useState('')
+  const [dateFilter, setDateFilter] = useState('all')
 
   if (!quarterlyResults) {
     return (
@@ -40,6 +47,9 @@ export default function QuarterlyResults() {
     )
   }
 
+  // The last-7-days window is enforced server-side (AppContext range-queries on announcedAtMs),
+  // not here — "recent" in Firebase accumulates indefinitely so financials filled in later
+  // survive future sync runs, but this component only ever receives the last 7 days over the wire.
   const recentList = Object.entries(quarterlyResults.recent || {})
     .map(([seqId, item]) => ({ seqId, ...item }))
     .sort((a, b) => moment(b.announcedAt, ANNOUNCED_DATE_FORMAT).valueOf() - moment(a.announcedAt, ANNOUNCED_DATE_FORMAT).valueOf())
@@ -51,7 +61,14 @@ export default function QuarterlyResults() {
   const query = searchQuery.trim().toUpperCase()
   const matchesQuery = (symbol, name) => !query || symbol.toUpperCase().includes(query) || (name || '').toUpperCase().includes(query)
 
-  const filteredRecent = recentList.filter((item) => matchesQuery(item.symbol, item.companyName))
+  const matchesDateFilter = (announcedAt) => {
+    if (dateFilter === 'all') return true
+    const day = moment(announcedAt, ANNOUNCED_DATE_FORMAT)
+    if (dateFilter === 'today') return day.isSame(moment(), 'day')
+    return day.isSame(moment().subtract(1, 'day'), 'day')
+  }
+
+  const filteredRecent = recentList.filter((item) => matchesQuery(item.symbol, item.companyName) && matchesDateFilter(item.announcedAt))
   const filteredUpcoming = upcomingList.filter((item) => matchesQuery(item.symbol, item.company))
 
   return (
@@ -78,11 +95,25 @@ export default function QuarterlyResults() {
       </div>
 
       {tab === 'recent' && (
+        <div style={styles.filterRow}>
+          {DATE_FILTERS.map(({ key, label }) => (
+            <button
+              key={key}
+              style={{ ...styles.filterPill, ...(dateFilter === key ? styles.filterPillActive : {}) }}
+              onClick={() => setDateFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'recent' && (
         filteredRecent.length === 0 ? (
           <EmptyState
             icon={faFileLines}
             title={recentList.length === 0 ? 'No recent results' : 'No matches'}
-            subtitle={recentList.length === 0 ? 'Results announced in the last 7 days will show up here' : 'Try a different search'}
+            subtitle={recentList.length === 0 ? 'Results announced in the last 7 days will show up here' : 'Try a different search or filter'}
           />
         ) : (
           <CardList style={styles.list}>
@@ -149,6 +180,27 @@ const styles = {
     color: 'var(--color-primary)',
     fontWeight: 600,
     boxShadow: 'inset 0 -2px 0 var(--color-primary)',
+  },
+  filterRow: {
+    display: 'flex',
+    gap: 'var(--space-sm)',
+    marginBottom: 'var(--space-md)',
+  },
+  filterPill: {
+    padding: '5px 12px',
+    borderRadius: '999px',
+    border: '1px solid var(--color-text-muted)',
+    background: 'transparent',
+    fontSize: 'var(--font-caption)',
+    fontWeight: 500,
+    color: 'var(--color-text-muted)',
+    cursor: 'pointer',
+  },
+  filterPillActive: {
+    background: 'var(--color-primary)',
+    borderColor: 'var(--color-primary)',
+    color: '#fff',
+    fontWeight: 600,
   },
   searchBar: {
     display: 'flex',

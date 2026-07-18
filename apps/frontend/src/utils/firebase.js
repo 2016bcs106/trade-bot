@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getDatabase, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt, push } from 'firebase/database'
+import { getDatabase, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, orderByChild, startAt, endAt, push } from 'firebase/database'
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth'
 
 const firebaseConfig = {
@@ -18,5 +18,5 @@ const auth = getAuth(app)
 setPersistence(auth, browserLocalPersistence).catch(() => {})
 const googleProvider = new GoogleAuthProvider()
 
-export { db, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, startAt, endAt, push }
+export { db, ref, set, get, remove, onValue, onChildAdded, off, query, orderByKey, orderByChild, startAt, endAt, push }
 export { auth, googleProvider, signInWithPopup, onAuthStateChanged, signOut }
