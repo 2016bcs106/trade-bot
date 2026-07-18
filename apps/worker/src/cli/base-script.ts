@@ -1,15 +1,10 @@
-import moment from "moment";
-import { nowISO, nowMs } from "../utils/time.ts";
+import { nowISO } from "../utils/time.ts";
 import createLogger from "../utils/logger.ts";
 import FirebaseClient from "../firebase/client.ts";
 import { ScriptStatus } from "../types/script-status.ts";
 import { Logger } from "../types/logger.ts";
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
-// A "running" status is only trusted as a live lock while its heartbeat is this fresh. Beyond
-// this, it's treated as a crashed process that never got to report "stopped"/"errored" (e.g.
-// killed, OOM), so a new run is allowed to proceed rather than being blocked forever.
-const STALE_LOCK_MS = 3 * HEARTBEAT_INTERVAL_MS;
 
 /**
  * Abstract base class for all CLI scripts.
@@ -46,21 +41,6 @@ export default abstract class BaseScript {
     this.log = createLogger(this.scriptName);
     this.log.info("Script starting...");
 
-    // Overlap protection: if a cron-scheduled run takes longer than the schedule interval (e.g.
-    // reprocessing a large backlog), the next scheduled run must not start concurrently -- both
-    // instances would re-read the same stale Firebase snapshot, redo the same work, and race on
-    // the final write. Reuses the existing status/heartbeat reporting as the lock signal rather
-    // than a separate lock node; a stale heartbeat (crashed process) never blocks a new run.
-    if (await this.isAnotherInstanceRunning()) {
-      this.log.info("Another instance is already running (fresh heartbeat) — skipping this run.");
-      // Firebase's realtime connection is a WebSocket that keeps the event loop alive by design
-      // -- without explicitly closing it here, a skipped process never exits on its own, and
-      // cron keeps spawning a new one every interval on top of it (exactly the process pile-up
-      // this check was meant to prevent, just moved one level down).
-      await this.firebase.destroy();
-      return;
-    }
-
     this.setupShutdownHandlers();
     this.startHeartbeat();
 
@@ -76,19 +56,6 @@ export default abstract class BaseScript {
       this.log.error("Script crashed", error);
       await this.reportStatus("errored");
       process.exit(1);
-    }
-  }
-
-  /** Whether Firebase already shows this script "running" with a heartbeat recent enough to trust as a live instance, not a crashed one. */
-  private async isAnotherInstanceRunning(): Promise<boolean> {
-    try {
-      const existing = (await this.firebase.getValue(`scripts/${this.scriptName}`)) as ScriptStatus | null;
-      if (!existing || existing.status !== "running") return false;
-      const heartbeatAgeMs = nowMs() - moment(existing.lastHeartbeat).valueOf();
-      return heartbeatAgeMs < STALE_LOCK_MS;
-    } catch (err) {
-      this.log.warn("Failed to check for a running instance — proceeding anyway", err);
-      return false;
     }
   }
 

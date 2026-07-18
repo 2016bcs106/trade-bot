@@ -1,12 +1,15 @@
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import moment from "moment";
 import BaseScript from "./base-script.ts";
 import NseClient from "../data/providers/nse-client.ts";
 import BseClient from "../data/providers/bse-client.ts";
-import { now, nowISO, parseDate } from "../utils/time.ts";
+import { now, nowISO, nowMs, parseDate } from "../utils/time.ts";
+import createLogger from "../utils/logger.ts";
 import { QuarterlyResultFinancials, RecentQuarterlyResultRecord, UpcomingQuarterlyResultRecord } from "../types/market-data/quarterly-results-firebase.ts";
 import { NseCorporateAnnouncementEntry } from "../types/market-data/nse-corporate-announcement.ts";
+import { ScriptStatus } from "../types/script-status.ts";
 import downloadFile from "../utils/download-file.ts";
 import locateResultPages from "../data/pdf-locator.ts";
 import renderPages, { getPageCount } from "../data/pdf-to-images.ts";
@@ -20,6 +23,13 @@ const RECENT_DAYS = 7;
 const LOOKAHEAD_DAYS = 45;
 const BSE_REQUEST_DELAY_MS = 400;
 const FULL_DOCUMENT_FALLBACK_MAX_PAGES = 20;
+// A "running" status is only trusted as a live lock while its heartbeat is this fresh (3x the
+// 60s heartbeat interval). Beyond this, it's treated as a crashed process that never got to
+// report "stopped"/"errored" (e.g. killed, OOM), so a new run is allowed to proceed rather than
+// being blocked forever. Scoped to this script only -- it's the one that reprocesses a large
+// backlog (100+ companies, each needing several BSE calls with retries) and can run long enough
+// to exceed the 5-minute cron interval; no other script on this codebase has that shape.
+const STALE_LOCK_MS = 3 * 60_000;
 
 class NseQuarterlyResultsScript extends BaseScript {
   private client = new NseClient();
@@ -40,6 +50,35 @@ class NseQuarterlyResultsScript extends BaseScript {
 
   get scriptName(): string {
     return "nse-quarterly-results";
+  }
+
+  /**
+   * Overlap protection, scoped to this script only -- see STALE_LOCK_MS above for why. Reuses
+   * the existing status/heartbeat reporting as the lock signal rather than a separate lock node.
+   */
+  async start(): Promise<void> {
+    if (await this.isAnotherInstanceRunning()) {
+      createLogger(this.scriptName).info("Another instance is already running (fresh heartbeat) — skipping this run.");
+      // Firebase's realtime connection is a WebSocket that keeps the event loop alive by design
+      // -- without explicitly closing it here, a skipped process never exits on its own, and
+      // cron keeps spawning a new one every interval on top of it (exactly the process pile-up
+      // this check is meant to prevent, just moved one level down).
+      await this.firebase.destroy();
+      return;
+    }
+    await super.start();
+  }
+
+  private async isAnotherInstanceRunning(): Promise<boolean> {
+    try {
+      const existing = (await this.firebase.getValue(`scripts/${this.scriptName}`)) as ScriptStatus | null;
+      if (!existing || existing.status !== "running") return false;
+      const heartbeatAgeMs = nowMs() - moment(existing.lastHeartbeat).valueOf();
+      return heartbeatAgeMs < STALE_LOCK_MS;
+    } catch (err) {
+      createLogger(this.scriptName).warn("Failed to check for a running instance — proceeding anyway", err);
+      return false;
+    }
   }
 
   protected getMetadata(): Record<string, unknown> {
