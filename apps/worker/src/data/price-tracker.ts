@@ -4,6 +4,8 @@ import { now } from "../utils/time.ts";
 import { StockConfig } from "../types/stocks/stock-config.ts";
 
 const LOOKBACK_DAYS = 10;
+const MARKET_OPEN = "09:15";
+const MARKET_CLOSE = "15:30";
 
 export interface PriceSnapshot {
   releasePrice: number | null;
@@ -22,11 +24,11 @@ const EMPTY_SNAPSHOT: PriceSnapshot = {
 };
 
 /**
- * Tracks a stock's price from the day its quarterly results were released through to the most
- * recent close, via Paytm Money's daily OHLCV (the same source already used for the rest of this
- * app's price data, unlike NSE's own bhavcopy archive which would be a second, inconsistent
- * source). Degrades to null fields on any failure -- a missing price snapshot shouldn't block
- * the rest of a result record from being saved.
+ * Tracks a stock's price from the moment its quarterly results were released through to the most
+ * recent close, via Paytm Money OHLCV (the same source already used for the rest of this app's
+ * price data, unlike NSE's own bhavcopy archive which would be a second, inconsistent source).
+ * Degrades to null fields on any failure -- a missing price snapshot shouldn't block the rest of
+ * a result record from being saved.
  */
 export default class PriceTracker {
   constructor(
@@ -40,29 +42,19 @@ export default class PriceTracker {
       const pmlId = await this.resolvePmlId(symbol);
       if (!pmlId) return EMPTY_SNAPSHOT;
 
-      const fromDate = announcedAt.clone().subtract(LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
-      const toDate = now().format("YYYY-MM-DD");
-      const candles = await this.paytm.fetchOHLCV(pmlId, fromDate, toDate, "DAY");
-      if (candles.length === 0) return EMPTY_SNAPSHOT;
+      const release = await this.resolveReleasePrice(pmlId, announcedAt);
+      if (!release) return EMPTY_SNAPSHOT;
 
-      // "Release price" is the close on the announcement's trading day, or -- if results were
-      // announced outside market hours, on a holiday, or on a weekend -- the last available
-      // close before it. Filtering to candles on/before the announcement date and taking the
-      // last one covers both cases with the same logic.
-      const announceDay = announcedAt.format("YYYY-MM-DD");
-      const onOrBefore = candles.filter((c) => c.timestamp.split(" ")[0] <= announceDay);
-      const releaseCandle = onOrBefore.length > 0 ? onOrBefore[onOrBefore.length - 1] : candles[0];
-      const latestCandle = candles[candles.length - 1];
+      const latest = await this.resolveLatestClose(pmlId);
+      if (!latest) return EMPTY_SNAPSHOT;
 
-      const releasePrice = releaseCandle.close;
-      const latestPrice = latestCandle.close;
-      const priceChangePct = releasePrice !== 0 ? Math.round(((latestPrice - releasePrice) / releasePrice) * 10000) / 100 : null;
+      const priceChangePct = release.price !== 0 ? Math.round(((latest.price - release.price) / release.price) * 10000) / 100 : null;
 
       return {
-        releasePrice,
-        releasePriceDate: releaseCandle.timestamp.split(" ")[0],
-        latestPrice,
-        latestPriceDate: latestCandle.timestamp.split(" ")[0],
+        releasePrice: release.price,
+        releasePriceDate: release.date,
+        latestPrice: latest.price,
+        latestPriceDate: latest.date,
         priceChangePct,
       };
     } catch {
@@ -76,16 +68,59 @@ export default class PriceTracker {
       const pmlId = await this.resolvePmlId(symbol);
       if (!pmlId) return null;
 
-      const fromDate = now().subtract(LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
-      const toDate = now().format("YYYY-MM-DD");
-      const candles = await this.paytm.fetchOHLCV(pmlId, fromDate, toDate, "DAY");
-      if (candles.length === 0) return null;
-
-      const latestCandle = candles[candles.length - 1];
-      return { latestPrice: latestCandle.close, latestPriceDate: latestCandle.timestamp.split(" ")[0] };
+      const latest = await this.resolveLatestClose(pmlId);
+      return latest ? { latestPrice: latest.price, latestPriceDate: latest.date } : null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The exact price at the moment results were released. When the announcement (per BSE's
+   * DT_TM, which is where `announcedAt` comes from -- see bse-client.ts) falls within market
+   * hours on a weekday, this looks up the minute candle at or immediately before that exact
+   * timestamp. Otherwise -- outside 09:15-15:30, a weekend, or a weekday that turns out to be a
+   * holiday with no minute data -- it falls back to the daily close on/before the announcement's
+   * trading day, which naturally resolves to the same day's close for an after-hours release, or
+   * the prior trading day's close for a pre-market/holiday/weekend one.
+   */
+  private async resolveReleasePrice(pmlId: string, announcedAt: Moment): Promise<{ price: number; date: string } | null> {
+    if (this.isWithinMarketHours(announcedAt)) {
+      const day = announcedAt.format("YYYY-MM-DD");
+      const minuteCandles = await this.paytm.fetchOHLCV(pmlId, day, day, "MINUTE");
+      const cutoff = announcedAt.format("YYYY-MM-DD HH:mm");
+      const onOrBefore = minuteCandles.filter((c) => c.timestamp <= cutoff);
+      if (onOrBefore.length > 0) {
+        const candle = onOrBefore[onOrBefore.length - 1];
+        return { price: candle.close, date: candle.timestamp.split(" ")[0] };
+      }
+    }
+
+    const fromDate = announcedAt.clone().subtract(LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
+    const toDate = now().format("YYYY-MM-DD");
+    const dailyCandles = await this.paytm.fetchOHLCV(pmlId, fromDate, toDate, "DAY");
+    if (dailyCandles.length === 0) return null;
+
+    const announceDay = announcedAt.format("YYYY-MM-DD");
+    const onOrBefore = dailyCandles.filter((c) => c.timestamp.split(" ")[0] <= announceDay);
+    const releaseCandle = onOrBefore.length > 0 ? onOrBefore[onOrBefore.length - 1] : dailyCandles[0];
+    return { price: releaseCandle.close, date: releaseCandle.timestamp.split(" ")[0] };
+  }
+
+  private async resolveLatestClose(pmlId: string): Promise<{ price: number; date: string } | null> {
+    const fromDate = now().subtract(LOOKBACK_DAYS, "days").format("YYYY-MM-DD");
+    const toDate = now().format("YYYY-MM-DD");
+    const candles = await this.paytm.fetchOHLCV(pmlId, fromDate, toDate, "DAY");
+    if (candles.length === 0) return null;
+
+    const latestCandle = candles[candles.length - 1];
+    return { price: latestCandle.close, date: latestCandle.timestamp.split(" ")[0] };
+  }
+
+  private isWithinMarketHours(m: Moment): boolean {
+    if (m.day() === 0 || m.day() === 6) return false;
+    const time = m.format("HH:mm");
+    return time >= MARKET_OPEN && time <= MARKET_CLOSE;
   }
 
   private async resolvePmlId(symbol: string): Promise<string | null> {

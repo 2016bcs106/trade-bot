@@ -104,9 +104,11 @@ export interface RecentQuarterlyResultRecord {
    * typically transient; "bse" records are left alone. See nse-quarterly-results-script.ts. */
   financialsSource: "bse" | "ocr" | "none";
 
-  /** Daily close (via Paytm Money) on the announcement date, or the last trading day before it
-   * if results were announced outside market hours or on a holiday — set once and never touched
-   * again, since a historical close never changes. Null if no price data was found. */
+  /** Price at the exact minute results were announced (via Paytm Money minute OHLCV, using
+   * announcedAt as the reference time) if that falls within market hours, otherwise the daily
+   * close on the announcement date or the last trading day before it — see price-tracker.ts.
+   * Set once and never touched again, since a historical price never changes. Null if no price
+   * data was found. */
   releasePrice: number | null;
   /** YYYY-MM-DD of the trading day releasePrice actually came from (may be earlier than
    * announcedAt's date if results were announced outside market hours or on a holiday). */
