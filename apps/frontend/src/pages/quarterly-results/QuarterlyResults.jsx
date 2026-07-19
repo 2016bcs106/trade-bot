@@ -81,8 +81,7 @@ export default function QuarterlyResults() {
   // The last-7-days window is enforced server-side (AppContext range-queries on announcedAtMs),
   // not here — "recent" in Firebase accumulates indefinitely so financials filled in later
   // survive future sync runs, but this component only ever receives the last 7 days over the wire.
-  const recentList = Object.entries(quarterlyResults.recent || {})
-    .map(([seqId, item]) => ({ seqId, ...item }))
+  const recentList = Object.values(quarterlyResults.recent || {})
     .sort((a, b) => moment(b.announcedAt, ANNOUNCED_DATE_FORMAT).valueOf() - moment(a.announcedAt, ANNOUNCED_DATE_FORMAT).valueOf())
 
   const upcomingList = Object.entries(quarterlyResults.upcoming || {})
@@ -163,7 +162,7 @@ export default function QuarterlyResults() {
           <CardList style={styles.list}>
             {filteredRecent.map((item, i) => (
               <ListItem
-                key={item.seqId}
+                key={item.symbol}
                 title={
                   <div style={styles.titleRow}>
                     <span>{item.symbol}</span>

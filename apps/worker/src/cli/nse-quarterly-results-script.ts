@@ -182,7 +182,25 @@ class NseQuarterlyResultsScript extends BaseScript {
     // never "upcoming"). BSE has no market-wide query, so this is a per-symbol lookup; if BSE
     // doesn't have it (not dual-listed, lookup failure), fall back to NSE's own data.
 
-    const newlyReleased = released.filter((a) => !existingRecent[a.seq_id]);
+    // "recent" is keyed by symbol (not NSE's seq_id) precisely so a symbol can never have two
+    // entries -- NSE has been observed re-listing the identical announcement under a brand new
+    // seq_id, and companies routinely file a follow-up "Outcome of Board Meeting" -> "Financial
+    // Results" pair minutes apart for the same disclosure; keying by seq_id let both through as
+    // separate records. A later announcement for an already-tracked symbol is assumed to be one
+    // of those cases, not a genuine second event, and is skipped.
+    //
+    // released can still contain more than one entry for the same symbol within a single run
+    // (e.g. exactly the NSE-re-listing case above) -- collapse to one candidate per symbol before
+    // processing, purely to avoid wasted duplicate BSE/OCR/price API calls (released is already
+    // sorted by an_dt descending, so this keeps the most recent).
+    const seenSymbolsThisRun = new Set<string>();
+    const dedupedReleased = released.filter((a) => {
+      if (seenSymbolsThisRun.has(a.symbol)) return false;
+      seenSymbolsThisRun.add(a.symbol);
+      return true;
+    });
+
+    const newlyReleased = dedupedReleased.filter((a) => !existingRecent[a.symbol]);
 
     for (const a of newlyReleased) {
       // Each company's processing is isolated in its own try/catch: an unexpected failure here
@@ -264,7 +282,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           financialsSource,
           ...priceSnapshot,
         };
-        await this.firebase.setValue(`quarterlyResults/recent/${a.seq_id}`, record);
+        await this.firebase.setValue(`quarterlyResults/recent/${a.symbol}`, record);
         this.recentAdded++;
         const { color, blocks } = buildQuarterlyResultBlocks(record);
         await sendSlackBlocks(blocks, `Quarterly Result Released: ${record.symbol}`, color);
@@ -281,13 +299,13 @@ class NseQuarterlyResultsScript extends BaseScript {
     // window as everything else here, since a stock BSE still doesn't have data for after a
     // week is unlikely to ever get it (not dual-listed) and isn't worth retrying forever.
     const recentCutoffMs = now().subtract(RECENT_DAYS, "days").valueOf();
-    const retryableSeqIds = Object.keys(existingRecent).filter(
-      (seqId) => existingRecent[seqId].financialsSource !== "bse" && existingRecent[seqId].announcedAtMs >= recentCutoffMs
+    const retryableSymbols = Object.keys(existingRecent).filter(
+      (symbol) => existingRecent[symbol].financialsSource !== "bse" && existingRecent[symbol].announcedAtMs >= recentCutoffMs
     );
 
-    for (const seqId of retryableSeqIds) {
+    for (const symbol of retryableSymbols) {
       try {
-        const existing = existingRecent[seqId];
+        const existing = existingRecent[symbol];
 
         await this.delay(BSE_REQUEST_DELAY_MS);
         const scripCode = await this.bse.findScripCode(existing.symbol, existing.companyName);
@@ -298,12 +316,12 @@ class NseQuarterlyResultsScript extends BaseScript {
         if (!structuredFinancials) continue;
 
         const upgraded: RecentQuarterlyResultRecord = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
-        await this.firebase.setValue(`quarterlyResults/recent/${seqId}`, upgraded);
+        await this.firebase.setValue(`quarterlyResults/recent/${symbol}`, upgraded);
         this.upgraded++;
         const { color, blocks } = buildQuarterlyResultBlocks(upgraded, "Financials Updated");
         await sendSlackBlocks(blocks, `Financials Updated: ${upgraded.symbol}`, color);
       } catch (err) {
-        this.log.error(`Skipping retry for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
+        this.log.error(`Skipping retry for ${symbol} this run after an unexpected error`, err);
       }
     }
 
@@ -316,12 +334,12 @@ class NseQuarterlyResultsScript extends BaseScript {
     // saved before that field existed) skip that gate so pmlId backfills immediately rather than
     // waiting for tomorrow's refresh.
     const today = now().format("YYYY-MM-DD");
-    const priceableSeqIds = Object.keys(existingRecent).filter((seqId) => existingRecent[seqId].announcedAtMs >= recentCutoffMs);
-    this.log.info(`Price backfill/refresh candidates: ${priceableSeqIds.length}`);
+    const priceableSymbols = Object.keys(existingRecent).filter((symbol) => existingRecent[symbol].announcedAtMs >= recentCutoffMs);
+    this.log.info(`Price backfill/refresh candidates: ${priceableSymbols.length}`);
 
-    for (const seqId of priceableSeqIds) {
+    for (const symbol of priceableSymbols) {
       try {
-        const existing = existingRecent[seqId];
+        const existing = existingRecent[symbol];
 
         // Firebase omits fields that were never written rather than storing them as null, so
         // records that predate this feature have releasePrice as `undefined`, not `null` -- a
@@ -332,7 +350,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           this.log.info(`Backfilling release price for ${existing.symbol} (announced ${existing.announcedAt})`);
           const snapshot = await priceTracker.fetchSnapshot(existing.symbol, parseDate(existing.announcedAt, ANNOUNCEMENT_DATE_FORMAT));
           if (snapshot.releasePrice !== null) {
-            await this.firebase.updateValues({ [`quarterlyResults/recent/${seqId}`]: { ...existing, ...snapshot } });
+            await this.firebase.updateValues({ [`quarterlyResults/recent/${symbol}`]: { ...existing, ...snapshot } });
             this.priceSnapshotsFetched++;
           } else {
             this.log.error(`Still no release price for ${existing.symbol} after backfill attempt`);
@@ -344,7 +362,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           if (latest !== null) {
             const priceChangePct = existing.releasePrice !== 0 ? Math.round(((latest.latestPrice - existing.releasePrice) / existing.releasePrice) * 10000) / 100 : null;
             await this.firebase.updateValues({
-              [`quarterlyResults/recent/${seqId}`]: {
+              [`quarterlyResults/recent/${symbol}`]: {
                 ...existing,
                 pmlId: latest.pmlId,
                 latestPrice: latest.latestPrice,
@@ -356,7 +374,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           }
         }
       } catch (err) {
-        this.log.error(`Skipping price refresh for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
+        this.log.error(`Skipping price refresh for ${symbol} this run after an unexpected error`, err);
       }
     }
 
