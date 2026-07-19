@@ -116,21 +116,18 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
       isOpen={isOpen}
       onClose={onClose}
       footer={
-        <>
-          <div style={styles.brokerLinks}>
-            <a href={zerodhaUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
-              Zerodha
+        <div style={styles.brokerLinks}>
+          <a href={zerodhaUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
+            Zerodha
+            <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={styles.brokerLinkIcon} />
+          </a>
+          {paytmUrl && (
+            <a href={paytmUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
+              Paytm
               <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={styles.brokerLinkIcon} />
             </a>
-            {paytmUrl && (
-              <a href={paytmUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
-                Paytm
-                <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={styles.brokerLinkIcon} />
-              </a>
-            )}
-          </div>
-          <button style={styles.closeButton} onClick={onClose}>Close</button>
-        </>
+          )}
+        </div>
       }
     >
       <SectionHeader style={styles.firstSection}>Overview</SectionHeader>
@@ -310,7 +307,6 @@ const styles = {
   brokerLinks: {
     display: 'flex',
     gap: 'var(--space-sm)',
-    marginBottom: 'var(--space-sm)',
   },
   brokerLink: {
     flex: 1,
@@ -328,16 +324,5 @@ const styles = {
   },
   brokerLinkIcon: {
     fontSize: '0.7rem',
-  },
-  closeButton: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: 'var(--radius-sm)',
-    border: 'none',
-    background: 'var(--color-primary)',
-    color: '#fff',
-    fontSize: 'var(--font-body)',
-    fontWeight: 600,
-    cursor: 'pointer',
   },
 }

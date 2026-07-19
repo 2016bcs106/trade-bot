@@ -1,6 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+const CLOSE_DRAG_THRESHOLD_PX = 100
 
 export default function BottomSheet({ title, isOpen, onClose, children, footer }) {
+  const [dragY, setDragY] = useState(0)
+  const [isDraggingBody, setIsDraggingBody] = useState(false)
+  const bodyRef = useRef(null)
+  const dragYRef = useRef(0)
+  const headerDraggingRef = useRef(false)
+  const headerStartYRef = useRef(0)
+  const bodyStateRef = useRef({ pointerDown: false, dragging: false, startY: 0 })
+
+  const setDrag = (value) => {
+    dragYRef.current = value
+    setDragY(value)
+  }
+
   useEffect(() => {
     if (!isOpen) return
 
@@ -22,17 +37,108 @@ export default function BottomSheet({ title, isOpen, onClose, children, footer }
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (isOpen) setDrag(0)
+  }, [isOpen])
+
+  // The scrollable body needs raw touch events (not React's synthetic pointer events) --
+  // preventDefault() on a pointermove doesn't reliably suppress touch-driven scrolling once the
+  // browser has started handling it; touchmove's preventDefault is the mechanism that actually
+  // works, and it needs { passive: false } to be callable at all.
+  useEffect(() => {
+    if (!isOpen) return
+    const el = bodyRef.current
+    if (!el) return
+
+    const onTouchStart = (e) => {
+      bodyStateRef.current = { pointerDown: true, dragging: false, startY: e.touches[0].clientY }
+    }
+
+    const onTouchMove = (e) => {
+      const state = bodyStateRef.current
+      if (!state.pointerDown) return
+      const currentY = e.touches[0].clientY
+      const delta = currentY - state.startY
+
+      if (!state.dragging) {
+        if (el.scrollTop <= 0 && delta > 0) {
+          state.dragging = true
+          state.startY = currentY
+          setIsDraggingBody(true)
+        } else {
+          return
+        }
+      }
+
+      e.preventDefault()
+      setDrag(Math.max(0, currentY - state.startY))
+    }
+
+    const onTouchEnd = () => {
+      if (bodyStateRef.current.dragging) {
+        if (dragYRef.current > CLOSE_DRAG_THRESHOLD_PX) {
+          onClose()
+        } else {
+          setDrag(0)
+        }
+      }
+      bodyStateRef.current = { pointerDown: false, dragging: false, startY: 0 }
+      setIsDraggingBody(false)
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchEnd)
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
+
+  const handleHeaderDragStart = (e) => {
+    headerDraggingRef.current = true
+    headerStartYRef.current = e.clientY
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const handleHeaderDragMove = (e) => {
+    if (!headerDraggingRef.current) return
+    setDrag(Math.max(0, e.clientY - headerStartYRef.current))
+  }
+
+  const handleHeaderDragEnd = () => {
+    if (!headerDraggingRef.current) return
+    headerDraggingRef.current = false
+    if (dragYRef.current > CLOSE_DRAG_THRESHOLD_PX) {
+      onClose()
+    } else {
+      setDrag(0)
+    }
+  }
+
+  const isDragging = headerDraggingRef.current || isDraggingBody
 
   return (
     <>
       <div onClick={onClose} style={styles.overlay} />
-      <div style={styles.sheet}>
-        <div style={styles.header}>
+      <div style={{ ...styles.sheet, transform: `translateY(${dragY}px)`, transition: isDragging ? 'none' : 'transform 0.25s ease' }}>
+        <div
+          style={styles.header}
+          onPointerDown={handleHeaderDragStart}
+          onPointerMove={handleHeaderDragMove}
+          onPointerUp={handleHeaderDragEnd}
+          onPointerCancel={handleHeaderDragEnd}
+        >
           <div style={styles.handle} />
           {title && <span style={styles.title}>{title}</span>}
         </div>
-        <div style={styles.body}>
+        <div ref={bodyRef} style={styles.body}>
           {children}
         </div>
         {footer && <div style={styles.footer}>{footer}</div>}
@@ -68,6 +174,8 @@ const styles = {
     padding: '12px 16px 8px',
     textAlign: 'center',
     flexShrink: 0,
+    touchAction: 'none',
+    cursor: 'grab',
   },
   handle: {
     width: '36px',
@@ -86,6 +194,7 @@ const styles = {
     overflowY: 'auto',
     flex: 1,
     WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
   },
   footer: {
     flexShrink: 0,
