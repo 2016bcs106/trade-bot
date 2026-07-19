@@ -69,6 +69,12 @@ function financialsSourceValue(source) {
   return <span style={{ color }}>{label}</span>
 }
 
+function signedValue(value, format) {
+  if (value === null || value === undefined) return undefined
+  const color = value > 0 ? 'var(--color-success)' : value < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'
+  return <span style={{ color }}>{format(value)}</span>
+}
+
 function comparisonValue(comparison) {
   if (!comparison || comparison.pctChange === null || comparison.pctChange === undefined) return undefined
   const color = comparison.verdict === 'positive' ? 'var(--color-success)' : comparison.verdict === 'negative' ? 'var(--color-danger)' : 'var(--color-text-muted)'
@@ -150,6 +156,9 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
             }
           />
         )}
+        {has(record.latestPrice) && has(f.trailingEps) && f.trailingEps > 0 && (
+          <DetailRow label="P/E Ratio" value={`${(record.latestPrice / f.trailingEps).toFixed(2)}x`} />
+        )}
       </div>
 
       {hasProfitLoss && (
@@ -157,11 +166,11 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
           <SectionHeader>Profit &amp; Loss</SectionHeader>
           <div style={styles.body}>
             <DetailRow label="Revenue" value={crores(f.revenue)} />
-            <DetailRow label="Profit Before Tax" value={crores(f.profitBeforeTax)} />
-            <DetailRow label="Net Profit" value={crores(f.netProfit)} />
-            <DetailRow label="Operating Margin" value={pct(f.operatingMarginPct)} />
-            <DetailRow label="EPS" value={has(f.eps) ? `₹${f.eps.toFixed(2)}` : undefined} />
-            <DetailRow label="Exceptional Items" value={crores(f.exceptionalItems)} />
+            <DetailRow label="Profit Before Tax" value={signedValue(f.profitBeforeTax, crores)} />
+            <DetailRow label="Net Profit" value={signedValue(f.netProfit, crores)} />
+            <DetailRow label="Operating Margin" value={signedValue(f.operatingMarginPct, pct)} />
+            <DetailRow label="EPS" value={signedValue(f.eps, (v) => `₹${v.toFixed(2)}`)} />
+            <DetailRow label="Exceptional Items" value={signedValue(f.exceptionalItems, crores)} />
           </div>
         </>
       )}

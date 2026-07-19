@@ -17,7 +17,7 @@ import { QuarterlyResultFinancials } from "../types/market-data/quarterly-result
  */
 export default function mapBseFinancialsToResult(financials: BseQuarterlyFinancials): QuarterlyResultFinancials {
   const result = emptyFinancials();
-  const [current, qoqBase, , , yoyBase] = financials.columns;
+  const [current, qoqBase, , , yoyBase, trailingFullYear] = financials.columns;
   if (!current) return result;
 
   result.revenue = current.revenue;
@@ -25,6 +25,7 @@ export default function mapBseFinancialsToResult(financials: BseQuarterlyFinanci
   result.profitBeforeTax = current.pbt;
   result.eps = current.eps;
   result.operatingMarginPct = current.operatingMarginPct;
+  result.trailingEps = trailingFullYear?.eps ?? null;
 
   result.yoy = {
     revenue: comparison(current.revenue, yoyBase?.revenue ?? null),

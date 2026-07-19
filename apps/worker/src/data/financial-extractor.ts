@@ -209,6 +209,7 @@ export function emptyFinancials(): QuarterlyResultFinancials {
     operatingMarginPct: null,
     eps: null,
     exceptionalItems: null,
+    trailingEps: null,
     yoy: emptyComparisons(),
     qoq: emptyComparisons(),
     debtToEquityRatio: null,

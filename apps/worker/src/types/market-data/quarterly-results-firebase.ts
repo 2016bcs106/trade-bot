@@ -48,6 +48,12 @@ export interface QuarterlyResultFinancials {
   operatingMarginPct: number | null;
   eps: number | null;
   exceptionalItems: number | null;
+  /** Trailing-twelve-month EPS, for computing a proper P/E ratio (frontend divides the live
+   * price by this) -- only available via BSE's structured feed, which reports a trailing
+   * full-year column alongside the quarterly ones. OCR extraction only ever sees one quarter's
+   * figures, so this stays null for OCR-sourced records rather than showing an EPS x4
+   * approximation as if it were the real trailing figure. */
+  trailingEps: number | null;
 
   // Period-over-period comparisons
   yoy: QuarterlyResultComparisons;
