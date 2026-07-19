@@ -187,8 +187,13 @@ class NseQuarterlyResultsScript extends BaseScript {
     // seq_id, and companies routinely file a follow-up "Outcome of Board Meeting" -> "Financial
     // Results" pair minutes apart for the same disclosure; keying by seq_id let both through as
     // separate records. A later announcement for an already-tracked symbol is assumed to be one
-    // of those cases, not a genuine second event, and is skipped.
-    //
+    // of those cases, not a genuine second event, and is skipped -- but only while that existing
+    // record is still within RECENT_DAYS. Records in "recent" are never deleted (they just age
+    // out of the frontend's own range query), so without the recency check here, a symbol's
+    // *next quarter's* results a few months later would find existingRecent[symbol] permanently
+    // truthy from the prior quarter and never get processed at all.
+    const recentCutoffMs = now().subtract(RECENT_DAYS, "days").valueOf();
+
     // released can still contain more than one entry for the same symbol within a single run
     // (e.g. exactly the NSE-re-listing case above) -- collapse to one candidate per symbol before
     // processing, purely to avoid wasted duplicate BSE/OCR/price API calls (released is already
@@ -200,7 +205,10 @@ class NseQuarterlyResultsScript extends BaseScript {
       return true;
     });
 
-    const newlyReleased = dedupedReleased.filter((a) => !existingRecent[a.symbol]);
+    const newlyReleased = dedupedReleased.filter((a) => {
+      const existing = existingRecent[a.symbol];
+      return !existing || existing.announcedAtMs < recentCutoffMs;
+    });
 
     for (const a of newlyReleased) {
       // Each company's processing is isolated in its own try/catch: an unexpected failure here
@@ -298,7 +306,6 @@ class NseQuarterlyResultsScript extends BaseScript {
     // now succeeds; leaves the record untouched otherwise. Scoped to the same RECENT_DAYS
     // window as everything else here, since a stock BSE still doesn't have data for after a
     // week is unlikely to ever get it (not dual-listed) and isn't worth retrying forever.
-    const recentCutoffMs = now().subtract(RECENT_DAYS, "days").valueOf();
     const retryableSymbols = Object.keys(existingRecent).filter(
       (symbol) => existingRecent[symbol].financialsSource !== "bse" && existingRecent[symbol].announcedAtMs >= recentCutoffMs
     );

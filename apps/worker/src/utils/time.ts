@@ -39,9 +39,21 @@ export function nowFilenameSafe(): string {
   return now().format("YYYY-MM-DDTHH-mm-ss");
 }
 
-/** Parse a date string into a Moment in IST */
+/**
+ * Parse a date string into a Moment in IST. Uses `utcOffset(offset, keepLocalTime=true)` --
+ * critical when parsing a naive string with no embedded timezone (e.g. NSE/BSE's exchange
+ * timestamps, which are always IST wall-clock values): without keepLocalTime, `.utcOffset()`
+ * shifts the underlying instant to match the new offset rather than just tagging the existing
+ * wall-clock digits as IST. `moment(date, format)` parses using the process's local system
+ * timezone, so on a server whose system time isn't already IST (production runs in UTC), the
+ * un-flagged version silently rolled timestamps forward -- e.g. "16-Jul-2026 19:03:54" (IST)
+ * became "2026-07-17 00:33:54", corrupting which trading day a same-day-evening announcement
+ * resolved to for release-price lookups. Safe for the single-arg (no format) case too: its only
+ * caller re-parses nowISO() output, which already carries an explicit +05:30 offset, so shifting
+ * to +05:30 is a no-op regardless of this flag.
+ */
 export function parseDate(date: string, format?: string): Moment {
-  return format ? moment(date, format).utcOffset(IST_OFFSET) : moment(date).utcOffset(IST_OFFSET);
+  return format ? moment(date, format).utcOffset(IST_OFFSET, true) : moment(date).utcOffset(IST_OFFSET, true);
 }
 
 /** Whether the given ISO timestamp falls on the current IST calendar day */
