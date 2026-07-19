@@ -41,16 +41,32 @@ export function PriceChangeBadge({ pct }) {
 }
 
 const DATE_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'today', label: 'Today' },
-  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'today', label: 'Today', color: 'var(--color-primary)' },
+  { key: 'yesterday', label: 'Yesterday', color: 'var(--color-primary)' },
 ]
+
+const VERDICT_FILTERS = [
+  { key: 'positive', label: 'Positive', color: 'var(--color-success)' },
+  { key: 'strong_positive', label: 'Strong Positive', color: 'var(--color-success)' },
+  { key: 'negative', label: 'Negative', color: 'var(--color-danger)' },
+]
+
+function filterPillStyle(color, active) {
+  return {
+    ...styles.filterPill,
+    borderColor: color,
+    color: active ? '#fff' : color,
+    background: active ? color : 'transparent',
+    fontWeight: active ? 600 : 500,
+  }
+}
 
 export default function QuarterlyResults() {
   const { quarterlyResults } = useApp()
   const [tab, setTab] = useState('recent')
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState(null)
+  const [verdictFilter, setVerdictFilter] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
 
   if (!quarterlyResults) {
@@ -77,13 +93,17 @@ export default function QuarterlyResults() {
   const matchesQuery = (symbol, name) => !query || symbol.toUpperCase().includes(query) || (name || '').toUpperCase().includes(query)
 
   const matchesDateFilter = (announcedAt) => {
-    if (dateFilter === 'all') return true
+    if (!dateFilter) return true
     const day = moment(announcedAt, ANNOUNCED_DATE_FORMAT)
     if (dateFilter === 'today') return day.isSame(moment(), 'day')
     return day.isSame(moment().subtract(1, 'day'), 'day')
   }
 
-  const filteredRecent = recentList.filter((item) => matchesQuery(item.symbol, item.companyName) && matchesDateFilter(item.announcedAt))
+  const matchesVerdictFilter = (verdict) => !verdictFilter || verdict === verdictFilter
+
+  const filteredRecent = recentList.filter(
+    (item) => matchesQuery(item.symbol, item.companyName) && matchesDateFilter(item.announcedAt) && matchesVerdictFilter(item.financials?.overallVerdict)
+  )
   const filteredUpcoming = upcomingList.filter((item) => matchesQuery(item.symbol, item.company))
 
   return (
@@ -111,11 +131,20 @@ export default function QuarterlyResults() {
 
       {tab === 'recent' && (
         <div style={styles.filterRow}>
-          {DATE_FILTERS.map(({ key, label }) => (
+          {DATE_FILTERS.map(({ key, label, color }) => (
             <button
               key={key}
-              style={{ ...styles.filterPill, ...(dateFilter === key ? styles.filterPillActive : {}) }}
-              onClick={() => setDateFilter(key)}
+              style={filterPillStyle(color, dateFilter === key)}
+              onClick={() => setDateFilter(dateFilter === key ? null : key)}
+            >
+              {label}
+            </button>
+          ))}
+          {VERDICT_FILTERS.map(({ key, label, color }) => (
+            <button
+              key={key}
+              style={filterPillStyle(color, verdictFilter === key)}
+              onClick={() => setVerdictFilter(verdictFilter === key ? null : key)}
             >
               {label}
             </button>
@@ -211,6 +240,7 @@ const styles = {
   },
   filterRow: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: 'var(--space-sm)',
     marginBottom: 'var(--space-md)',
   },
@@ -223,12 +253,6 @@ const styles = {
     fontWeight: 500,
     color: 'var(--color-text-muted)',
     cursor: 'pointer',
-  },
-  filterPillActive: {
-    background: 'var(--color-primary)',
-    borderColor: 'var(--color-primary)',
-    color: '#fff',
-    fontWeight: 600,
   },
   searchBar: {
     display: 'flex',
