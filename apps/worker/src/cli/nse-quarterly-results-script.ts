@@ -16,6 +16,7 @@ import locateResultPages from "../data/pdf-locator.ts";
 import renderPages, { getPageCount } from "../data/pdf-to-images.ts";
 import extractFinancials, { emptyFinancials } from "../data/financial-extractor.ts";
 import mapBseFinancialsToResult from "../data/bse-financials-mapper.ts";
+import getSectorSignal from "../data/sector-signal.ts";
 import PriceTracker, { pmlIdsBySymbol } from "../data/price-tracker.ts";
 import { buildQuarterlyResultBlocks } from "../data/quarterly-result-slack-message.ts";
 import { sendSlackBlocks } from "../utils/slack.ts";
@@ -169,7 +170,10 @@ class NseQuarterlyResultsScript extends BaseScript {
     const existingUpcoming = ((await this.firebase.getValue("quarterlyResults/upcoming")) as Record<string, UpcomingQuarterlyResultRecord> | null) ?? {};
     const existingRecent = ((await this.firebase.getValue("quarterlyResults/recent")) as Record<string, RecentQuarterlyResultRecord> | null) ?? {};
 
-    const priceTracker = new PriceTracker(this.paytm, pmlIdsBySymbol(await this.firebase.getAllStocks()));
+    const allStocks = await this.firebase.getAllStocks();
+    const priceTracker = new PriceTracker(this.paytm, pmlIdsBySymbol(allStocks));
+    const industryNameBySymbol: Record<string, string | undefined> = {};
+    for (const stock of Object.values(allStocks)) industryNameBySymbol[stock.symbol] = stock.industryName;
 
     const upcomingRecords: Record<string, UpcomingQuarterlyResultRecord> = {};
     for (const e of upcoming) {
@@ -289,6 +293,7 @@ class NseQuarterlyResultsScript extends BaseScript {
           financials,
           financialsSource,
           ...priceSnapshot,
+          sectorSignal: getSectorSignal(industryNameBySymbol[a.symbol], financials.overallVerdict),
         };
         await this.firebase.setValue(`quarterlyResults/recent/${a.symbol}`, record);
         this.recentAdded++;
@@ -322,7 +327,13 @@ class NseQuarterlyResultsScript extends BaseScript {
         const structuredFinancials = await this.bse.fetchStructuredFinancials(scripCode);
         if (!structuredFinancials) continue;
 
-        const upgraded: RecentQuarterlyResultRecord = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
+        const upgradedFinancials = mapBseFinancialsToResult(structuredFinancials);
+        const upgraded: RecentQuarterlyResultRecord = {
+          ...existing,
+          financials: upgradedFinancials,
+          financialsSource: "bse",
+          sectorSignal: getSectorSignal(industryNameBySymbol[symbol], upgradedFinancials.overallVerdict),
+        };
         await this.firebase.setValue(`quarterlyResults/recent/${symbol}`, upgraded);
         this.upgraded++;
         const { color, blocks } = buildQuarterlyResultBlocks(upgraded, "Financials Updated");

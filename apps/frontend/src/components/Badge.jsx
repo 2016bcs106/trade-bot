@@ -6,7 +6,7 @@ const PRESETS = {
   'var(--color-text-muted)': { color: '#8e8e93', bg: 'rgba(142, 142, 147, 0.12)' },
 }
 
-export default function Badge({ label, color }) {
+export default function Badge({ label, color, bordered = false }) {
   const preset = PRESETS[color]
   const resolvedColor = preset ? preset.color : (color || '#8e8e93')
   const resolvedBg = preset ? preset.bg : `${color}1f`
@@ -17,7 +17,8 @@ export default function Badge({ label, color }) {
       fontWeight: 600,
       padding: '3px 10px',
       borderRadius: '100px',
-      background: resolvedBg,
+      background: bordered ? 'transparent' : resolvedBg,
+      border: bordered ? `1px solid ${resolvedColor}` : 'none',
       color: resolvedColor,
       letterSpacing: '0.2px',
       whiteSpace: 'nowrap',

@@ -1,6 +1,12 @@
 import fetch from "node-fetch";
+import moment from "moment";
 import { NseEventCalendarEntry } from "../../types/market-data/nse-event-calendar.ts";
 import { NseCorporateAnnouncementEntry } from "../../types/market-data/nse-corporate-announcement.ts";
+
+interface NseHolidayEntry {
+  tradingDate: string; // "DD-MMM-YYYY"
+  description: string;
+}
 
 /**
  * NSE (nseindia.com) client — handles the cookie handshake their API requires.
@@ -76,5 +82,33 @@ export default class NseClient {
 
     const data = await response.json();
     return Array.isArray(data) ? (data as NseCorporateAnnouncementEntry[]) : [];
+  }
+
+  /**
+   * Fetch NSE's official equity (Capital Market segment, "CM") trading holiday list -- the
+   * authoritative source, published by NSE itself, rather than a hand-maintained list that needs
+   * a manual update every year. Returns ISO ("YYYY-MM-DD") dates. NSE typically only publishes
+   * the current calendar year in advance, so this naturally has nothing for future years until
+   * NSE itself publishes them.
+   */
+  async fetchTradingHolidays(): Promise<string[]> {
+    const cookies = await this.getSessionCookies();
+
+    const response = await fetch(`${this.baseUrl}/api/holiday-master?type=trading`, {
+      headers: {
+        "User-Agent": this.userAgent,
+        "Accept": "application/json",
+        "Referer": `${this.baseUrl}/resources/exchange-communication-holidays`,
+        "Cookie": cookies,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`NSE holiday-master request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as Record<string, NseHolidayEntry[]>;
+    const entries = data.CM ?? [];
+    return entries.map((e) => moment(e.tradingDate, "DD-MMM-YYYY").format("YYYY-MM-DD"));
   }
 }

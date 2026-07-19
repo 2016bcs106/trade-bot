@@ -58,5 +58,10 @@
     "name": "nse-quarterly-results",
     "schedule": "*/5 * * * *",
     "command": "src/cli/nse-quarterly-results-script.ts"
+  },
+  {
+    "name": "nse-holidays-sync",
+    "schedule": "15 0 * * *",
+    "command": "src/cli/nse-holidays-sync-script.ts"
   }
 ]

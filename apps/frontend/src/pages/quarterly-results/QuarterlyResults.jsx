@@ -24,7 +24,7 @@ const VERDICT_BADGES = {
 
 export function VerdictBadge({ verdict }) {
   const config = VERDICT_BADGES[verdict] || { label: 'Pending', color: 'var(--color-text-tertiary)' }
-  return <Badge label={config.label} color={config.color} />
+  return <Badge label={config.label} color={config.color} bordered />
 }
 
 export const FINANCIALS_SOURCE_LABELS = {
@@ -40,6 +40,54 @@ export function PriceChangeBadge({ pct }) {
   return <span style={{ ...styles.priceChangeText, color }}>{sign}{pct.toFixed(2)}%</span>
 }
 
+export const HORIZON_TRADING_DAYS = { t0: 0, t1: 1, t3: 3, t5: 5, t10: 10, t20: 20 }
+
+// `holidays` is the live list synced from NSE's own holiday-master API (see
+// nse-holidays-sync-script.ts -> config/nseHolidays), not a hand-maintained one -- falls back to
+// weekend-only skipping if it hasn't loaded yet or NSE hasn't published a year's list.
+function isTradingDay(m, holidays) {
+  return m.day() !== 0 && m.day() !== 6 && !holidays.includes(m.format('YYYY-MM-DD'))
+}
+
+export function addTradingDays(startMoment, days, holidays = []) {
+  const d = startMoment.clone().startOf('day')
+  while (!isTradingDay(d, holidays)) d.add(1, 'day')
+  let remaining = days
+  while (remaining > 0) {
+    d.add(1, 'day')
+    if (isTradingDay(d, holidays)) remaining--
+  }
+  return d
+}
+
+/** null (hidden) once today has passed the exit date -- the signal window has closed. */
+export function getSignalState(signal, announcedAt, holidays = []) {
+  if (!signal) return null
+  const announced = moment(announcedAt, ANNOUNCED_DATE_FORMAT)
+  const entryDate = addTradingDays(announced, HORIZON_TRADING_DAYS[signal.entryHorizon], holidays)
+  const exitDate = addTradingDays(announced, HORIZON_TRADING_DAYS[signal.exitHorizon], holidays)
+  const today = moment()
+  if (today.isBefore(entryDate, 'day')) return 'wait'
+  if (today.isSame(entryDate, 'day')) return 'buy'
+  if (today.isSame(exitDate, 'day')) return 'sell'
+  if (today.isBefore(exitDate, 'day')) return 'hold'
+  return null
+}
+
+const SIGNAL_STATE_BADGES = {
+  wait: { label: 'Wait', color: 'var(--color-text-muted)' },
+  buy: { label: 'Buy', color: 'var(--color-success)' },
+  hold: { label: 'Hold', color: 'var(--color-primary)' },
+  sell: { label: 'Sell', color: 'var(--color-warning)' },
+}
+
+export function SignalStateBadge({ signal, announcedAt, holidays }) {
+  const state = getSignalState(signal, announcedAt, holidays)
+  if (!state) return null
+  const { label, color } = SIGNAL_STATE_BADGES[state]
+  return <Badge label={label} color={color} />
+}
+
 const DATE_FILTERS = [
   { key: 'today', label: 'Today', color: 'var(--color-primary)' },
   { key: 'yesterday', label: 'Yesterday', color: 'var(--color-primary)' },
@@ -50,6 +98,8 @@ const VERDICT_FILTERS = [
   { key: 'strong_positive', label: 'Strong Positive', color: 'var(--color-success)' },
   { key: 'negative', label: 'Negative', color: 'var(--color-danger)' },
 ]
+
+const SIGNAL_STATE_FILTERS = Object.entries(SIGNAL_STATE_BADGES).map(([key, { label, color }]) => ({ key, label, color }))
 
 function filterPillStyle(color, active) {
   return {
@@ -62,11 +112,12 @@ function filterPillStyle(color, active) {
 }
 
 export default function QuarterlyResults() {
-  const { quarterlyResults } = useApp()
+  const { quarterlyResults, nseHolidays } = useApp()
   const [tab, setTab] = useState('recent')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState(null)
   const [verdictFilter, setVerdictFilter] = useState(null)
+  const [signalFilter, setSignalFilter] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
 
   if (!quarterlyResults) {
@@ -99,9 +150,14 @@ export default function QuarterlyResults() {
   }
 
   const matchesVerdictFilter = (verdict) => !verdictFilter || verdict === verdictFilter
+  const matchesSignalFilter = (item) => !signalFilter || getSignalState(item.sectorSignal, item.announcedAt, nseHolidays) === signalFilter
 
   const filteredRecent = recentList.filter(
-    (item) => matchesQuery(item.symbol, item.companyName) && matchesDateFilter(item.announcedAt) && matchesVerdictFilter(item.financials?.overallVerdict)
+    (item) =>
+      matchesQuery(item.symbol, item.companyName) &&
+      matchesDateFilter(item.announcedAt) &&
+      matchesVerdictFilter(item.financials?.overallVerdict) &&
+      matchesSignalFilter(item)
   )
   const filteredUpcoming = upcomingList.filter((item) => matchesQuery(item.symbol, item.company))
 
@@ -148,6 +204,15 @@ export default function QuarterlyResults() {
               {label}
             </button>
           ))}
+          {SIGNAL_STATE_FILTERS.map(({ key, label, color }) => (
+            <button
+              key={key}
+              style={filterPillStyle(color, signalFilter === key)}
+              onClick={() => setSignalFilter(signalFilter === key ? null : key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -172,7 +237,10 @@ export default function QuarterlyResults() {
                 subtitle={FINANCIALS_SOURCE_LABELS[item.financialsSource || 'none']}
                 right={
                   <div style={styles.rightStack}>
-                    <VerdictBadge verdict={item.financials?.overallVerdict} />
+                    <div style={styles.badgeRow}>
+                      <VerdictBadge verdict={item.financials?.overallVerdict} />
+                      <SignalStateBadge signal={item.sectorSignal} announcedAt={item.announcedAt} holidays={nseHolidays} />
+                    </div>
                     <span style={styles.dateText}>{moment(item.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY, h:mm A')}</span>
                   </div>
                 }
@@ -184,7 +252,7 @@ export default function QuarterlyResults() {
         )
       )}
 
-      <FinancialsDetailSheet isOpen={!!selectedRecord} onClose={() => setSelectedRecord(null)} record={selectedRecord} />
+      <FinancialsDetailSheet isOpen={!!selectedRecord} onClose={() => setSelectedRecord(null)} record={selectedRecord} nseHolidays={nseHolidays} />
 
       {tab === 'upcoming' && (
         filteredUpcoming.length === 0 ? (
@@ -291,6 +359,11 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'flex-end',
     gap: '4px',
+  },
+  badgeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-xs)',
   },
   dateText: {
     fontSize: 'var(--font-caption)',

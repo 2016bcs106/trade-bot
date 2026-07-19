@@ -6,7 +6,7 @@ import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons'
 import BottomSheet from '../../../components/BottomSheet'
 import DetailRow from '../../../components/DetailRow'
 import SectionHeader from '../../../components/SectionHeader'
-import { VerdictBadge, FINANCIALS_SOURCE_LABELS, PriceChangeBadge } from '../QuarterlyResults'
+import { VerdictBadge, FINANCIALS_SOURCE_LABELS, PriceChangeBadge, HORIZON_TRADING_DAYS, addTradingDays } from '../QuarterlyResults'
 
 const ZERODHA_CHART_ID = '6401'
 
@@ -75,6 +75,24 @@ function signedValue(value, format) {
   return <span style={{ color }}>{format(value)}</span>
 }
 
+function SectorSignalRow({ signal, announcedAt, holidays }) {
+  if (!signal) return null
+  const color = signal.avgReturnPct > 0 ? 'var(--color-success)' : 'var(--color-danger)'
+  const sign = signal.avgReturnPct > 0 ? '+' : ''
+  const announced = moment(announcedAt, ANNOUNCED_DATE_FORMAT)
+  const entryDate = addTradingDays(announced, HORIZON_TRADING_DAYS[signal.entryHorizon], holidays)
+  const exitDate = addTradingDays(announced, HORIZON_TRADING_DAYS[signal.exitHorizon], holidays)
+  return (
+    <div style={styles.signalRow}>
+      <div style={styles.signalTopLine}>
+        <span style={styles.signalLabel}>{`Signal: Buy ${entryDate.format('D MMM')} → Sell ${exitDate.format('D MMM')}`}</span>
+        <span style={{ ...styles.signalValue, color }}>{`${sign}${signal.avgReturnPct.toFixed(1)}% avg`}</span>
+      </div>
+      <span style={styles.signalCaption}>{`${signal.winRatePct}% win rate · ${signal.sector} · ${signal.sampleSize} historical quarters`}</span>
+    </div>
+  )
+}
+
 function comparisonValue(comparison) {
   if (!comparison || comparison.pctChange === null || comparison.pctChange === undefined) return undefined
   const color = comparison.verdict === 'positive' ? 'var(--color-success)' : comparison.verdict === 'negative' ? 'var(--color-danger)' : 'var(--color-text-muted)'
@@ -82,7 +100,7 @@ function comparisonValue(comparison) {
   return <span style={{ color }}>{sign}{comparison.pctChange.toFixed(2)}%</span>
 }
 
-export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
+export default function FinancialsDetailSheet({ isOpen, onClose, record, nseHolidays }) {
   const [copied, setCopied] = useState(false)
 
   if (!record) return null
@@ -139,6 +157,7 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
       <SectionHeader style={styles.firstSection}>Overview</SectionHeader>
       <div style={styles.body}>
         <DetailRow label="Verdict" value={<VerdictBadge verdict={f.overallVerdict} />} />
+        <SectorSignalRow signal={record.sectorSignal} announcedAt={record.announcedAt} holidays={nseHolidays} />
         <DetailRow label="Announced" value={moment(record.announcedAt, ANNOUNCED_DATE_FORMAT).format('DD MMM YYYY, h:mm A')} />
         <DetailRow label="Audit Opinion" value={AUDIT_OPINION_LABELS[f.auditOpinion]} />
         <DetailRow label="Data Source" value={financialsSourceValue(record.financialsSource)} />
@@ -303,6 +322,31 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-sm)',
+  },
+  signalRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    padding: '11px 0',
+    borderBottom: '1px solid var(--color-border)',
+  },
+  signalTopLine: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 'var(--space-sm)',
+  },
+  signalLabel: {
+    fontSize: 'var(--font-body)',
+    color: 'var(--color-text)',
+  },
+  signalValue: {
+    fontSize: 'var(--font-body)',
+    fontWeight: 600,
+  },
+  signalCaption: {
+    fontSize: 'var(--font-caption)',
+    color: 'var(--color-text-tertiary)',
   },
   firstSection: {
     marginTop: 0,

@@ -95,6 +95,18 @@ export interface UpcomingQuarterlyResultRecord {
   date: string;
 }
 
+export type SignalHorizon = "t0" | "t1" | "t3" | "t5" | "t10" | "t20";
+
+/** Backtested buy-day/sell-day for a sector+verdict combo -- see sector-signal.ts. */
+export interface SectorSignal {
+  sector: string;
+  entryHorizon: SignalHorizon;
+  exitHorizon: SignalHorizon;
+  avgReturnPct: number;
+  winRatePct: number;
+  sampleSize: number;
+}
+
 export interface RecentQuarterlyResultRecord {
   symbol: string;
   companyName: string;
@@ -131,6 +143,11 @@ export interface RecentQuarterlyResultRecord {
   latestPriceDate: string | null;
   /** (latestPrice - releasePrice) / releasePrice * 100. Null unless both prices are available. */
   priceChangePct: number | null;
+
+  /** Backtested buy-day/sell-day for this stock's sector, only for strong_positive/positive
+   * verdicts that cleared the backtest's significance gate -- see sector-signal.ts. Null if the
+   * sector couldn't be classified or didn't clear the gate. */
+  sectorSignal: SectorSignal | null;
 }
 
 export interface QuarterlyResultsSnapshot {
