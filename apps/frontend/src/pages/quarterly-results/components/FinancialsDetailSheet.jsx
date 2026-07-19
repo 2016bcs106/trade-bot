@@ -94,7 +94,7 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
   const has = (value) => value !== null && value !== undefined
   const hasComparison = (comparison) => has(comparison?.pctChange)
 
-  const hasProfitLoss = has(f.revenue) || has(f.profitBeforeTax) || has(f.netProfit) || has(f.operatingMarginPct) || has(f.eps) || has(f.exceptionalItems)
+  const hasProfitLoss = has(f.revenue) || has(f.profitBeforeTax) || has(f.netProfit) || has(f.operatingMarginPct) || has(f.eps) || has(f.exceptionalItems) || has(f.trailingEps)
   const hasYoy = hasComparison(f.yoy?.revenue) || hasComparison(f.yoy?.netProfit) || hasComparison(f.yoy?.operatingMargin)
   const hasQoq = hasComparison(f.qoq?.revenue) || hasComparison(f.qoq?.netProfit) || hasComparison(f.qoq?.operatingMargin)
 
@@ -156,9 +156,6 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
             }
           />
         )}
-        {has(record.latestPrice) && has(f.trailingEps) && f.trailingEps > 0 && (
-          <DetailRow label="P/E Ratio" value={`${(record.latestPrice / f.trailingEps).toFixed(2)}x`} />
-        )}
       </div>
 
       {hasProfitLoss && (
@@ -170,6 +167,9 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record }) {
             <DetailRow label="Net Profit" value={signedValue(f.netProfit, crores)} />
             <DetailRow label="Operating Margin" value={signedValue(f.operatingMarginPct, pct)} />
             <DetailRow label="EPS" value={signedValue(f.eps, (v) => `₹${v.toFixed(2)}`)} />
+            {has(record.latestPrice) && has(f.trailingEps) && f.trailingEps > 0 && (
+              <DetailRow label="P/E Ratio" value={`${(record.latestPrice / f.trailingEps).toFixed(2)}x`} />
+            )}
             <DetailRow label="Exceptional Items" value={signedValue(f.exceptionalItems, crores)} />
           </div>
         </>
