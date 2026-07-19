@@ -176,6 +176,7 @@ const styles = {
     flexShrink: 0,
     touchAction: 'none',
     cursor: 'grab',
+    borderBottom: '1px solid var(--color-border)',
   },
   handle: {
     width: '36px',
@@ -195,6 +196,7 @@ const styles = {
     flex: 1,
     WebkitOverflowScrolling: 'touch',
     overscrollBehavior: 'contain',
+    paddingTop: 'var(--space-md)',
   },
   footer: {
     flexShrink: 0,
