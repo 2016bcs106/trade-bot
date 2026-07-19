@@ -1,4 +1,5 @@
-import { RecentQuarterlyResultRecord } from "../types/market-data/quarterly-results-firebase.ts";
+import moment from "moment";
+import { RecentQuarterlyResultRecord, SignalHorizon } from "../types/market-data/quarterly-results-firebase.ts";
 
 // Same URL formats used by the frontend's FinancialsDetailSheet -- see apps/frontend/src/pages/
 // quarterly-results/components/FinancialsDetailSheet.jsx.
@@ -53,6 +54,27 @@ const SECTOR_METRIC_LABELS: Record<string, string> = {
   realizationPerUnit: "Realization / Unit",
 };
 
+const ANNOUNCED_DATE_FORMAT = "DD-MMM-YYYY HH:mm:ss";
+
+const HORIZON_TRADING_DAYS: Record<SignalHorizon, number> = { t0: 0, t1: 1, t3: 3, t5: 5, t10: 10, t20: 20 };
+
+// Mirrors the frontend's addTradingDays (QuarterlyResults.jsx) -- same weekend + NSE-holiday
+// skipping logic, so the dates shown here match what the app shows later.
+function isTradingDay(m: moment.Moment, holidays: string[]): boolean {
+  return m.day() !== 0 && m.day() !== 6 && !holidays.includes(m.format("YYYY-MM-DD"));
+}
+
+function addTradingDays(start: moment.Moment, tradingDays: number, holidays: string[]): moment.Moment {
+  const d = start.clone().startOf("day");
+  while (!isTradingDay(d, holidays)) d.add(1, "day");
+  let remaining = tradingDays;
+  while (remaining > 0) {
+    d.add(1, "day");
+    if (isTradingDay(d, holidays)) remaining--;
+  }
+  return d;
+}
+
 type MrkdwnField = { type: "mrkdwn"; text: string };
 
 const has = (v: unknown): boolean => v !== null && v !== undefined;
@@ -87,6 +109,21 @@ function sectionHeader(text: string): unknown {
   return { type: "section", text: { type: "mrkdwn", text: `*${text}*` } };
 }
 
+function signalField(record: RecentQuarterlyResultRecord, holidays: string[]): MrkdwnField | null {
+  const signal = record.sectorSignal;
+  if (!signal) return null;
+
+  const announced = moment(record.announcedAt, ANNOUNCED_DATE_FORMAT);
+  const entryDate = addTradingDays(announced, HORIZON_TRADING_DAYS[signal.entryHorizon], holidays);
+  const exitDate = addTradingDays(announced, HORIZON_TRADING_DAYS[signal.exitHorizon], holidays);
+  const sign = signal.avgReturnPct > 0 ? "+" : "";
+
+  return field(
+    "Signal",
+    `Buy ${entryDate.format("D MMM")} → Sell ${exitDate.format("D MMM")}\n${sign}${signal.avgReturnPct.toFixed(1)}% avg · ${signal.winRatePct}% win · ${signal.sector} (n=${signal.sampleSize})`
+  );
+}
+
 /**
  * Builds a Slack Block Kit message mirroring every section of the frontend's
  * FinancialsDetailSheet bottom sheet -- same fields, same "only show a section if it has data"
@@ -99,7 +136,11 @@ function sectionHeader(text: string): unknown {
  * point); "Financials Updated" fires separately, only for records that upgrade from OCR/none to
  * BSE's structured data on a later run.
  */
-export function buildQuarterlyResultBlocks(record: RecentQuarterlyResultRecord, eventLabel = "Quarterly Result Released"): { color: string; blocks: unknown[] } {
+export function buildQuarterlyResultBlocks(
+  record: RecentQuarterlyResultRecord,
+  holidays: string[],
+  eventLabel = "Quarterly Result Released"
+): { color: string; blocks: unknown[] } {
   const f = record.financials;
   const verdict = `${f.overallVerdict ? VERDICT_EMOJI[f.overallVerdict] ?? "" : ""}${f.overallVerdict ? VERDICT_LABELS[f.overallVerdict] : "Pending"}`;
   const color = f.overallVerdict ? VERDICT_COLORS[f.overallVerdict] : VERDICT_COLORS.neutral;
@@ -123,6 +164,8 @@ export function buildQuarterlyResultBlocks(record: RecentQuarterlyResultRecord, 
     field("Audit Opinion", f.auditOpinion ? AUDIT_OPINION_LABELS[f.auditOpinion] : "-"),
     field("Data Source", FINANCIALS_SOURCE_LABELS[record.financialsSource] ?? "-"),
   ];
+  const signal = signalField(record, holidays);
+  if (signal) overviewFields.push(signal);
   if (has(record.latestPrice)) overviewFields.push(field("Latest Price", `₹${record.latestPrice!.toFixed(2)}`));
   blocks.push({ type: "divider" }, sectionHeader("Overview"), ...fieldsSections(overviewFields));
 

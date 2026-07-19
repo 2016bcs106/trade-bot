@@ -174,6 +174,7 @@ class NseQuarterlyResultsScript extends BaseScript {
     const priceTracker = new PriceTracker(this.paytm, pmlIdsBySymbol(allStocks));
     const industryNameBySymbol: Record<string, string | undefined> = {};
     for (const stock of Object.values(allStocks)) industryNameBySymbol[stock.symbol] = stock.industryName;
+    const nseHolidays = ((await this.firebase.getConfig("nseHolidays")) as string[] | null) ?? [];
 
     const upcomingRecords: Record<string, UpcomingQuarterlyResultRecord> = {};
     for (const e of upcoming) {
@@ -297,7 +298,7 @@ class NseQuarterlyResultsScript extends BaseScript {
         };
         await this.firebase.setValue(`quarterlyResults/recent/${a.symbol}`, record);
         this.recentAdded++;
-        const { color, blocks } = buildQuarterlyResultBlocks(record);
+        const { color, blocks } = buildQuarterlyResultBlocks(record, nseHolidays);
         await sendSlackBlocks(blocks, `Quarterly Result Released: ${record.symbol}`, color);
       } catch (err) {
         this.log.error(`Skipping ${a.symbol} this run after an unexpected error`, err);
@@ -336,7 +337,7 @@ class NseQuarterlyResultsScript extends BaseScript {
         };
         await this.firebase.setValue(`quarterlyResults/recent/${symbol}`, upgraded);
         this.upgraded++;
-        const { color, blocks } = buildQuarterlyResultBlocks(upgraded, "Financials Updated");
+        const { color, blocks } = buildQuarterlyResultBlocks(upgraded, nseHolidays, "Financials Updated");
         await sendSlackBlocks(blocks, `Financials Updated: ${upgraded.symbol}`, color);
       } catch (err) {
         this.log.error(`Skipping retry for ${symbol} this run after an unexpected error`, err);
