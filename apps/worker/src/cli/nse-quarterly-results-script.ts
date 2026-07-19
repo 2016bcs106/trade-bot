@@ -17,6 +17,8 @@ import renderPages, { getPageCount } from "../data/pdf-to-images.ts";
 import extractFinancials, { emptyFinancials } from "../data/financial-extractor.ts";
 import mapBseFinancialsToResult from "../data/bse-financials-mapper.ts";
 import PriceTracker, { pmlIdsBySymbol } from "../data/price-tracker.ts";
+import { buildQuarterlyResultBlocks } from "../data/quarterly-result-slack-message.ts";
+import { sendSlackBlocks } from "../utils/slack.ts";
 
 const DATE_FORMAT = "DD-MMM-YYYY";
 const QUERY_DATE_FORMAT = "DD-MM-YYYY";
@@ -264,6 +266,8 @@ class NseQuarterlyResultsScript extends BaseScript {
         };
         await this.firebase.setValue(`quarterlyResults/recent/${a.seq_id}`, record);
         this.recentAdded++;
+        const { color, blocks } = buildQuarterlyResultBlocks(record);
+        await sendSlackBlocks(blocks, `Quarterly Result Released: ${record.symbol}`, color);
       } catch (err) {
         this.log.error(`Skipping ${a.symbol} this run after an unexpected error`, err);
       }
@@ -296,6 +300,8 @@ class NseQuarterlyResultsScript extends BaseScript {
         const upgraded: RecentQuarterlyResultRecord = { ...existing, financials: mapBseFinancialsToResult(structuredFinancials), financialsSource: "bse" };
         await this.firebase.setValue(`quarterlyResults/recent/${seqId}`, upgraded);
         this.upgraded++;
+        const { color, blocks } = buildQuarterlyResultBlocks(upgraded, "Financials Updated");
+        await sendSlackBlocks(blocks, `Financials Updated: ${upgraded.symbol}`, color);
       } catch (err) {
         this.log.error(`Skipping retry for ${existingRecent[seqId]?.symbol} this run after an unexpected error`, err);
       }
