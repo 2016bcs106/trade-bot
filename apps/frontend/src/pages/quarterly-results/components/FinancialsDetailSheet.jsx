@@ -2,7 +2,7 @@ import { useState } from 'react'
 import moment from 'moment'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCopy, faCircleCheck } from '@fortawesome/free-regular-svg-icons'
-import { faArrowUpRightFromSquare } from '@fortawesome/free-solid-svg-icons'
+import { faArrowUpRightFromSquare, faFileArrowDown } from '@fortawesome/free-solid-svg-icons'
 import BottomSheet from '../../../components/BottomSheet'
 import DetailRow from '../../../components/DetailRow'
 import SectionHeader from '../../../components/SectionHeader'
@@ -141,6 +141,12 @@ export default function FinancialsDetailSheet({ isOpen, onClose, record, nseHoli
       onClose={onClose}
       footer={
         <div style={styles.brokerLinks}>
+          {record.pdfUrl && (
+            <a href={record.pdfUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
+              Filing PDF
+              <FontAwesomeIcon icon={faFileArrowDown} style={styles.brokerLinkIcon} />
+            </a>
+          )}
           <a href={zerodhaUrl} target="_blank" rel="noopener noreferrer" style={styles.brokerLink}>
             Zerodha
             <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={styles.brokerLinkIcon} />
