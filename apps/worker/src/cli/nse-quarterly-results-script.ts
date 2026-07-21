@@ -336,6 +336,12 @@ class NseQuarterlyResultsScript extends BaseScript {
           sectorSignal: getSectorSignal(industryNameBySymbol[symbol], upgradedFinancials.overallVerdict),
         };
         await this.firebase.setValue(`quarterlyResults/recent/${symbol}`, upgraded);
+        // Keep the in-memory snapshot in sync with this write -- the price backfill/refresh loop
+        // below still reads from existingRecent, and without this it clobbers the upgrade just
+        // made here (reverting financialsSource back to non-"bse") using its stale pre-run copy,
+        // which then makes this symbol look retryable again on the very next run, repeating
+        // forever every 5 minutes instead of upgrading once.
+        existingRecent[symbol] = upgraded;
         this.upgraded++;
         const { color, blocks } = buildQuarterlyResultBlocks(upgraded, nseHolidays, "Financials Updated");
         await sendSlackBlocks(blocks, `Financials Updated: ${upgraded.symbol}`, color);
