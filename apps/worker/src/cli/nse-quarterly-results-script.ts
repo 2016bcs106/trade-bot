@@ -192,23 +192,32 @@ class NseQuarterlyResultsScript extends BaseScript {
     // seq_id, and companies routinely file a follow-up "Outcome of Board Meeting" -> "Financial
     // Results" pair minutes apart for the same disclosure; keying by seq_id let both through as
     // separate records. A later announcement for an already-tracked symbol is assumed to be one
-    // of those cases, not a genuine second event, and is skipped -- by comparing the incoming
-    // announcement's own timestamp against what's already stored, rather than against a rolling
-    // "has the existing record aged out of RECENT_DAYS" window. The two used to give the same
-    // answer almost always, but NSE's own queries above are day-level (DD-MM-YYYY, no time),
-    // so NSE keeps re-serving an announcement for its entire calendar day of issuance -- once the
-    // stored record crossed the precise RECENT_DAYS-ago instant within that same day, the old
-    // aged-out check treated every re-serve as a brand new release for the rest of the day,
-    // reprocessing it and re-firing the Slack notification every run (e.g. MBAPL, ~10:28 AM
-    // cutoff). Comparing timestamps directly has no such boundary: a later announcement for an
-    // already-tracked symbol is only treated as new if it's actually newer than what's stored,
-    // which is also what makes a symbol's *next quarter's* results (months later) get processed
-    // as a genuine new event rather than being permanently blocked by existingRecent[symbol].
-
-    // Used below to bound the BSE-upgrade retry and price backfill/refresh loops to records from
-    // roughly the last RECENT_DAYS -- unrelated to the newlyReleased check above (that one now
-    // compares announcement timestamps directly instead, see above).
+    // of those cases, not a genuine second event, and is skipped -- but only while that existing
+    // record is still within RECENT_DAYS. Records in "recent" are never deleted (they just age
+    // out of the frontend's own range query), so without the recency check here, a symbol's
+    // *next quarter's* results a few months later would find existingRecent[symbol] permanently
+    // truthy from the prior quarter and never get processed at all.
     const recentCutoffMs = now().subtract(RECENT_DAYS, "days").valueOf();
+
+    // The cutoff for "has this record aged out, so a re-serve counts as a genuinely new event"
+    // must be day-aligned (start of the from-day), not the precise instant above -- NSE's own
+    // queries are day-level (DD-MM-YYYY, no time), so NSE keeps re-serving an announcement for
+    // its *entire calendar day* of issuance regardless of what time within that day it was first
+    // filed. A precise-instant cutoff crosses mid-day, partway through that same day of
+    // re-serves, and treats every re-serve for the rest of the day as brand new -- reprocessing
+    // it and re-firing the Slack notification every run (e.g. MBAPL, ~10:28 AM cutoff). Aligning
+    // to the start of the day closes that gap: the record only actually goes stale once NSE's own
+    // day-level window has moved past the day it was announced on, which is also the point at
+    // which NSE stops re-serving it at all.
+    //
+    // Comparing the incoming announcement's own timestamp against existing.announcedAtMs instead
+    // (rather than a rolling cutoff) looks tempting, but existing.announcedAtMs isn't reliably
+    // NSE-sourced -- the BSE lookup below overwrites announcedAt with BSE's own filing timestamp
+    // when it finds a match, which routinely differs from NSE's an_dt for the very same event.
+    // Comparing NSE's an_dt against a BSE-sourced announcedAtMs made nearly every already-tracked
+    // record look "newer" than what was stored, reprocessing (and re-notifying for) all of them
+    // at once.
+    const newlyReleasedCutoffMs = now().subtract(RECENT_DAYS, "days").startOf("day").valueOf();
 
     // released can still contain more than one entry for the same symbol within a single run
     // (e.g. exactly the NSE-re-listing case above) -- collapse to one candidate per symbol before
@@ -223,7 +232,7 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     const newlyReleased = dedupedReleased.filter((a) => {
       const existing = existingRecent[a.symbol];
-      return !existing || parseDate(a.an_dt, ANNOUNCEMENT_DATE_FORMAT).valueOf() > existing.announcedAtMs;
+      return !existing || existing.announcedAtMs < newlyReleasedCutoffMs;
     });
 
     for (const a of newlyReleased) {
