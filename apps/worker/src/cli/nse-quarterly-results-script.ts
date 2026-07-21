@@ -192,11 +192,22 @@ class NseQuarterlyResultsScript extends BaseScript {
     // seq_id, and companies routinely file a follow-up "Outcome of Board Meeting" -> "Financial
     // Results" pair minutes apart for the same disclosure; keying by seq_id let both through as
     // separate records. A later announcement for an already-tracked symbol is assumed to be one
-    // of those cases, not a genuine second event, and is skipped -- but only while that existing
-    // record is still within RECENT_DAYS. Records in "recent" are never deleted (they just age
-    // out of the frontend's own range query), so without the recency check here, a symbol's
-    // *next quarter's* results a few months later would find existingRecent[symbol] permanently
-    // truthy from the prior quarter and never get processed at all.
+    // of those cases, not a genuine second event, and is skipped -- by comparing the incoming
+    // announcement's own timestamp against what's already stored, rather than against a rolling
+    // "has the existing record aged out of RECENT_DAYS" window. The two used to give the same
+    // answer almost always, but NSE's own queries above are day-level (DD-MM-YYYY, no time),
+    // so NSE keeps re-serving an announcement for its entire calendar day of issuance -- once the
+    // stored record crossed the precise RECENT_DAYS-ago instant within that same day, the old
+    // aged-out check treated every re-serve as a brand new release for the rest of the day,
+    // reprocessing it and re-firing the Slack notification every run (e.g. MBAPL, ~10:28 AM
+    // cutoff). Comparing timestamps directly has no such boundary: a later announcement for an
+    // already-tracked symbol is only treated as new if it's actually newer than what's stored,
+    // which is also what makes a symbol's *next quarter's* results (months later) get processed
+    // as a genuine new event rather than being permanently blocked by existingRecent[symbol].
+
+    // Used below to bound the BSE-upgrade retry and price backfill/refresh loops to records from
+    // roughly the last RECENT_DAYS -- unrelated to the newlyReleased check above (that one now
+    // compares announcement timestamps directly instead, see above).
     const recentCutoffMs = now().subtract(RECENT_DAYS, "days").valueOf();
 
     // released can still contain more than one entry for the same symbol within a single run
@@ -212,7 +223,7 @@ class NseQuarterlyResultsScript extends BaseScript {
 
     const newlyReleased = dedupedReleased.filter((a) => {
       const existing = existingRecent[a.symbol];
-      return !existing || existing.announcedAtMs < recentCutoffMs;
+      return !existing || parseDate(a.an_dt, ANNOUNCEMENT_DATE_FORMAT).valueOf() > existing.announcedAtMs;
     });
 
     for (const a of newlyReleased) {
